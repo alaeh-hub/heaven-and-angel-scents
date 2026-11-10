@@ -11,6 +11,7 @@ import './styles/catalog.css';
 import './styles/skin.css';
 import './styles/atelier.css';
 import './styles/square.css';
+import './styles/reveal.css';
 
 // On a reload the browser's own scroll restoration jumps back to the old
 // scroll position before the videos/marquee/images have re-established

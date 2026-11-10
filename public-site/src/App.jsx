@@ -6,6 +6,7 @@ import ScrollProgress from './components/ScrollProgress.jsx';
 import { InquiryProvider } from './components/InquiryProvider.jsx';
 import { ToastProvider } from './components/Toasts.jsx';
 import { useGlowPointer } from './hooks/useGlowPointer.js';
+import { useScrollReveal } from './hooks/useScrollReveal.js';
 import { EASE_OUT } from './motion.js';
 import PackagesPage from './pages/PackagesPage.jsx';
 
@@ -57,6 +58,7 @@ export default function App() {
   const background = location.state?.background;
   const pageLocation = background || location;
   useGlowPointer();
+  useScrollReveal();
   usePrefetchPages();
 
   return (

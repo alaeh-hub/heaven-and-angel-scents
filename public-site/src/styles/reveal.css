@@ -1,0 +1,27 @@
+/* Site-wide scroll reveals, driven by hooks/useScrollReveal.js.
+   Uses the individual `translate`/`scale`/`opacity` properties, so it never
+   collides with an element's own `transform` (hover lifts, tilts). The
+   `in` state is a keyframe animation with `backwards` fill, so once it has
+   played the element returns to its normal CSS and hover rules apply. */
+
+.js [data-sr='hide'] { opacity: 0; }
+.js [data-sr='hide'][data-srv='up'] { translate: 0 28px; }
+.js [data-sr='hide'][data-srv='left'] { translate: -22px 0; }
+.js [data-sr='hide'][data-srv='scale'] { scale: 0.94; }
+
+.js [data-sr='in'] {
+  animation: sr-up 0.85s cubic-bezier(0.22, 1, 0.36, 1) backwards;
+  animation-delay: calc(var(--sr-i, 0) * 80ms);
+}
+.js [data-sr='in'][data-srv='left'] { animation-name: sr-left; }
+.js [data-sr='in'][data-srv='scale'] { animation-name: sr-scale; }
+.js [data-sr='in'][data-srv='fade'] { animation-name: sr-fade; }
+
+@keyframes sr-up { from { opacity: 0; translate: 0 28px; } to { opacity: 1; translate: 0 0; } }
+@keyframes sr-left { from { opacity: 0; translate: -22px 0; } to { opacity: 1; translate: 0 0; } }
+@keyframes sr-scale { from { opacity: 0; scale: 0.94; } to { opacity: 1; scale: 1; } }
+@keyframes sr-fade { from { opacity: 0; } to { opacity: 1; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .js [data-sr] { animation: none !important; opacity: 1 !important; translate: none !important; scale: none !important; }
+}
