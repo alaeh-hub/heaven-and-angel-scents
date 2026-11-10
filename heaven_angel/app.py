@@ -186,9 +186,21 @@ def _register_site_routes(app):
     def robots_txt():
         # Every page here is either login-gated (admin/branch/ai) or
         # slug-gated (the partner portal — see routes/portal.py) and never
-        # meant to be publicly discoverable, so block crawling site-wide
-        # rather than maintaining a per-path allow/deny list.
-        return "User-agent: *\nDisallow: /\n", 200, {"Content-Type": "text/plain; charset=utf-8"}
+        # meant to be publicly discoverable, so search engines are blocked
+        # site-wide. The chat/social link-preview fetchers are the exception:
+        # when HQ shares a portal link in Messenger/Viber/etc., they must
+        # read the page's Open Graph tags and the preview image, and some
+        # honour robots.txt. The page itself still carries `noindex`, and a
+        # wrong slug still 404s, so allowing them exposes nothing new.
+        preview_bots = (
+            "facebookexternalhit", "Facebot", "meta-externalagent", "Twitterbot",
+            "LinkedInBot", "Slackbot", "Slack-ImgProxy", "TelegramBot", "WhatsApp",
+            "Viber", "Discordbot", "Pinterestbot",
+        )
+        rules = [f"User-agent: {bot}\nAllow: /partner-portal/\nAllow: /static/\n" for bot in preview_bots]
+        rules.append("User-agent: *\nDisallow: /\n")
+        body = "\n".join(rules)
+        return body, 200, {"Content-Type": "text/plain; charset=utf-8"}
 
 
 def _ensure_support_tables(app):
