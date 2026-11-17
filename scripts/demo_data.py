@@ -605,7 +605,6 @@ def sales(branches, plan, total_sales):
                     branches["Tanauan Branch"]: "tanauan", HQ: "admin"}
     weights = {branches["Balayan Branch"]: 0.36, branches["Lipa Branch"]: 0.24,
                branches["Tanauan Branch"]: 0.15, HQ: 0.25}
-    products = query("SELECT sku, item_name, unit FROM products ORDER BY item_name")
     ranked_skus = [b["scent"]["sku"] for b in sorted(plan, key=lambda b: b["scent"]["rank"])]
     pop = [1 / (i + 4) for i in range(len(ranked_skus))]
     bulk_codes = [b["scent"]["code"] for b in plan]
@@ -630,7 +629,6 @@ def sales(branches, plan, total_sales):
             else:
                 kind = "freebie" if roll < 0.06 else "sale"
             code_pick = rnd.choices(ranked_skus, weights=pop)[0]
-            base = code_pick[:-5]
             if kind == "bulk":
                 sku, qty, price = f"{rnd.choice(bulk_codes)}-BULK", rnd.choice([30, 50, 60, 100, 100, 150, 200, 250, 300, 500]), D(rnd.choice(["7.00", "7.00", "7.50", "6.50"]))
             elif kind == "refill":

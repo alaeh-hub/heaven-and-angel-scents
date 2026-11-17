@@ -29,8 +29,8 @@ from openpyxl.styles import Alignment, Font, Protection
 from openpyxl.worksheet.datavalidation import DataValidation
 
 from heaven_angel.db import TransactionAborted, transaction
-from heaven_angel.services.reports import XL_BORDER, XL_HEADER_FILL, XL_MONEY_FMT
-from heaven_angel.services.reports.excel import XL_ALT_FILL, XL_BAND_FILL, XL_TITLE_FILL
+from heaven_angel.services.reports import XL_BORDER, XL_MONEY_FMT
+from heaven_angel.services.reports.excel import XL_ALT_FILL, XL_BAND_FILL
 from heaven_angel.services.sale_stock import apply_sale_stock
 from heaven_angel.utils import (
     PAYMENT_METHODS, SALE_TYPES, ValidationError, business_now, parse_optional_text,

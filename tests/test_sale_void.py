@@ -5,7 +5,7 @@ only on the day it was recorded. A voided refill returns its bulk mL.
 """
 from factories import (count_sales, get_batch_remaining, get_form_token, get_inventory_qty,
                         last_movement_log, login, make_branch, make_inventory, make_product,
-                        make_scent, make_scent_batch, make_user, unique_suffix)
+                        make_scent, make_scent_batch, make_user)
 
 HQ = 1
 

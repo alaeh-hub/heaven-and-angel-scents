@@ -1,7 +1,6 @@
 """Excel (.xlsx) rendering of a report."""
 import datetime
 import io
-import os
 
 from openpyxl import Workbook
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side

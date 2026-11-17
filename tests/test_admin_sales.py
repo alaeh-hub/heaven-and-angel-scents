@@ -7,7 +7,7 @@ HQ warehouse (branch_id=1) instead of a regular branch.
 """
 from factories import (count_sales, get_batch_remaining, get_form_token, get_inventory_qty,
                         last_movement_log, login, make_inventory, make_product,
-                        make_scent, make_scent_batch, make_user, unique_suffix)
+                        make_scent, make_scent_batch, make_user)
 
 RECORD_SALE_URL = "/admin/record-sale"
 HQ_BRANCH_ID = 1  # schema.sql seeds this as the HQ warehouse

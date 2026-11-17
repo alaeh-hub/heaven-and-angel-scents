@@ -58,7 +58,7 @@ def test_request_stock_rejects_a_tampered_bulk_sku(client, sql):
 
 
 def test_dashboard_hides_reorder_for_low_stock_bulk(client, sql):
-    branch_id = _signed_in_branch(client, sql)
+    _signed_in_branch(client, sql)
     bulk = f"NOPE-{unique_suffix().upper()}-BULK"  # bulk is not a product
 
     html = client.get("/branch/").get_data(as_text=True)
@@ -144,7 +144,7 @@ def test_branch_inventory_lists_bottles_only(client, sql):
 
 
 def test_branch_low_stock_ignores_bulk(client, sql):
-    branch_id = _signed_in_branch(client, sql)
+    _signed_in_branch(client, sql)
     bulk = f"NOPE-{unique_suffix().upper()}-BULK"  # bulk is not a product
 
     html = client.get("/branch/").get_data(as_text=True)

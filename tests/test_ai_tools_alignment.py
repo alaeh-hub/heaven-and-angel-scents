@@ -3,7 +3,7 @@ runs cleanly for both roles, and the bottle / bulk-mL split, HQ naming,
 bulk-request guard and COGS maths match the rest of the system.
 """
 from heaven_angel.routes import ai_tools
-from factories import make_branch, make_inventory, make_product, make_scent, unique_suffix
+from factories import make_branch, make_product, make_scent, unique_suffix
 
 
 def _add_sale(sql, branch_id, sku, qty, unit_price, customer_name=None, address=None):
