@@ -75,7 +75,7 @@ def dashboard():
         """SELECT COALESCE(SUM(CASE WHEN p.unit <> 'BULK' THEN s.qty_sold ELSE 0 END), 0) AS units,
                   COALESCE(SUM(CASE WHEN p.unit = 'BULK' THEN s.qty_sold ELSE 0 END), 0) AS bulk_ml,
                   COALESCE(SUM(s.qty_sold * s.unit_price), 0) AS revenue
-           FROM sales s JOIN products p ON p.sku = s.sku
+           FROM sales s JOIN sale_catalog p ON p.sku = s.sku
            WHERE s.branch_id = %s AND DATE(s.sold_at) = CURDATE()""",
         (bid,), fetchone=True,
     )
@@ -93,7 +93,7 @@ def dashboard():
     unit_rows = {
         r["day"]: int(r["units"] or 0) for r in query(
             """SELECT DATE(s.sold_at) AS day, SUM(s.qty_sold) AS units
-               FROM sales s JOIN products p ON p.sku = s.sku
+               FROM sales s JOIN sale_catalog p ON p.sku = s.sku
                WHERE s.branch_id = %s AND p.unit <> 'BULK' AND s.sold_at >= CURDATE() - INTERVAL 14 DAY
                GROUP BY DATE(s.sold_at)""", (bid,))
     }

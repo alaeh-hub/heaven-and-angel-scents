@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% import "_empty.html" as empty %}
 {% import "_macros.html" as m %}
 {% block title %}Packages{% endblock %}
 {% block heading %}Packages{% endblock %}
@@ -167,9 +168,7 @@
           {% endfor %}
         </tbody>
       </table>
-      <div class="empty-state smart-no-match" style="display:none;">
-        <p>No packages match your search.</p>
-      </div>
+      {{ empty.no_match('packages') }}
     </div>
     <div class="smart-pagination" style="display:none;">
       <button type="button" class="btn btn-ghost btn-sm" data-page-prev>Previous</button>
@@ -181,9 +180,7 @@
     <p>Reference value is what the bundled products would cost at full price. Order price is what a partner actually pays after the discount. This is what shows up when they order.</p>
   </div>
   {% else %}
-  <div class="empty-state">
-    <p>No packages yet. Create one with the form beside this list, then add products to it.</p>
-  </div>
+  {{ empty.state('No packages yet', 'A package bundles products for partners and branches. Create one with the form beside this list, then add products to it.', icon='box') }}
   {% endif %}
 </div>
 

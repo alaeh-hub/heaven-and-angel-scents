@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% import "_empty.html" as empty %}
 {% import "_macros.html" as m %}
 {% block title %}Record Sale{% endblock %}
 {% block heading %}Record Sale{% endblock %}
@@ -88,7 +89,9 @@
     color: var(--ink);
     text-align: right;
   }
-  .price-hint:empty { display: none; }
+  /* The slot keeps its height when empty, so the dialog does not jump when a total appears. */
+  .price-hint { min-height: calc(1.75em + var(--space-xs)); }
+  .price-hint:empty { border-top-color: transparent; }
 
   .rs-note {
     margin: 0 0 var(--space-md);
@@ -114,7 +117,7 @@
     font-weight: 500;
     cursor: pointer;
   }
-  .rs-check input[type="checkbox"] { width: auto; margin: 0; }
+  .rs-check input[type="checkbox"] { margin: 0; }
 
   .rs-submit { width: 100%; }
   .tnum { font-variant-numeric: tabular-nums; }
@@ -355,6 +358,7 @@
       </div>
     </div>
 
+    {% include "_order_basket.html" %}
     </div>
 
     <div>
@@ -412,6 +416,7 @@
         their address from the first sale it was recorded on. Edit it if it’s changed.</div>
     </div>
 
+    {% include "_order_basket_list.html" %}
     <button type="submit" class="btn btn-accent rs-submit">Record sale</button>
     </div>
     </div>
@@ -429,7 +434,8 @@
   </div>
   <p class="rs-note">
     Got a backlog of sales to log? Download the template, fill in one row per sale, then upload it here.
-    Every row is inserted at once instead of typing each one in by hand.
+    Every row is inserted at once instead of typing each one in by hand. To put several scents on one receipt,
+    give those rows the same text in the Receipt column (A, B, 1, 2...); leave it blank for a receipt of its own.
   </p>
   <a href="{{ url_for('admin.sales_import_template') }}" class="btn btn-ghost rs-full" data-generate-file>
     Download import template (.xlsx)
@@ -510,7 +516,7 @@
             <td class="num mobile-detail" data-label="Total">{{ (s.qty_sold * s.unit_price)|peso }}</td>
             <td class="mobile-detail" data-label="Payment">{{ m.payment_method_badge(s.payment_method, s.buyer_username) }}</td>
             <td data-label="" class="mobile-inline-action">
-              <a href="{{ url_for('admin.sale_receipt', sale_id=s.sale_id) }}" class="btn btn-ghost btn-sm" target="_blank" data-generate-file>Receipt</a>
+              {{ m.receipt_button(s, 'admin.sale_receipt') }}
             </td>
             <!-- Mobile-only; see .mobile-toggle-row/.row-toggle-btn in
                  style.css. Hidden on desktop, where every cell above is
@@ -527,9 +533,7 @@
           {% endfor %}
         </tbody>
       </table>
-      <div class="empty-state smart-no-match" style="display:none;">
-        <p>No sales match your search.</p>
-      </div>
+      {{ empty.no_match('sales') }}
     </div>
     <div class="smart-pagination" style="display:none;">
       <button type="button" class="btn btn-ghost btn-sm" data-page-prev>Previous</button>
@@ -538,9 +542,7 @@
     </div>
   </div>
   {% else %}
-  <div class="empty-state">
-    <p>No sales recorded yet. Use New sale to log the first one.</p>
-  </div>
+  {{ empty.state('No sales recorded yet', 'Record the first sale and it shows up here with its payment and receipt.', icon='receipt', action='New sale', trigger='openNewSaleBtn') }}
   {% endif %}
 </div>
 {% endblock %}
@@ -756,6 +758,8 @@
         var opt = document.createElement('option');
         opt.value = name;
         opt.textContent = name;
+        // Lets the dropdown's search find a product by any of its SKUs.
+        opt.dataset.search = byProduct[name].map(function (r) { return r.sku; }).join(' ');
         productSelect.appendChild(opt);
       });
       productSelect.value = byProduct[previous] ? previous : '';
@@ -787,7 +791,7 @@
         priceHint.textContent = '';
         return;
       }
-      priceHint.textContent = formatPeso(rate) + ' × ' + qty + ' = ' + formatPeso(rate * qty) + ' total. Edit price if this sale used a different rate.';
+      priceHint.textContent = formatPeso(rate) + ' × ' + qty + ' = ' + formatPeso(rate * qty);
     }
 
     function applySuggestedPrice() {
@@ -851,11 +855,11 @@
       looseRows.forEach(function (row) {
         var opt = document.createElement('option');
         opt.value = row.sku;
-        opt.textContent = row.item_name + ', ' + row.stock_qty + ' mL in stock';
+        opt.textContent = row.item_name + ', ' + row.stock_qty + ' mL in batches';
         looseSelect.appendChild(opt);
       });
     } else {
-      looseSelect.options[0].textContent = 'No Bulk/Refill product stocked here';
+      looseSelect.options[0].textContent = 'No bulk batch has mL left to sell';
     }
 
     function refreshLooseTotal() {

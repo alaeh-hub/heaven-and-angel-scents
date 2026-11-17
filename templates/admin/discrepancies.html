@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% import "_empty.html" as empty %}
 {% import "_macros.html" as m %}
 {% block title %}Discrepancies{% endblock %}
 {% block heading %}Discrepancies{% endblock %}
@@ -111,7 +112,7 @@
     </table>
   </div>
   {% else %}
-  <div class="empty-state"><p>No branches yet. Add a branch and any damage or shortfall on its deliveries shows up here.</p></div>
+  {{ empty.state('No branches yet', 'Add a branch, and any damage or shortfall on its deliveries shows up here.', icon='store', action='Add a branch', href=url_for('admin.branches')) }}
   {% endif %}
 </div>
 
@@ -182,9 +183,7 @@
           {% endfor %}
         </tbody>
       </table>
-      <div class="empty-state smart-no-match" style="display:none;">
-        <p>No discrepancies match your search.</p>
-      </div>
+      {{ empty.no_match('discrepancies') }}
     </div>
     <div class="smart-pagination" style="display:none;">
       <button type="button" class="btn btn-ghost btn-sm" data-page-prev>Previous</button>
@@ -193,7 +192,7 @@
     </div>
   </div>
   {% else %}
-  <div class="empty-state"><p>No damage or shortfall reported on any delivery{{ '' if branch_filter == 'all' else ' for this branch' }}.</p></div>
+  {{ empty.state('Nothing reported', 'No damage or shortfall on any delivery' ~ ('' if branch_filter == 'all' else ' for this branch') ~ '.', icon='check', tone='clear') }}
   {% endif %}
 </div>
 {% endblock %}

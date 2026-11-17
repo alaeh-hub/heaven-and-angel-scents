@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% import "_empty.html" as empty %}
 {% block title %}Clear Data{% endblock %}
 {% block heading %}Clear Data{% endblock %}
 
@@ -50,7 +51,7 @@
     </table>
   </div>
   {% else %}
-  <div class="empty-state clear-table">Nothing to clear. All business tables are already empty.</div>
+  <div class="clear-table">{{ empty.state('Nothing to clear', 'Every business table is already empty.', icon='check', tone='clear', compact=True) }}</div>
   {% endif %}
 
   <form method="POST">

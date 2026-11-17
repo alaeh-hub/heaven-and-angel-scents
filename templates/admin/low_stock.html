@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% import "_empty.html" as empty %}
 {% import "_macros.html" as m %}
 {% block title %}Low Stock{% endblock %}
 {% block heading %}Low Stock{% endblock %}
@@ -85,7 +86,7 @@
     </table>
   </div>
   {% else %}
-  <div class="empty-state"><p>HQ and every branch are above their reorder thresholds.</p></div>
+  {{ empty.state('Nothing running low', 'HQ and every branch are above their reorder thresholds.', icon='check', tone='clear') }}
   {% endif %}
 </div>
 
@@ -149,9 +150,7 @@
           {% endfor %}
         </tbody>
       </table>
-      <div class="empty-state smart-no-match" style="display:none;">
-        <p>No SKUs match your search.</p>
-      </div>
+      {{ empty.no_match('SKUs') }}
     </div>
     <div class="smart-pagination" style="display:none;">
       <button type="button" class="btn btn-ghost btn-sm" data-page-prev>Previous</button>
@@ -161,9 +160,7 @@
   </div>
   <p class="ls-note">Sorted most-critical first: furthest below its own reorder level, regardless of location. A branch can dispatch a request for these from its own Request Stock page; HQ dispatches once that request comes in on <a href="{{ url_for('admin.requests_list') }}">Stock Requests</a>. HQ’s own low stock is restocked through <a href="{{ url_for('admin.production') }}">Production</a>.</p>
   {% else %}
-  <div class="empty-state">
-    <p>{{ 'All HQ and branch inventory is above its reorder threshold.' if branch_filter == 'all' else 'This location is above its reorder threshold for every SKU.' }}</p>
-  </div>
+  {{ empty.state('Nothing running low', 'All HQ and branch inventory is above its reorder threshold.' if branch_filter == 'all' else 'This location is above its reorder threshold for every SKU.', icon='check', tone='clear') }}
   {% endif %}
 </div>
 </div>

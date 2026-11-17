@@ -13,22 +13,30 @@ own record_sale() insert by hand: one sales row + one stock_movement_logs
 row per line, with stock checked/decremented by the same
 sale_stock.apply_sale_stock() (a Refill takes HQ bulk, and is refused
 for a branch).
+
+The optional last column, Receipt, puts several rows on ONE receipt (like several
+scents on one New sale): rows with the same text there share a customer, payment, type
+and date, and are tied together by sales.order_id exactly as the Record Sale form does.
+Blank = the row is its own receipt, as before.
 """
 import datetime
 import decimal
 import io
 
 from openpyxl import Workbook, load_workbook
-from openpyxl.styles import Alignment, Font
+from openpyxl.comments import Comment
+from openpyxl.styles import Alignment, Font, Protection
 from openpyxl.worksheet.datavalidation import DataValidation
 
 from heaven_angel.db import TransactionAborted, transaction
 from heaven_angel.services.reports import XL_BORDER, XL_HEADER_FILL, XL_MONEY_FMT
+from heaven_angel.services.reports.excel import XL_ALT_FILL, XL_BAND_FILL, XL_TITLE_FILL
 from heaven_angel.services.sale_stock import apply_sale_stock
 from heaven_angel.utils import (
     PAYMENT_METHODS, SALE_TYPES, ValidationError, business_now, parse_optional_text,
     parse_positive_decimal, parse_positive_int,
 )
+from heaven_angel.services.sale_entry import MAX_ORDER_LINES
 
 SHEET_NAME = "Import Sales"
 
@@ -36,17 +44,35 @@ SHEET_NAME = "Import Sales"
 # template's own header row both read/write positionally against this.
 HEADERS = [
     "SKU*",
-    "Item Name (reference only)",
-    "Qty Sold*",
-    "Price Charged* (0 or blank for Freebie)",
-    "Sale Type* (Sale, Refill, or Freebie)",
-    "Payment Method* (Cash or Credit — ignored for Freebie)",
-    "Buyer Name (Credit sales only)",
-    "Customer Name",
-    "Customer Address",
-    "Sale Date (YYYY-MM-DD, blank = today)",
+    "Item",
+    "Qty*",
+    "Price*",
+    "Type*",
+    "Payment*",
+    "Buyer",
+    "Customer",
+    "Address",
+    "Date",
+    "Receipt",
 ]
-_COL_WIDTHS = [16, 26, 10, 14, 20, 22, 22, 20, 26, 26]
+# Hover hints on the short headers (cell comments) keep the detail the
+# old long labels carried.
+_HEADER_HINTS = [
+    "Pick the SKU from the dropdown (or type it). The Item fills in automatically.",
+    "Fills in automatically from the SKU. Not imported.",
+    "Quantity sold (whole number).",
+    "Price actually charged. 0 or blank for a Freebie.",
+    "Sale, Refill, or Freebie.",
+    "Cash or Credit (ignored for Freebie).",
+    "Buyer name — Credit sales only.",
+    "Customer name (optional).",
+    "Customer address (optional).",
+    "Sale date as YYYY-MM-DD. Blank = today.",
+    "Optional. Rows with the same text here (A, B, 1, 2...) go on ONE receipt: same customer, "
+    "payment, type and date. Blank = its own receipt.",
+]
+_COL_WIDTHS = [16, 26, 9, 12, 12, 13, 18, 20, 26, 14, 12]
+XL_FONT = "Segoe UI"
 
 # A generous cap on one import batch — big enough for a real backlog of
 # unlogged sales, small enough that one bad file can't lock the sales
@@ -67,15 +93,18 @@ def build_sales_import_template(inventory):
     ws = wb.active
     ws.title = SHEET_NAME
 
+    ws.sheet_properties.tabColor = "0C0B0A"
+    # Every header is black with white text; a trailing "*" marks the
+    # required columns.
     for c, label in enumerate(HEADERS, start=1):
         cell = ws.cell(row=1, column=c, value=label)
-        cell.font = Font(name="Calibri", size=10, bold=True, color="FFFFFF")
-        cell.fill = XL_HEADER_FILL
-        cell.alignment = Alignment(
-            horizontal="center", vertical="center", wrap_text=True)
+        cell.font = Font(name=XL_FONT, size=9, bold=True, color="FFFFFF")
+        cell.fill = XL_BAND_FILL
+        cell.comment = Comment(_HEADER_HINTS[c - 1], "Heaven & Angel")
+        cell.alignment = Alignment(horizontal="center", vertical="center")
         cell.border = XL_BORDER
         ws.column_dimensions[chr(64 + c)].width = _COL_WIDTHS[c - 1]
-    ws.row_dimensions[1].height = 32
+    ws.row_dimensions[1].height = 22
     ws.freeze_panes = "A2"
 
     # Row 2 is a filled-in example so the expected shape/format is
@@ -86,12 +115,12 @@ def build_sales_import_template(inventory):
     example_values = [
         inventory[0]["sku"] if inventory else "SKU-HERE",
         (inventory[0]["item_name"] if inventory else "Example Item") + " — example row, not imported",
-        1, 120.00, "Sale", "Cash", "", "Juan Dela Cruz", "", "",
+        1, 120.00, "Sale", "Cash", "", "Juan Dela Cruz", "", "", "",
     ]
     for c, value in enumerate(example_values, start=1):
         cell = ws.cell(row=2, column=c, value=value)
-        cell.font = Font(italic=True, color="8A90A0")
-    ws.cell(row=2, column=4).number_format = "#,##0.00"
+        cell.font = Font(name=XL_FONT, size=10, italic=True, color="8A90A0")
+    ws.cell(row=2, column=4).number_format = XL_MONEY_FMT
 
     # Blank working rows below the example, ready to type/paste into.
     n_rows = 200
@@ -113,29 +142,68 @@ def build_sales_import_template(inventory):
     ws.add_data_validation(payment_dv)
     payment_dv.add(f"F2:F{last_data_row}")
 
+    # SKU dropdown fed by the reference sheet; Item then fills itself in
+    # from whichever SKU was picked. Item is reference-only (never read by
+    # the importer), so the formula is purely a convenience.
+    ref_sheet = "Products (reference)"
+    if inventory:
+        sku_dv = DataValidation(
+            type="list", formula1=f"='{ref_sheet}'!$A$2:$A${len(inventory) + 1}",
+            allow_blank=True, showErrorMessage=True, errorTitle="Unknown SKU",
+            error="Pick a SKU from the dropdown (only SKUs stocked here can be imported).",
+        )
+        ws.add_data_validation(sku_dv)
+        sku_dv.add(f"A3:A{last_data_row}")
+        for r in range(3, last_data_row + 1):
+            ws.cell(row=r, column=2).value = (
+                f"=IF(A{r}=\"\",\"\",IFERROR(VLOOKUP(A{r},'{ref_sheet}'!$A:$B,2,FALSE),\"\"))")
+
     for r in range(2, last_data_row + 1):
         for c in range(1, len(HEADERS) + 1):
-            ws.cell(row=r, column=c).border = XL_BORDER
+            cell = ws.cell(row=r, column=c)
+            cell.border = XL_BORDER
+            if r > 2:
+                cell.font = Font(name=XL_FONT, size=10)
+            # Zebra the blank working rows (the example row keeps its own tint).
+            if r > 2 and r % 2 == 1:
+                cell.fill = XL_ALT_FILL
+        if r > 2:
+            ws.cell(row=r, column=4).number_format = XL_MONEY_FMT
+
+    # Lock the Item column (auto-filled from SKU) so typing over it can't
+    # wipe the formula: protect the sheet, then unlock every other cell
+    # people fill in. No password, so "Unprotect Sheet" still works if an
+    # admin ever needs it. Column/row resizing stays allowed.
+    for r in range(2, last_data_row + 1):
+        for c in range(1, len(HEADERS) + 1):
+            if c != 2:
+                ws.cell(row=r, column=c).protection = Protection(locked=False)
+    ws.protection.sheet = True
+    ws.protection.formatColumns = False
+    ws.protection.formatRows = False
 
     # ---- reference sheet: every SKU this branch can actually sell ----
     ref = wb.create_sheet("Products (reference)")
-    ref_headers = ["SKU", "Item Name", "Variant", "Unit", "Price", "Stock on hand"]
+    ref.sheet_properties.tabColor = "0C0B0A"
+    ref_headers = ["SKU", "Item", "Variant", "Unit", "Price", "Stock"]
     for c, label in enumerate(ref_headers, start=1):
         cell = ref.cell(row=1, column=c, value=label)
-        cell.font = Font(name="Calibri", size=10, bold=True, color="FFFFFF")
-        cell.fill = XL_HEADER_FILL
+        cell.font = Font(name=XL_FONT, size=9, bold=True, color="FFFFFF")
+        cell.fill = XL_BAND_FILL
+        cell.alignment = Alignment(horizontal="center", vertical="center")
         cell.border = XL_BORDER
-    ref.row_dimensions[1].height = 20
+    ref.row_dimensions[1].height = 22
     ref.freeze_panes = "A2"
     for r, row in enumerate(inventory, start=2):
-        ref.cell(row=r, column=1, value=row["sku"]).border = XL_BORDER
-        ref.cell(row=r, column=2, value=row["item_name"]).border = XL_BORDER
-        ref.cell(row=r, column=3, value=row["variant"]).border = XL_BORDER
-        ref.cell(row=r, column=4, value=row["unit"]).border = XL_BORDER
-        price_cell = ref.cell(row=r, column=5, value=float(row["price"]))
-        price_cell.number_format = XL_MONEY_FMT
-        price_cell.border = XL_BORDER
-        ref.cell(row=r, column=6, value=int(row["stock_qty"])).border = XL_BORDER
+        values = [row["sku"], row["item_name"], row["variant"], row["unit"],
+                  float(row["price"]), int(row["stock_qty"])]
+        for c, value in enumerate(values, start=1):
+            cell = ref.cell(row=r, column=c, value=value)
+            cell.font = Font(name=XL_FONT, size=10)
+            cell.border = XL_BORDER
+            if r % 2 == 1:
+                cell.fill = XL_ALT_FILL
+        ref.cell(row=r, column=5).number_format = XL_MONEY_FMT
     for c, width in enumerate([16, 26, 10, 12, 12, 14], start=1):
         ref.column_dimensions[chr(64 + c)].width = width
 
@@ -143,7 +211,7 @@ def build_sales_import_template(inventory):
         row=len(inventory) + 3, column=1,
         value="Copy a SKU from this list into the Import Sales sheet — only SKUs stocked at this branch can be imported.",
     )
-    note.font = Font(italic=True, size=9.5, color="5B6272")
+    note.font = Font(name=XL_FONT, italic=True, size=9.5, color="8A7A4A")
 
     buf = io.BytesIO()
     wb.save(buf)
@@ -254,6 +322,14 @@ def _parse_row(excel_row_num, row):
         _cell(row, 8), "Customer Address", 255)
     sold_at = _parse_import_date(_cell(row, 9))
 
+    # Excel hands back a typed 1 as 1.0: "1" and "1.0" must be the same receipt.
+    receipt_raw = _cell(row, 10)
+    if isinstance(receipt_raw, float) and receipt_raw.is_integer():
+        receipt_raw = int(receipt_raw)
+    receipt = str(receipt_raw if receipt_raw is not None else "").strip()
+    if len(receipt) > 40:
+        raise ValidationError("Receipt is too long (max 40 characters).")
+
     return {
         "row": excel_row_num,
         "sku": sku,
@@ -265,12 +341,15 @@ def _parse_row(excel_row_num, row):
         "customer_name": customer_name,
         "customer_address": customer_address,
         "sold_at": sold_at,
+        "receipt": receipt.lower(),
+        "receipt_label": receipt,
     }
 
 
 def import_sales_rows(branch_id, raw_rows, user_id):
     """Validate and insert every row from parse_sales_import_workbook()
-    as one atomic transaction. Returns the number of rows inserted.
+    as one atomic transaction. Returns (rows inserted, receipts they make up): rows
+    sharing a Receipt label are one receipt, every other row is its own.
 
     Raises ValidationError for problems that don't need the database
     (empty file, too many rows, bad values on individual rows) and
@@ -293,6 +372,28 @@ def import_sales_rows(branch_id, raw_rows, user_id):
         except ValidationError as err:
             errors.append(f"Row {excel_row_num}: {err}")
 
+    # Rows sharing a Receipt label are one receipt: one customer, one payment, one type, one date.
+    groups = {}
+    for item in parsed:
+        if item["receipt"]:
+            groups.setdefault(item["receipt"], []).append(item)
+    for label, members in groups.items():
+        first = members[0]
+        if len(members) > MAX_ORDER_LINES:
+            errors.append(f"Receipt '{first['receipt_label']}' has {len(members)} rows; "
+                          f"one receipt can hold at most {MAX_ORDER_LINES} products.")
+            continue
+        same = ("sale_type", "payment_method", "buyer_name", "customer_name", "customer_address")
+        for item in members[1:]:
+            clash = [k for k in same if item[k] != first[k]]
+            if item["sold_at"].date() != first["sold_at"].date():
+                clash.append("date")
+            if clash:
+                errors.append(f"Row {item['row']}: Receipt '{item['receipt_label']}' must have the same "
+                              f"{', '.join(c.replace('_', ' ') for c in clash)} as row {first['row']}.")
+        for item in members:
+            item["sold_at"] = first["sold_at"]          # one receipt, one moment
+
     if errors:
         shown = errors[:20]
         if len(errors) > len(shown):
@@ -300,11 +401,12 @@ def import_sales_rows(branch_id, raw_rows, user_id):
         raise ValidationError("\n".join(shown))
 
     inserted = 0
+    new_ids = {}                                       # excel row -> new sale_id
     with transaction() as conn:
         cur = conn.cursor(dictionary=True)
         for item in parsed:
             sku = item["sku"]
-            cur.execute("SELECT sku, item_name, unit FROM products WHERE sku = %s", (sku,))
+            cur.execute("SELECT sku, item_name, unit FROM sale_catalog WHERE sku = %s", (sku,))
             product = cur.fetchone()
             if not product:
                 cur.close()
@@ -325,14 +427,23 @@ def import_sales_rows(branch_id, raw_rows, user_id):
             # re-locks its stock row, so several rows for one SKU in the
             # same file draw down one running total; a Refill takes HQ
             # bulk and is refused at a branch.
+            sale_id = cur.lastrowid
+            new_ids[item["row"]] = sale_id
             try:
-                apply_sale_stock(cur, sale_id=cur.lastrowid, branch_id=branch_id, product=product,
+                apply_sale_stock(cur, sale_id=sale_id, branch_id=branch_id, product=product,
                                  qty=item["qty"], sale_type=item["sale_type"], notes=notes,
                                  user_id=user_id)
             except TransactionAborted as err:
                 cur.close()
                 raise TransactionAborted(f"Row {item['row']}: {err}") from None
             inserted += 1
+        # Tie the rows of each shared receipt together (sales.order_id = the first row's id).
+        for members in groups.values():
+            if len(members) > 1:
+                ids = [new_ids[m["row"]] for m in members]
+                cur.execute("UPDATE sales SET order_id = %s WHERE sale_id IN (" + ", ".join(["%s"] * len(ids)) + ")",
+                            (ids[0], *ids))
         cur.close()
 
-    return inserted
+    receipts = inserted - sum(len(m) - 1 for m in groups.values() if len(m) > 1)
+    return inserted, receipts

@@ -3,7 +3,7 @@ runs cleanly for both roles, and the bottle / bulk-mL split, HQ naming,
 bulk-request guard and COGS maths match the rest of the system.
 """
 from heaven_angel.routes import ai_tools
-from factories import make_branch, make_inventory, make_product, unique_suffix
+from factories import make_branch, make_inventory, make_product, make_scent, unique_suffix
 
 
 def _add_sale(sql, branch_id, sku, qty, unit_price, customer_name=None, address=None):
@@ -34,6 +34,9 @@ READ_TOOLS = {
     "get_customers": {},
     "get_recent_sales": {"limit": 5},
     "get_discrepancies": {},
+    "get_voided_sales": {"period": "all_time"},
+    "get_inventory_log": {"period": "all_time"},
+    "find_report": {"topic": "sales"},
 }
 ADMIN_TOOLS = {
     "get_raw_materials": {},
@@ -45,6 +48,7 @@ ADMIN_TOOLS = {
     "get_partner_inquiries": {},
     "get_branch_performance": {},
     "get_financials": {"period": "all_time"},
+    "get_material_price_history": {},
 }
 
 
@@ -66,8 +70,8 @@ def test_every_tool_runs_for_its_roles(app, sql):
 
 def test_sales_tools_keep_bulk_ml_apart_and_customer_address(app, sql):
     branch_id = make_branch(sql)
-    bottle = make_product(sql)
-    bulk = make_product(sql, unit="BULK")
+    bottle, base = make_scent(sql)
+    bulk = f"{base}-BULK"
     customer = f"AI Buyer {unique_suffix()}"
     _add_sale(sql, branch_id, bottle, 2, "500.00", customer, "First Street")
     _add_sale(sql, branch_id, bulk, 100, "5.00", customer, "Second Street")
@@ -85,14 +89,14 @@ def test_sales_tools_keep_bulk_ml_apart_and_customer_address(app, sql):
 
 def test_branch_check_stock_hides_bulk_and_propose_rejects_bulk(app, sql):
     branch_id = make_branch(sql)
-    bulk = make_product(sql, unit="BULK")
-    make_inventory(sql, branch_id, bulk, stock_qty=0)
+    # Bulk is not a product: there is no such SKU to check or to request.
+    bulk = f"NOPE-{unique_suffix().upper()}-BULK"
     with app.test_request_context():
         stock = ai_tools.dispatch("check_stock", {"sku": bulk}, _branch_ctx(branch_id))
         draft = ai_tools.dispatch("propose_stock_request", {"items": [{"sku": bulk, "qty": 5}]},
                                   _branch_ctx(branch_id))
     assert stock["results"] == []
-    assert "Bulk/Refill" in draft["error"]
+    assert draft["error"]
 
 
 def test_admin_can_name_hq_for_sales(app, sql):

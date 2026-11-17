@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% import "_empty.html" as empty %}
 {% import "_macros.html" as m %}
 {% block title %}Stock Requests{% endblock %}
 {% block heading %}Stock Requests{% endblock %}
@@ -105,9 +106,7 @@
           {% endfor %}
         </tbody>
       </table>
-      <div class="empty-state smart-no-match" style="display:none;">
-        <p>No requests match your search.</p>
-      </div>
+      {{ empty.no_match('requests') }}
     </div>
     <div class="smart-pagination" style="display:none;">
       <button type="button" class="btn btn-ghost btn-sm" data-page-prev>Previous</button>
@@ -116,9 +115,7 @@
     </div>
   </div>
   {% else %}
-  <div class="empty-state">
-    <p>No requests in this view. A request appears here when a branch asks HQ for stock.</p>
-  </div>
+  {{ empty.state('No requests in this view', 'A request appears here when a branch asks HQ for stock.', icon='truck') }}
   {% endif %}
 </div>
 {% endblock %}

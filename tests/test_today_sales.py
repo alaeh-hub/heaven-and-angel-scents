@@ -97,4 +97,5 @@ def test_compact_amounts():
     assert compact_peso(850) == "₱850"
     assert compact_peso(10000) == "₱10k"
     assert compact_peso(12450) == "₱12.4k"
-    assert compact_peso(1_250_000) == "₱1.2M"
+    assert compact_peso(4030) == "₱4.03k"        # under ten of a unit keeps two decimals
+    assert compact_peso(1_250_000) == "₱1.25M"

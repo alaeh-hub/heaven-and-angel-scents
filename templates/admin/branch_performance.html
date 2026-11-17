@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% import "_empty.html" as empty %}
 {% import "_macros.html" as m %}
 {% block title %}Branch Performance{% endblock %}
 {% block heading %}Branch Performance{% endblock %}
@@ -159,9 +160,7 @@
           {% endfor %}
         </tbody>
       </table>
-      <div class="empty-state smart-no-match" style="display:none;">
-        <p>No branches match your search.</p>
-      </div>
+      {{ empty.no_match('branches') }}
     </div>
     <div class="smart-pagination" style="display:none;">
       <button type="button" class="btn btn-ghost btn-sm" data-page-prev>Previous</button>
@@ -170,7 +169,7 @@
     </div>
   </div>
   {% else %}
-  <div class="empty-state"><p>No branches yet.</p></div>
+  {{ empty.state('No branches to compare yet', 'Once branches are added and start selling, their sales and stock are ranked here.', icon='chart') }}
   {% endif %}
 </div>
 {% endblock %}
@@ -242,6 +241,7 @@
     // First-paint sizing fix (see reports.html): the canvas can be measured
     // once, before the sidebar/webfonts settle, and Chart.js never
     // re-measures on its own. Re-running resize() corrects that.
+    syncChartEmpties(document);
     document.fonts.ready.then(function () { chart.resize(); unitsChart.resize(); });
     window.addEventListener('load', function () { chart.resize(); unitsChart.resize(); });
   })();

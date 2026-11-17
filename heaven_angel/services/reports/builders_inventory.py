@@ -4,6 +4,7 @@ from heaven_angel.services.reports.filters import describe_window, time_window
 
 
 from heaven_angel.db import query
+from heaven_angel.services.material_prices import load_material_price_history
 from heaven_angel.utils import (
     BOTTLE_UNITS, bottle_size_ml,
 )
@@ -137,7 +138,7 @@ def report_materials(filters, branch_scope):
         tuple(params),
     )
     for r in rows:
-        r["supplier_name"] = r["supplier_name"] or "— none on file —"
+        r["supplier_name"] = r["supplier_name"] or "None on file"
         r["package_qty"] = float(r["package_qty"])
         r["package_cost"] = float(r["package_cost"])
         r["cost_per_unit"] = float(r["cost_per_unit"])
@@ -252,7 +253,7 @@ def report_formulas(filters, branch_scope):
         ("cost_per_unit", "Cost of Goods", "money"),
         ("updated_at", "Last Changed", "datetime"),
     ]
-    return columns, rows, False, "Snapshot as of now — the cost of goods each production run is charged"
+    return columns, rows, False, "Snapshot as of now: the cost of goods each production run is charged"
 
 
 def report_cogs_logs(filters, branch_scope):
@@ -641,4 +642,109 @@ def report_low_stock(filters, branch_scope):
         ("stock_qty", "Stock Qty", "int"), ("reorder_level", "Reorder Level", "int"),
         ("shortfall", "Below Reorder By", "int"),
     ]
-    return columns, rows, len(rows) == MAX_ROWS, "Snapshot as of now — at or below reorder level"
+    return columns, rows, len(rows) == MAX_ROWS, "Snapshot as of now, at or below reorder level"
+
+
+def report_material_prices(filters, branch_scope):
+    """One row per raw material: what it cost per unit on the first purchase and
+    on the latest one, how far it moved, and the blended cost per unit now.
+    Same figures as the Materials page's price trends chart (shared service),
+    biggest movers first. A snapshot, not windowed."""
+    history = load_material_price_history(filters["search"] or None)
+    rows = []
+    for m in history:
+        change = m["change_pct"]
+        rows.append({
+            "material_name": m["name"],
+            "unit": m["unit"].title(),
+            "purchase_count": m["purchase_count"],
+            "first_price": m["first_price"],
+            "latest_price": m["latest_price"],
+            "change": "—" if change is None or m["purchase_count"] < 2 else f"{change:+.1f}%",
+            "lowest_price": m["lowest_price"],
+            "highest_price": m["highest_price"],
+            "blended_price": m["current_cost_per_unit"],
+            "last_purchase": m["points"][-1]["date"],
+            "_sort": abs(change) if change is not None and m["purchase_count"] > 1 else -1,
+        })
+    rows.sort(key=lambda r: (-r["_sort"], r["material_name"]))
+    rows = rows[:MAX_ROWS]
+    for r in rows:
+        del r["_sort"]
+    columns = [
+        ("material_name", "Material", "str"),
+        ("unit", "Unit", "str"),
+        ("purchase_count", "Purchases", "int"),
+        ("first_price", "First Price / Unit", "price"),
+        ("latest_price", "Latest Price / Unit", "price"),
+        ("change", "Change Since First", "str"),
+        ("lowest_price", "Lowest Paid", "price"),
+        ("highest_price", "Highest Paid", "price"),
+        ("blended_price", "Blended Cost / Unit", "price"),
+        ("last_purchase", "Last Purchase", "str"),
+    ]
+    return columns, rows, len(rows) == MAX_ROWS, "Snapshot as of now, biggest price moves first"
+
+
+def report_shipments(filters, branch_scope):
+    """One row per delivery shipment (stock_request_shipments): which request
+    and branch it was for, when HQ dispatched it, when the branch received it,
+    and the units sent, received and damaged. A partial dispatch makes several
+    shipments for one request, so this is the finer-grained view of Stock Requests."""
+    where, params = "", []
+    if branch_scope is not None:
+        where += " AND sr.branch_id = %s"
+        params.append(branch_scope)
+    elif filters["branch_id"] != "all":
+        where += " AND sr.branch_id = %s"
+        params.append(filters["branch_id"])
+    if filters["status"] != "all":
+        if filters["status"] == "In Transit":
+            where += " AND ss.status = 'In Transit'"
+        elif filters["status"] in ("Fulfilled", "Partially Fulfilled"):
+            where += " AND ss.status = 'Received'"
+        else:
+            where += " AND 1=0"
+    if filters["search"]:
+        where += " AND (sr.delivery_number LIKE %s OR b.branch_name LIKE %s)"
+        like = f"%{filters['search']}%"
+        params += [like, like]
+    time_where, order, limit_n, truncated = time_window("ss.dispatched_at", filters, params)
+    where += time_where
+
+    rows = query(
+        f"""SELECT ss.dispatched_at, ss.received_at, ss.shipment_id, sr.delivery_number, b.branch_name, ss.status,
+                   COALESCE(SUM(ssi.dispatched_qty), 0) AS dispatched_units,
+                   COALESCE(SUM(ssi.received_qty), 0) AS received_units,
+                   COALESCE(SUM(ssi.damaged_qty), 0) AS damaged_units
+            FROM stock_request_shipments ss
+            JOIN stock_requests sr ON sr.request_id = ss.request_id
+            JOIN branches b ON b.branch_id = sr.branch_id
+            LEFT JOIN stock_request_shipment_items ssi ON ssi.shipment_id = ss.shipment_id
+            WHERE 1=1 {where}
+            GROUP BY ss.shipment_id, ss.dispatched_at, ss.received_at, sr.delivery_number, b.branch_name, ss.status
+            {order} LIMIT {limit_n}""",
+        tuple(params),
+    )
+    for r in rows:
+        r["shipment"] = f"#{r['shipment_id']}"
+        r["status"] = "In Transit" if r["status"] == "In Transit" else "Fulfilled"
+        r["received_at"] = r["received_at"] or "Awaiting branch"
+        r["dispatched_units"] = int(r["dispatched_units"])
+        r["received_units"] = int(r["received_units"])
+        r["damaged_units"] = int(r["damaged_units"])
+    columns = [
+        ("dispatched_at", "Dispatched", "datetime"),
+        ("delivery_number", "Delivery #", "str"),
+        ("shipment", "Shipment", "str"),
+        ("branch_name", "Branch", "str"),
+        ("status", "Status", "badge:status"),
+        ("dispatched_units", "Units Sent", "int"),
+        ("received_units", "Units Received", "int"),
+        ("damaged_units", "Units Damaged", "int"),
+        ("received_at", "Received", "datetime"),
+    ]
+    if branch_scope is not None:
+        columns = [c for c in columns if c[0] != "branch_name"]
+    truncated = truncated and len(rows) == MAX_ROWS
+    return columns, rows, truncated, describe_window(filters, truncated)

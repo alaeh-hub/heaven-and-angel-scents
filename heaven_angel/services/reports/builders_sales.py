@@ -42,7 +42,7 @@ def report_sales_history(filters, branch_scope):
                    s.customer_name
             FROM sales s
             JOIN branches b ON s.branch_id = b.branch_id
-            JOIN products p ON s.sku = p.sku
+            JOIN sale_catalog p ON s.sku = p.sku
             LEFT JOIN users bu ON s.buyer_user_id = bu.user_id
             WHERE 1=1 {where} {order} LIMIT {limit_n}""",
         tuple(params),
@@ -100,7 +100,7 @@ def report_credit_purchases(filters, branch_scope):
                    COALESCE(s.buyer_name, bu.username, '(unspecified)') AS buyer_username
             FROM sales s
             JOIN branches b ON s.branch_id = b.branch_id
-            JOIN products p ON s.sku = p.sku
+            JOIN sale_catalog p ON s.sku = p.sku
             LEFT JOIN users bu ON s.buyer_user_id = bu.user_id
             WHERE s.payment_method = %s {where} {order} LIMIT {limit_n}""",
         tuple(params),
@@ -355,7 +355,7 @@ def report_customers(filters, branch_scope):
                        MAX(sa.sold_at) AS last_purchase_at
                 FROM sales sa
                 JOIN branches b ON sa.branch_id = b.branch_id
-                JOIN products p ON p.sku = sa.sku
+                JOIN sale_catalog p ON p.sku = sa.sku
                 WHERE sa.customer_name IS NOT NULL AND sa.customer_name <> ''
                       {scope_sql.format(a="sa")}{search_sql}
                 GROUP BY sa.customer_name
@@ -381,7 +381,7 @@ def report_customers(filters, branch_scope):
     ]
     if branch_scope is None:
         columns.append(("last_branch", "Last At", "str"))
-    return columns, rows, len(rows) == MAX_ROWS, "Snapshot as of now — named customers only (walk-ins excluded)"
+    return columns, rows, len(rows) == MAX_ROWS, "Snapshot as of now, named customers only (walk-ins excluded)"
 
 
 def report_branch_performance(filters, branch_scope):
@@ -420,7 +420,7 @@ def report_branch_performance(filters, branch_scope):
                        SUM(CASE WHEN p.unit <> 'BULK' THEN s.qty_sold ELSE 0 END) AS units_sold,
                        SUM(CASE WHEN p.unit = 'BULK' THEN s.qty_sold ELSE 0 END) AS bulk_ml_sold,
                        SUM(s.qty_sold * s.unit_price) AS revenue
-                FROM sales s JOIN products p ON p.sku = s.sku
+                FROM sales s JOIN sale_catalog p ON p.sku = s.sku
                 WHERE 1=1 {sales_where} GROUP BY s.branch_id
             ) sales_agg ON sales_agg.branch_id = b.branch_id
             LEFT JOIN (
@@ -512,7 +512,7 @@ def report_financial_summary(filters, branch_scope):
     ]
     columns = [("figure", "Figure", "str", 2.5), ("figure_amount", "Amount", "money", 1.0)]
     note = describe_window(filters, False) if filters["mode"] in ("range", "month") else "All time"
-    return columns, rows, False, note + " — gross profit excludes rent, payroll and other untracked costs"
+    return columns, rows, False, note + ". Gross profit excludes rent, payroll and other untracked costs"
 
 
 def report_voided_sales(filters, branch_scope):

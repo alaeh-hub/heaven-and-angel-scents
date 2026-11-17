@@ -1,12 +1,13 @@
 
 from flask import (
-    current_app, flash, redirect, render_template,
+    current_app, flash, jsonify, redirect, render_template,
     request, session, url_for,
 )
 
 from heaven_angel.db import TransactionAborted, execute, query, transaction
 from heaven_angel.decorators import admin_required
 from heaven_angel.services.audit import log_action
+from heaven_angel.services.material_prices import build_material_price_history, load_material_price_history  # noqa: F401
 from heaven_angel.sockets import notify_all
 from heaven_angel.utils import (
     MATERIAL_UNITS, ValidationError,
@@ -159,6 +160,12 @@ def materials():
         supplier_totals=supplier_totals,
         unit_choices=MATERIAL_UNITS,
     )
+
+
+@bp.route("/api/material-price-trends")
+@admin_required
+def material_price_trends():
+    return jsonify({"materials": load_material_price_history()})
 
 
 @bp.route("/materials/edit", methods=["POST"])

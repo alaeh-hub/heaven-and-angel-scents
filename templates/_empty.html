@@ -1,0 +1,79 @@
+{# Shared empty states for every admin and branch screen.
+
+   Import:   {% import "_empty.html" as empty %}
+
+   Every empty state says what is empty (title), why it matters or what
+   fills it (body) and offers at most one action:
+
+     {{ empty.state('No sales yet', 'Recorded sales show up here.', icon='receipt',
+                    action='Record a sale', href=url_for('branch.record_sale')) }}
+
+   An action can also click a button that is already on the page, which is
+   how "New sale" or "+ Add material" open their dialogs:
+
+     {{ empty.state(..., action='New sale', trigger='openNewSaleBtn') }}
+
+   For anything more than one action, wrap the extras in a call block:
+
+     {% call empty.state('Title', 'Body') %}<a class="btn btn-ghost btn-sm" href="...">Other</a>{% endcall %}
+
+   tone:  'empty' (nothing here yet), 'clear' (good news: nothing needs attention).
+   Search misses use no_match(), which tables.js shows and hides and adds the
+   "Clear search" button to.
+
+   icon: inbox, check, search, users, chart, box, truck, receipt, flask, clock,
+         shield, tag, mail, alert, store. #}
+
+{% macro icon_paths(name) -%}
+{%- if name == 'check' -%}<circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/>
+{%- elif name == 'search' -%}<circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/>
+{%- elif name == 'users' -%}<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+{%- elif name == 'chart' -%}<path d="M3 3v18h18"/><path d="m7 15 4-4 3 3 5-6"/>
+{%- elif name == 'box' -%}<path d="M21 8 12 3 3 8v8l9 5 9-5z"/><path d="m3 8 9 5 9-5M12 13v8"/>
+{%- elif name == 'truck' -%}<path d="M1 3h13v13H1z"/><path d="M14 8h5l3 3v5h-8z"/><circle cx="5.5" cy="18.5" r="2"/><circle cx="18.5" cy="18.5" r="2"/>
+{%- elif name == 'receipt' -%}<path d="M4 2v20l3-2 2 2 3-2 3 2 2-2 3 2V2z"/><path d="M8 7h8M8 11h8M8 15h5"/>
+{%- elif name == 'flask' -%}<path d="M9 3h6M10 3v6L4.5 19a1.5 1.5 0 0 0 1.3 2.2h12.4a1.5 1.5 0 0 0 1.3-2.2L14 9V3"/><path d="M7.5 14h9"/>
+{%- elif name == 'clock' -%}<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>
+{%- elif name == 'shield' -%}<path d="M12 3 4 6v6c0 5 3.5 8.5 8 9 4.5-.5 8-4 8-9V6z"/>
+{%- elif name == 'tag' -%}<path d="M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8z"/><circle cx="7.5" cy="7.5" r="1.5"/>
+{%- elif name == 'mail' -%}<rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/>
+{%- elif name == 'alert' -%}<path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/>
+{%- elif name == 'store' -%}<path d="M3 9l1.5-5h15L21 9"/><path d="M3 9a3 3 0 0 0 6 0 3 3 0 0 0 6 0 3 3 0 0 0 6 0"/><path d="M5 12v8h14v-8"/>
+{%- else -%}<polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/>
+{%- endif -%}
+{%- endmacro %}
+
+{% macro state(title, body='', icon='inbox', tone='empty', action=None, href=None, trigger=None, compact=False, id=None) -%}
+{#- Actions sit to the right in a wide card, and under the text in a compact one (half-width cards), so they never end up alone on a row. -#}
+{%- set actions -%}
+  {%- if action or caller %}
+  <div class="empty-actions">
+    {%- if action and href %}<a class="btn btn-accent btn-sm" href="{{ href }}">{{ action }}</a>
+    {%- elif action and trigger %}<button type="button" class="btn btn-accent btn-sm" data-click-target="{{ trigger }}">{{ action }}</button>{% endif %}
+    {%- if caller %}{{ caller() }}{% endif %}
+  </div>
+  {%- endif %}
+{%- endset -%}
+<div class="empty-state empty-{{ tone }}{{ ' empty-compact' if compact }}"{% if id %} id="{{ id }}"{% endif %}>
+  <span class="empty-icon" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false">{{ icon_paths('check' if tone == 'clear' and icon == 'inbox' else icon) }}</svg></span>
+  <div class="empty-text">
+    <h3 class="empty-title">{{ title }}</h3>
+    {%- if body %}
+    <p class="empty-body">{{ body }}</p>
+    {%- endif %}
+    {%- if compact %}{{ actions }}{% endif %}
+  </div>
+  {%- if not compact %}{{ actions }}{% endif %}
+</div>
+{%- endmacro %}
+
+{# A search or filter that matched nothing. Hidden until tables.js shows it. #}
+{% macro no_match(noun='results', show=False) -%}
+<div class="empty-state empty-search empty-compact smart-no-match"{% if not show %} style="display:none;"{% endif %}>
+  <span class="empty-icon" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false">{{ icon_paths('search') }}</svg></span>
+  <div class="empty-text">
+    <h3 class="empty-title">No {{ noun }} match</h3>
+    <p class="empty-body">Check the spelling, try fewer words, or change the filter.</p>
+  </div>
+</div>
+{%- endmacro %}

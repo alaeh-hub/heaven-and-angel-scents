@@ -1,5 +1,6 @@
     {# The app's main script, split by feature. Order matters: they share one global scope #}
     {# and the DOMContentLoaded boot in page-init.js calls helpers defined in later files. #}
+    <script src="{{ url_for('static', filename='js/app/smart-match.js') }}"></script>
     <script src="{{ url_for('static', filename='js/app/core.js') }}"></script>
     <script src="{{ url_for('static', filename='js/app/sidebar.js') }}"></script>
     <script src="{{ url_for('static', filename='js/app/settings.js') }}"></script>

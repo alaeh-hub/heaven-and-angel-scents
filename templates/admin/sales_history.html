@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% import "_empty.html" as empty %}
 {% import "_macros.html" as m %}
 {% block title %}Sales History{% endblock %}
 {% block heading %}Sales History{% endblock %}
@@ -84,8 +85,7 @@
             <td class="mobile-detail" data-label="Payment">{{ m.payment_method_badge(s.payment_method, s.buyer_username) }}</td>
             <td data-label="" class="mobile-detail">
               <div class="sh-actions">
-                <a href="{{ url_for('admin.sale_receipt', sale_id=s.sale_id) }}" class="btn btn-ghost btn-sm"
-                  target="_blank" data-generate-file>Receipt</a>
+                {{ m.receipt_button(s, 'admin.sale_receipt') }}
                 <button type="button" class="btn btn-ghost btn-sm void-sale-btn"
                   data-url="{{ url_for('admin.void_sale_route', sale_id=s.sale_id) }}"
                   data-label="{{ s.sale_type }} of {{ s.qty_sold }}{{ ' mL' if s.unit == 'BULK' }} × {{ s.item_name }} ({{ s.branch_name }}, {{ s.sold_at.strftime('%b %d') }})">Void</button>
@@ -101,9 +101,7 @@
           {% endfor %}
         </tbody>
       </table>
-      <div class="empty-state smart-no-match" style="display:none;">
-        <p>No sales match your search.</p>
-      </div>
+      {{ empty.no_match('sales') }}
     </div>
     <div class="smart-pagination" style="display:none;">
       <button type="button" class="btn btn-ghost btn-sm" data-page-prev>Previous</button>
@@ -112,7 +110,7 @@
     </div>
   </div>
   {% else %}
-  <div class="empty-state"><p>No sales recorded here yet. Record one from <a href="{{ url_for('admin.record_sale') }}">Record Sale</a>.</p></div>
+  {{ empty.state('No sales recorded here yet', 'Record one from Record Sale and it is listed here.', icon='receipt', action='Record a sale', href=url_for('admin.record_sale')) }}
   {% endif %}
 </div>
 
@@ -150,7 +148,7 @@
     </table>
   </div>
   {% else %}
-  <div class="empty-state"><p>No sales have been voided. A voided sale and its reason are listed here.</p></div>
+  {{ empty.state('No voided sales', 'A voided sale and the reason it was voided are listed here.', icon='check', tone='clear') }}
   {% endif %}
 </div>
 

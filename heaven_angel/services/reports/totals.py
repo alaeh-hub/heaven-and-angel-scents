@@ -38,7 +38,10 @@ NO_TOTAL_COLUMNS = {"unit_price", "cost_per_unit", "cogs_per_unit",
                     # only the Closed-only sale_amount column is a total.
                     "package_value",
                     # Financial Summary is one row per different figure.
-                    "figure_amount"}
+                    "figure_amount",
+                    # Material Price Changes: how many purchases each material had is a count per row,
+                    # not an amount that means anything added across different materials.
+                    "purchase_count"}
 
 
 # Per-row quantity columns that hold mL rather than a bottle count on a

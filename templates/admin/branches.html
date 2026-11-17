@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% import "_empty.html" as empty %}
 {% block title %}Branches{% endblock %}
 {% block heading %}Branches{% endblock %}
 
@@ -74,9 +75,7 @@
             {% endfor %}
           </tbody>
         </table>
-        <div class="empty-state smart-no-match" style="display:none;">
-          <p>No branches match your search.</p>
-        </div>
+        {{ empty.no_match('branches') }}
       </div>
       <div class="smart-pagination" style="display:none;">
         <button type="button" class="btn btn-ghost btn-sm" data-page-prev>Previous</button>
@@ -85,7 +84,7 @@
       </div>
     </div>
     {% else %}
-    <div class="empty-state"><p>No branches yet. Add your first retail location with the form beside this table.</p></div>
+    {{ empty.state('No branches yet', 'Add your first retail location with the form beside this table. Each branch gets its own stock, sales and staff accounts.', icon='store') }}
     {% endif %}
   </div>
 

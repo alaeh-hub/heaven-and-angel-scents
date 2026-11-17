@@ -1,5 +1,6 @@
 
 from heaven_angel.db import query
+from heaven_angel.services.material_prices import load_material_price_history
 from heaven_angel.utils import BOTTLE_UNITS, bottle_size_ml
 
 from heaven_angel.routes.ai_tools._common import MAX_ROWS
@@ -20,14 +21,25 @@ def get_raw_materials(args, ctx):
     sql += " ORDER BY rm.stock_qty ASC, rm.material_name LIMIT %s"
     params.append(MAX_ROWS)
     rows = query(sql, tuple(params))
+    # What each purchase actually cost, so "cost_per_unit" (a blended average) is not mistaken for the latest price.
+    history = {m["name"]: m for m in load_material_price_history(name or None)}
+    results = []
+    for r in rows:
+        h = history.get(r["material_name"])
+        results.append({
+            "material": r["material_name"], "unit": r["unit"], "stock_qty": float(r["stock_qty"] or 0),
+            "cost_per_unit": float(r["cost_per_unit"] or 0), "purchase_mode": r["purchase_mode"],
+            "supplier": r["supplier_name"],
+            "purchases": h["purchase_count"] if h else None,
+            "latest_price_paid_per_unit": h["latest_price"] if h else None,
+            "last_purchase": h["points"][-1]["date"] if h else None,
+            "price_change_since_first_pct": None if not h or h["change_pct"] is None or h["purchase_count"] < 2 else round(h["change_pct"], 1),
+        })
     return {
-        "results": [
-            {"material": r["material_name"], "unit": r["unit"], "stock_qty": float(r["stock_qty"] or 0),
-             "cost_per_unit": float(r["cost_per_unit"] or 0), "purchase_mode": r["purchase_mode"],
-             "supplier": r["supplier_name"]}
-            for r in rows
-        ],
-        "note": "Sorted lowest stock first.",
+        "results": results,
+        "note": ("Sorted lowest stock first. cost_per_unit is the blended average across every purchase; "
+                 "latest_price_paid_per_unit is what the most recent purchase cost. "
+                 "Use get_material_price_history for the full price story."),
     }
 
 

@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% import "_empty.html" as empty %}
 {% import "_macros.html" as m %}
 {% block title %}Login Activity{% endblock %}
 {% block heading %}Login Activity{% endblock %}
@@ -175,9 +176,7 @@
           {% endfor %}
         </tbody>
       </table>
-      <div class="empty-state smart-no-match" style="display:none;">
-        <p>No attempts match your search.</p>
-      </div>
+      {{ empty.no_match('attempts') }}
     </div>
     <div class="smart-pagination" style="display:none;">
       <button type="button" class="btn btn-ghost btn-sm" data-page-prev>Previous</button>
@@ -196,7 +195,7 @@
   </div>
   {% endif %}
   {% else %}
-  <div class="empty-state"><p>No login attempts in this view. Attempts appear here as people submit the login form.</p></div>
+  {{ empty.state('No login attempts in this view', 'Each sign-in attempt, successful or not, is recorded here as people use the login form.', icon='shield') }}
   {% endif %}
 </div>
 {% endblock %}

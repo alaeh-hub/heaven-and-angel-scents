@@ -184,20 +184,49 @@ def reminder():
 
 
 # ---------------------------------------------------------------- scheduler
+def _test_run_at(app):
+    """Development override: BACKUP_TEST_RUN_AT ("YYYY-MM-DD HH:MM", business
+    time) makes the scheduler send one backup at that moment, regardless of the
+    days/hour schedule or the auto toggle. None when unset or invalid."""
+    raw = (app.config.get("BACKUP_TEST_RUN_AT") or "").strip()
+    if not raw:
+        return None
+    try:
+        return datetime.datetime.strptime(raw, "%Y-%m-%d %H:%M")
+    except ValueError:
+        app.logger.warning("BACKUP_TEST_RUN_AT=%r is not 'YYYY-MM-DD HH:MM'; ignoring it", raw)
+        return None
+
+
+def _auto_ran_since(moment):
+    """True if an automatic backup (success or failure) was logged at/after moment."""
+    row = query("""SELECT 1 AS hit FROM admin_actions
+                   WHERE actor_username = %s AND action IN ('BACKUP_EMAIL', 'BACKUP_EMAIL_FAILED')
+                     AND created_at >= %s LIMIT 1""", (AUTO_ACTOR, moment), fetchone=True)
+    return bool(row)
+
+
 def _tick(app):
     with app.app_context():
         if restore_running():
             return
-        schedule = get_schedule()
-        if not schedule["auto"] or not backup_email_configured(app.config):
+        if not backup_email_configured(app.config):
             return
-        ov = overview(schedule)
-        if not ov["due_now"]:
-            return
-        failed = ov["failed"]
-        if failed and failed["actor_username"] == AUTO_ACTOR \
-                and business_now() - failed["created_at"] < _RETRY_AFTER_FAILURE:
-            return                              # it failed recently; don't hammer the mail server
+        test_at = _test_run_at(app)
+        if test_at:
+            if business_now() < test_at or _auto_ran_since(test_at):
+                return                          # not yet, or already ran once for this test time
+        else:
+            schedule = get_schedule()
+            if not schedule["auto"]:
+                return
+            ov = overview(schedule)
+            if not ov["due_now"]:
+                return
+            failed = ov["failed"]
+            if failed and failed["actor_username"] == AUTO_ACTOR \
+                    and business_now() - failed["created_at"] < _RETRY_AFTER_FAILURE:
+                return                          # it failed recently; don't hammer the mail server
 
         conn = get_db()
         cur = conn.cursor()
@@ -226,6 +255,7 @@ def start_scheduler(app):
                 _tick(app)
             except Exception:
                 app.logger.exception("Backup scheduler tick failed")
-            time.sleep(_TICK_SECONDS)
+            # check often while a dev test time is set so it fires on the minute
+            time.sleep(15 if app.config.get("BACKUP_TEST_RUN_AT") else _TICK_SECONDS)
 
     threading.Thread(target=loop, name="backup-scheduler", daemon=True).start()

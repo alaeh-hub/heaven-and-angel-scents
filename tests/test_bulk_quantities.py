@@ -1,8 +1,8 @@
-"""Bulk products' qty_sold is recorded in mL, not bottles — so every
+"""A bulk sale's qty_sold is recorded in mL, not bottles — so every
 "units" figure (Customers, the branch dashboard, reports) must keep bulk
 mL apart from bottle counts rather than adding the two together.
 """
-from factories import login, make_branch, make_product, make_user, unique_suffix
+from factories import login, make_branch, make_bulk_sale, make_scent, make_user, unique_suffix
 from heaven_angel.services.reports import get_report, parse_report_filters, render_report_excel, render_report_pdf
 
 
@@ -19,11 +19,10 @@ def _add_sale(sql, branch_id, sku, qty, unit_price, customer_name=None):
 
 def _setup_mixed_sales(sql):
     branch_id = make_branch(sql)
-    bottle_sku = make_product(sql)
-    bulk_sku = make_product(sql, unit="BULK")
+    bottle_sku, base = make_scent(sql)
     customer = f"Bulk Buyer {unique_suffix()}"
     _add_sale(sql, branch_id, bottle_sku, 2, "500.00", customer)
-    _add_sale(sql, branch_id, bulk_sku, 100, "5.00", customer)
+    make_bulk_sale(sql, branch_id, base, 100, "5.00", customer)
     return branch_id, customer
 
 

@@ -115,12 +115,49 @@ _READ_ONLY_DECLARATIONS += [
 ]
 
 
+_NEWER_DECLARATIONS = [
+    {
+        "name": "get_voided_sales",
+        "description": "Sales that were voided (removed, stock returned): how many, their total value, and the most recent ones with the reason and who voided them. Branch staff see their own branch only.",
+        "parameters": {"type": "object", "properties": {
+            "period": {"type": "string", "description": "One of " + PERIOD_NAMES + ". Defaults to all_time."},
+            "branch_name": {"type": "string", "description": "Admin only: restrict to one branch (partial match ok)."},
+        }},
+    },
+    {
+        "name": "get_inventory_log",
+        "description": "The stock movement ledger (Inventory Log): production, dispatch, receipts, sales, refills, freebies, adjustments, damage, package orders and voids. Totals by type plus the latest entries with stock before and after. Branch staff see their own branch only.",
+        "parameters": {"type": "object", "properties": {
+            "period": {"type": "string", "description": "One of " + PERIOD_NAMES + ". Defaults to this_week."},
+            "movement_type": {"type": "string", "description": "One of PRODUCTION, DISPATCH, RECEIPT, SALE, REFILL, FREEBIE, ADJUSTMENT, DAMAGE, PACKAGE_ORDER, PACKAGE_RETURN, SALE_VOID. Omit for all."},
+            "item_name": {"type": "string", "description": "Partial product name or SKU."},
+            "branch_name": {"type": "string", "description": "Admin only: restrict to one branch or HQ (partial match ok)."},
+            "limit": {"type": "integer", "description": "How many latest entries to return (default 15)."},
+        }},
+    },
+    {
+        "name": "find_report",
+        "description": "Find which report on the Reports page answers a question (sales, stock, deliveries, material prices, and so on) and get a link that opens it. Use it whenever someone asks for a report, an export, a list to download, a PDF or an Excel file. You cannot generate the file yourself.",
+        "parameters": {"type": "object", "properties": {
+            "topic": {"type": "string", "description": "What the person wants a report on, in a few words, e.g. 'sales by customer' or 'material prices'."},
+        }},
+    },
+]
+
+
 _ADMIN_DECLARATIONS = [
     {
         "name": "get_raw_materials",
         "description": "HQ raw materials (oils, alcohol, bottles and so on): stock on hand, unit, cost per unit, supplier. Lowest stock first.",
         "parameters": {"type": "object", "properties": {
             "name": {"type": "string", "description": "Partial material name to search for."},
+        }},
+    },
+    {
+        "name": "get_material_price_history",
+        "description": "How each raw material's price per unit has moved across purchases and restocks: first, latest, lowest and highest price per unit, percent change since the first purchase and since the previous one, the blended cost per unit now, and the most recent purchases. Biggest movers first. Use it for questions like which materials got more expensive.",
+        "parameters": {"type": "object", "properties": {
+            "name": {"type": "string", "description": "Partial material name to look at one material. Omit for all."},
         }},
     },
     {
@@ -223,7 +260,7 @@ def get_tool_declarations(role):
     (_ADMIN_DECLARATIONS) are declared to Admin only. propose_stock_request
     is available to both roles — Admin proposes for any branch (must name
     one), Branch staff can only ever propose for their own."""
-    decls = list(_READ_ONLY_DECLARATIONS)
+    decls = list(_READ_ONLY_DECLARATIONS) + list(_NEWER_DECLARATIONS)
     if role == "Admin":
         decls += _ADMIN_DECLARATIONS
     decls.append(_PROPOSE_DECLARATION)

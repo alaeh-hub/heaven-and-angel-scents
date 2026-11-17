@@ -6,10 +6,10 @@ from flask import (
 
 from heaven_angel.db import query
 from heaven_angel.decorators import admin_required
-from heaven_angel.services.reports import (REPORT_TYPES, get_report,
+from heaven_angel.services.reports import (REPORT_GROUPS, REPORT_TYPES, report_catalog, get_report,
                      parse_report_filters, render_report_excel, render_report_pdf)
 from heaven_angel.utils import (
-    PRODUCT_UNITS, business_today,
+    SALE_UNITS, business_today,
 )
 
 from heaven_angel.routes.admin._common import bp
@@ -30,10 +30,7 @@ from heaven_angel.services.trends import TREND_GRANULARITIES
 def reports():
     branch_list = query(
         "SELECT branch_id, branch_name FROM branches WHERE is_hq = FALSE ORDER BY branch_name")
-    report_types = [
-        {"key": key, "label": meta["label"], "windowed": meta["windowed"]}
-        for key, meta in REPORT_TYPES.items() if meta["admin"]
-    ]
+    catalog = report_catalog("Admin")
     # All-time, across every branch — qty_sold/unit_price on `sales`
     # already carries everything this needs, no extra table required.
     top_sellers = query(
@@ -41,7 +38,7 @@ def reports():
                   SUM(s.qty_sold) AS total_units,
                   SUM(s.qty_sold * s.unit_price) AS total_revenue
            FROM sales s
-           JOIN products p ON p.sku = s.sku
+           JOIN sale_catalog p ON p.sku = s.sku
            WHERE p.unit <> 'BULK'  -- bulk qty_sold is mL, not bottles
            GROUP BY p.sku, p.item_name, p.variant
            ORDER BY total_units DESC LIMIT 3"""
@@ -95,7 +92,8 @@ def reports():
     )
 
     return render_template(
-        "admin/reports.html", branch_list=branch_list, report_types=report_types, unit_choices=PRODUCT_UNITS,
+        "admin/reports.html", branch_list=branch_list, report_catalog=catalog, report_groups=REPORT_GROUPS,
+        unit_choices=SALE_UNITS,
         current_month=business_today().strftime("%Y-%m"),
         top_sellers=top_sellers, top_packages=top_packages, top_partners=top_partners,
     )
@@ -117,7 +115,7 @@ def generate_report():
 
     filters = parse_report_filters(request.args)
     report = get_report(report_type, filters, branch_scope=None,
-                        actor_label=f"HQ Admin — {session.get('username')}")
+                        actor_label=f"HQ Admin, {session.get('username')}")
 
     if report["row_count"] == 0:
         flash(
@@ -135,6 +133,21 @@ def generate_report():
         buf, mimetype=mimetype, as_attachment=True,
         download_name=f"{report_type}-{stamp}.{fmt}",
     )
+
+
+@bp.route("/api/report-preview")
+@admin_required
+def report_preview():
+    """How many rows the builder's current choices would produce, so the page can
+    say "no rows match" before anyone downloads an empty report."""
+    report_type = request.args.get("type", "")
+    meta = REPORT_TYPES.get(report_type)
+    if meta is None or not meta["admin"]:
+        abort(404)
+    report = get_report(report_type, parse_report_filters(request.args), branch_scope=None,
+                        actor_label=f"HQ Admin, {session.get('username')}")
+    return jsonify({"rows": report["row_count"], "truncated": report["truncated"],
+                    "title": report["title"], "subtitle": report["subtitle"]})
 
 
 @bp.route("/api/reports-data")

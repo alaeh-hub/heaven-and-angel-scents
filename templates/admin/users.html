@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% import "_empty.html" as empty %}
 {% block title %}Accounts{% endblock %}
 {% block heading %}Accounts{% endblock %}
 
@@ -47,6 +48,7 @@
           <option value="{{ b.branch_id }}">{{ b.branch_name }}</option>
           {% endfor %}
         </select>
+        {% if not branch_list %}<div class="help">No branches yet. <a href="{{ url_for('admin.branches') }}">Add a branch</a> before creating a branch account.</div>{% endif %}
       </div>
       <button type="submit" class="btn btn-accent panel-submit">Add account</button>
     </form>
@@ -102,9 +104,7 @@
             {% endfor %}
           </tbody>
         </table>
-        <div class="empty-state smart-no-match" style="display:none;">
-          <p>No accounts match your search.</p>
-        </div>
+        {{ empty.no_match('accounts') }}
       </div>
       <div class="smart-pagination" style="display:none;">
         <button type="button" class="btn btn-ghost btn-sm" data-page-prev>Previous</button>

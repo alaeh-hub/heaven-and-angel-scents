@@ -1,0 +1,32 @@
+{# Several scents on one receipt. Shared by the branch and HQ Record Sale forms.
+   The form's own product / quantity / price fields stay the "current line":
+   "Add to receipt" moves it into this list and clears the fields for the next
+   scent. The list is submitted as cart_sku / cart_qty / cart_price (see
+   sale_entry.parse_sale_order_form). Whatever is still filled in on the form
+   when it is submitted counts as one more product. #}
+<style>
+  .ob { margin-top: var(--space-xs); }
+  .ob-note { margin-top: 4px; font-size: var(--text-xs); color: var(--ink-faint); }
+  .ob-note.is-error { color: var(--danger, #b3261e); }
+  /* The list lives in the dialog's right-hand column (_order_basket_list.html). It scrolls
+     inside itself past about five rows, so a long order never makes the dialog scroll. */
+  .ob-list { margin: 0; padding: 0; list-style: none; border-top: 1px solid var(--border, #e6e0cf); max-height: 9.75rem; overflow-y: auto; overscroll-behavior: contain; }
+  .ob-item { display: flex; align-items: center; gap: var(--space-sm); padding: 3px 0; border-bottom: 1px solid var(--border, #e6e0cf); font-size: var(--text-sm); min-height: 1.9rem; }
+  .ob-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ob-sub { margin-left: 6px; font-size: var(--text-xs); color: var(--ink-faint); }
+  .ob-sum { font-variant-numeric: tabular-nums; white-space: nowrap; font-weight: 600; }
+  .ob-x { min-width: 28px; min-height: 28px; padding: 0; }
+  .ob-total { display: flex; justify-content: space-between; padding: 6px 0 2px; margin-bottom: var(--space-sm); font-weight: 700; }
+  .ob-head { font-size: var(--text-xs); font-weight: 600; color: var(--ink-soft); margin: var(--space-sm) 0 4px; }
+
+  /* New sale dialog: made to fit the screen without scrolling. The two big option
+     descriptions become tooltips (see the script below), and spacing is tightened. */
+  #newSaleOverlay .choice-opt-desc { display: none; }
+  #newSaleOverlay .choice-opt { min-height: 0; padding: 8px 12px; }
+  #newSaleOverlay .field { margin-bottom: var(--space-xs); }
+  #newSaleOverlay .price-hint { min-height: 1.5em; }
+</style>
+<div class="ob" id="orderBasket">
+  <button type="button" class="btn btn-ghost btn-sm" id="addToOrderBtn">+ Add to receipt (another scent)</button>
+  <div class="ob-note" id="basketNote">One receipt can hold many scents. It prints 10 per slip, and a bigger order continues on a second slip.</div>
+</div>

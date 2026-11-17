@@ -26,14 +26,12 @@ def test_every_report_builds_and_renders(app, sql):
 def test_low_stock_report_matches_low_stock_rule(app, sql):
     branch_id = make_branch(sql)
     low = make_product(sql)
-    bulk = make_product(sql, unit="BULK")
     make_inventory(sql, branch_id, low, stock_qty=2, reorder_level=10)
-    make_inventory(sql, branch_id, bulk, stock_qty=0, reorder_level=10)
     with app.test_request_context():
         report = get_report("low_stock", parse_report_filters({}), branch_scope=branch_id)
     skus = {r["sku"] for r in report["rows"]}
     assert low in skus
-    assert bulk not in skus
+    assert not any(sku.endswith("-BULK") for sku in skus)
 
 
 def test_branch_filter_only_labels_reports_that_use_it(app, sql):

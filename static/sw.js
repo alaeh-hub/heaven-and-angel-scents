@@ -7,7 +7,7 @@
  * when a page is opened, a short offline notice is shown instead of the
  * browser's error page. */
 const CACHE_PREFIX = 'ha-static-';
-const CACHE = CACHE_PREFIX + 'v2';
+const CACHE = CACHE_PREFIX + 'v3';
 
 self.addEventListener('install', () => self.skipWaiting());
 

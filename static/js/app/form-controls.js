@@ -47,15 +47,29 @@ function enhanceDatalistInput(input) {
     };
     const render = () => {
         const q = input.value.trim().toLowerCase();
-        items = Array.from(dl.options).map((o) => o.value)
-            .filter((v) => v && v.toLowerCase() !== q && v.toLowerCase().includes(q))
-            .slice(0, 8);
+        // An <option value="A1" label="Lacoste Red"> also searches (and shows)
+        // its label, so a code can be found by the name it belongs to.
+        const hints = {};
+        const all = Array.from(dl.options).filter((o) => o.value && o.value.toLowerCase() !== q).map((o) => {
+            hints[o.value] = o.getAttribute('label') || '';
+            return o.value;
+        });
+        items = (window.SmartMatch
+            ? window.SmartMatch.rank(all, q, (v) => v, (v) => hints[v])
+            : all.filter((v) => v.toLowerCase().includes(q))).slice(0, 8);
         panel.replaceChildren();
         items.forEach((v) => {
             const el = document.createElement('div');
             el.className = 'cs-option';
             el.setAttribute('role', 'option');
-            el.textContent = v;
+            if (window.SmartMatch && q) el.appendChild(window.SmartMatch.highlight(v, q, 'cs-match'));
+            else el.textContent = v;
+            if (hints[v]) {
+                const hint = document.createElement('span');
+                hint.className = 'cs-option-desc';
+                hint.textContent = ' ' + hints[v];
+                el.appendChild(hint);
+            }
             el.addEventListener('mousedown', (e) => e.preventDefault());
             el.addEventListener('click', () => pick(v));
             panel.appendChild(el);
@@ -129,8 +143,112 @@ function enhanceSelect(select) {
     let triggerDot = null;
     let activeIndex = -1;
 
+    // ---- Type-to-search. Lists of 7+ choices (or any select marked
+    // data-cs-search) get a search box at the top of the panel; short
+    // lists stay a plain pick-list (data-cs-nosearch opts a long one out).
+    // Matching is the shared SmartMatch scorer: any word order, SKU-style
+    // codes, small typos. An option can add extra searchable text with
+    // data-search="...". ----
+    let searchRow = null;
+    let searchInput = null;
+    let emptyEl = null;
+    let query = '';
+
+    function isSearchable() {
+        if (floating || select.dataset.csNosearch !== undefined || !window.SmartMatch) return false;
+        return select.dataset.csSearch !== undefined || select.options.length >= 7;
+    }
+
+    function ensureSearch() {
+        if (searchRow) return;
+        searchRow = document.createElement('div');
+        searchRow.className = 'cs-search';
+        searchInput = document.createElement('input');
+        searchInput.type = 'text';
+        searchInput.className = 'cs-search-input';
+        searchInput.placeholder = 'Type to search…';
+        searchInput.autocomplete = 'off';
+        searchInput.spellcheck = false;
+        searchInput.setAttribute('aria-label', 'Search options');
+        searchRow.appendChild(searchInput);
+        // Typing here must not look like an edit of the form's real field.
+        ['input', 'change'].forEach(function (evt) {
+            searchInput.addEventListener(evt, function (e) { e.stopPropagation(); });
+        });
+        searchInput.addEventListener('input', function () {
+            query = searchInput.value;
+            applyFilter();
+            position();
+        });
+        searchInput.addEventListener('blur', function (e) {
+            if (e.relatedTarget && wrap.contains(e.relatedTarget)) return;
+            close();
+        });
+        // Keep clicks on the panel from pulling focus off the search box
+        // (which would blur-close the panel before the click lands).
+        panel.addEventListener('mousedown', function (e) {
+            if (e.target !== searchInput) e.preventDefault();
+        });
+        emptyEl = document.createElement('div');
+        emptyEl.className = 'cs-option-empty';
+        emptyEl.textContent = 'No matches. Try a different spelling.';
+    }
+
     function optionEls() {
         return Array.prototype.slice.call(panel.querySelectorAll('.cs-option'));
+    }
+
+    function visibleOptionEls() {
+        return optionEls().filter(function (el) { return !el.hidden; });
+    }
+
+    function optionElFor(index) {
+        return optionEls().filter(function (el) { return Number(el.dataset.index) === index; })[0] || null;
+    }
+
+    // Shows only the options that match what was typed, best match first;
+    // an empty query restores the original order and plain text.
+    function applyFilter() {
+        const els = optionEls();
+        const q = query.trim();
+        if (emptyEl && emptyEl.parentNode) emptyEl.remove();
+        els.forEach(function (el) {
+            const nameEl = el.querySelector('.cs-option-name');
+            if (nameEl) nameEl.textContent = select.options[Number(el.dataset.index)].textContent.trim() || ' ';
+        });
+        if (!q) {
+            els.sort(function (a, b) { return Number(a.dataset.index) - Number(b.dataset.index); })
+                .forEach(function (el) { el.hidden = false; panel.appendChild(el); });
+            return;
+        }
+        const scored = els.map(function (el) {
+            const opt = select.options[Number(el.dataset.index)];
+            const s = opt.value === '' ? -1
+                : window.SmartMatch.score(q, opt.textContent, (opt.dataset.search || '') + ' ' + (opt.dataset.desc || ''));
+            return { el: el, opt: opt, s: s };
+        });
+        const hits = scored.filter(function (r) { return r.s !== -1; })
+            .sort(function (a, b) { return a.s - b.s || Number(a.el.dataset.index) - Number(b.el.dataset.index); });
+        scored.forEach(function (r) { r.el.hidden = r.s === -1; });
+        hits.forEach(function (r) {
+            panel.appendChild(r.el);
+            const nameEl = r.el.querySelector('.cs-option-name');
+            if (nameEl) nameEl.replaceChildren(window.SmartMatch.highlight(r.opt.textContent.trim(), q, 'cs-match'));
+        });
+        if (!hits.length) panel.appendChild(emptyEl);
+        const first = hits.filter(function (r) { return !r.opt.disabled; })[0];
+        activeIndex = first ? Number(first.el.dataset.index) : -1;
+        highlightActive();
+        const el = first && first.el;
+        if (el && el.scrollIntoView) el.scrollIntoView({ block: 'nearest' });
+    }
+
+    function setQuery(text) {
+        ensureSearch();
+        query = text;
+        searchInput.value = text;
+        applyFilter();
+        position();
     }
 
     function isOpen() {
@@ -222,6 +340,11 @@ function enhanceSelect(select) {
 
     function open() {
         if (select.disabled || isOpen()) return;
+        if (isSearchable()) {
+            ensureSearch();
+            query = '';
+            searchInput.value = '';
+        }
         rebuildPanel();
         if (floating) {
             document.body.appendChild(panel);
@@ -232,12 +355,25 @@ function enhanceSelect(select) {
         activeIndex = select.selectedIndex;
         highlightActive();
         position();
-        const activeEl = optionEls()[activeIndex];
+        const activeEl = optionElFor(activeIndex);
         if (activeEl && activeEl.scrollIntoView) activeEl.scrollIntoView({ block: 'nearest' });
+        if (searchInput && isSearchable()) {
+            searchInput.focus({ preventScroll: true });
+            // The panel only just became visible; retry once if the
+            // browser refused focus on the first frame.
+            if (document.activeElement !== searchInput) {
+                requestAnimationFrame(function () {
+                    if (isOpen()) searchInput.focus({ preventScroll: true });
+                });
+            }
+        }
     }
 
     function close() {
         if (!isOpen()) return;
+        // Hand focus back to the real <select> so Tab order carries on
+        // from it (the search box lives inside the panel).
+        if (searchInput && document.activeElement === searchInput) select.focus({ preventScroll: true });
         wrap.classList.remove('cs-open');
         panel.classList.remove('cs-panel-open');
         // Deliberately NOT clearing 'cs-open-up' (or the inline
@@ -253,24 +389,26 @@ function enhanceSelect(select) {
     }
 
     function highlightActive() {
-        optionEls().forEach(function (el, i) {
-            el.classList.toggle('cs-active', i === activeIndex);
+        optionEls().forEach(function (el) {
+            el.classList.toggle('cs-active', Number(el.dataset.index) === activeIndex);
         });
     }
 
+    // Walks the options that are currently shown (all of them, or just the
+    // search matches) in on-screen order, skipping disabled ones.
     function moveActive(delta) {
-        const opts = optionEls();
+        const opts = visibleOptionEls();
         if (!opts.length) return;
-        let next = activeIndex;
+        let pos = opts.findIndex(function (el) { return Number(el.dataset.index) === activeIndex; });
         for (let step = 0; step < opts.length; step++) {
-            next += delta;
-            if (next < 0) next = opts.length - 1;
-            if (next > opts.length - 1) next = 0;
-            if (!select.options[next].disabled) break;
+            pos += delta;
+            if (pos < 0) pos = opts.length - 1;
+            if (pos > opts.length - 1) pos = 0;
+            if (!select.options[Number(opts[pos].dataset.index)].disabled) break;
         }
-        activeIndex = next;
+        activeIndex = Number(opts[pos].dataset.index);
         highlightActive();
-        const el = opts[activeIndex];
+        const el = opts[pos];
         if (el && el.scrollIntoView) el.scrollIntoView({ block: 'nearest' });
     }
 
@@ -288,9 +426,11 @@ function enhanceSelect(select) {
     function rebuildPanel() {
         const opts = Array.prototype.slice.call(select.options);
         if (!opts.length) {
-            panel.innerHTML = '<div class="cs-option-empty">No options</div>';
+            panel.innerHTML = '<div class="cs-option-empty">Nothing to choose from yet.</div>';
             return;
         }
+        const withSearch = isSearchable();
+        if (withSearch) ensureSearch();
         // Built as real DOM nodes with textContent (not an HTML string)
         // so option text is never re-parsed as markup -- an option whose
         // text came from user-entered data (a supplier/customer/material
@@ -298,6 +438,7 @@ function enhanceSelect(select) {
         // back to panel.innerHTML = opts.map(...).join('') without
         // escaping first.
         panel.innerHTML = '';
+        if (withSearch) panel.appendChild(searchRow);
         opts.forEach(function (opt, i) {
             const el = document.createElement('div');
             el.className = 'cs-option' + (opt.disabled ? ' cs-option-disabled' : '');
@@ -340,11 +481,14 @@ function enhanceSelect(select) {
             el.addEventListener('mousedown', function (e) { e.preventDefault(); });
         });
         syncSelectedMarker();
+        // The option list was rebuilt (opened, or the page changed it
+        // while open) — keep whatever is typed in the search box applied.
+        if (withSearch && query.trim()) applyFilter();
     }
 
     function syncSelectedMarker() {
-        optionEls().forEach(function (el, i) {
-            el.classList.toggle('cs-selected', i === select.selectedIndex);
+        optionEls().forEach(function (el) {
+            el.classList.toggle('cs-selected', Number(el.dataset.index) === select.selectedIndex);
         });
     }
 
@@ -413,7 +557,12 @@ function enhanceSelect(select) {
     // either way. ----
     select.addEventListener('change', function () { sync(); close(); });
     select.addEventListener('focus', function () { wrap.classList.add('cs-focus'); });
-    select.addEventListener('blur', function () { wrap.classList.remove('cs-focus'); close(); });
+    select.addEventListener('blur', function (e) {
+        wrap.classList.remove('cs-focus');
+        // Focus moving into the panel's own search box is not leaving.
+        if (e.relatedTarget && panel.contains(e.relatedTarget)) return;
+        close();
+    });
 
     trigger.addEventListener('mousedown', function (e) { e.preventDefault(); });
     trigger.addEventListener('click', function () {
@@ -424,17 +573,25 @@ function enhanceSelect(select) {
 
     wrap.addEventListener('keydown', function (e) {
         if (select.disabled) return;
+        const inSearch = !!searchInput && e.target === searchInput;
         if (e.key === 'Escape') { close(); return; }
         if (e.key === 'Tab') { close(); return; }
         if (!isOpen()) {
             if (e.key === 'Enter' || e.key === ' ' || e.key === 'ArrowDown' || e.key === 'ArrowUp') {
                 e.preventDefault();
                 open();
+            } else if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey && isSearchable()) {
+                // Just start typing on a focused dropdown: open it with
+                // that first letter already in the search box.
+                e.preventDefault();
+                open();
+                setQuery(e.key);
             }
             return;
         }
         if (e.key === 'ArrowDown') { e.preventDefault(); moveActive(1); }
         else if (e.key === 'ArrowUp') { e.preventDefault(); moveActive(-1); }
+        else if (inSearch && e.key === ' ') { /* a space is just a space while typing */ }
         else if (e.key === 'Enter' || e.key === ' ') {
             e.preventDefault();
             if (activeIndex >= 0) { selectIndex(activeIndex); close(); }

@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% import "_empty.html" as empty %}
 {% import "_macros.html" as m %}
 {% block title %}Customers{% endblock %}
 {% block heading %}Customers{% endblock %}
@@ -128,9 +129,7 @@
           {% endfor %}
         </tbody>
       </table>
-      <div class="empty-state smart-no-match" style="display:none;">
-        <p>No customers match your search.</p>
-      </div>
+      {{ empty.no_match('customers') }}
     </div>
     <div class="smart-pagination" style="display:none;">
       <button type="button" class="btn btn-ghost btn-sm" data-page-prev>Previous</button>
@@ -139,7 +138,7 @@
     </div>
   </div>
   {% else %}
-  <div class="empty-state"><p>No named customers on file yet. Enter a customer name on Record Sale and the sale shows up here.</p></div>
+  {{ empty.state('No named customers yet', 'A customer appears here once a sale is recorded with their name. Walk-in sales without a name are not listed.', icon='users', action='Record a sale', href=url_for('admin.record_sale')) }}
   {% endif %}
 </div>
 {% endblock %}

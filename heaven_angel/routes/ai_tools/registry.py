@@ -1,6 +1,7 @@
 from flask import current_app
 
 
+from heaven_angel.routes.ai_tools.insights import find_report, get_inventory_log, get_material_price_history, get_voided_sales
 from heaven_angel.routes.ai_tools.catalog import get_bulk_batches, get_formulas, get_packages, get_partner_inquiries, get_production_costs, get_raw_materials, get_suppliers
 from heaven_angel.routes.ai_tools.sales import get_branch_performance, get_credit_purchases, get_customers, get_financials, get_recent_sales, get_sales_summary
 from heaven_angel.routes.ai_tools.stock import check_stock, get_discrepancies, get_low_stock, get_pending_deliveries, propose_stock_request
@@ -24,6 +25,10 @@ _TOOL_IMPL = {
     "get_production_costs": get_production_costs,
     "get_packages": get_packages,
     "get_partner_inquiries": get_partner_inquiries,
+    "get_material_price_history": get_material_price_history,
+    "get_voided_sales": get_voided_sales,
+    "get_inventory_log": get_inventory_log,
+    "find_report": find_report,
     "propose_stock_request": propose_stock_request,
 }
 
@@ -33,7 +38,7 @@ _TOOL_IMPL = {
 _ADMIN_ONLY = {
     "get_raw_materials", "get_suppliers", "get_formulas", "get_bulk_batches",
     "get_production_costs", "get_packages", "get_partner_inquiries",
-    "get_branch_performance", "get_financials",
+    "get_branch_performance", "get_financials", "get_material_price_history",
 }
 
 

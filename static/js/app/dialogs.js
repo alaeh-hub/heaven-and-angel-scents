@@ -47,6 +47,8 @@ function initConfirmDialogs() {
     document.addEventListener('submit', (e) => {
         const form = e.target;
         if (!(form instanceof HTMLFormElement)) return;
+        // Second pass, after the person confirmed in the dialog below.
+        if (form.dataset.confirmed === '1') { delete form.dataset.confirmed; return; }
 
         let message = form.dataset.confirm;
         if (!message && form.matches('form[action*="/toggle"]')) {
@@ -55,9 +57,32 @@ function initConfirmDialogs() {
             message = `${label}?`;
         }
 
-        if (message && !confirm(message)) {
-            e.preventDefault();
+        if (!message) return;
+        // The styled dialog (initConfirmModal's appConfirm); the browser's own
+        // popup is only the fallback if it somehow isn't there.
+        if (!window.appConfirm) {
+            if (!confirm(message)) e.preventDefault();
+            return;
         }
+        // Hold the submit, ask, then re-submit through requestSubmit() so
+        // validation, the loading overlay and soft-nav all still run, exactly
+        // once, after the person has said yes.
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        const submitter = e.submitter || form.querySelector('button[type="submit"]');
+        const label = submitter ? submitter.textContent.trim() : '';
+        const q = message.indexOf('? ');
+        window.appConfirm({
+            title: q > 0 ? message.slice(0, q + 1) : 'Are you sure?',
+            detail: q > 0 ? message.slice(q + 2) : message,
+            ok: label && label.length <= 24 ? label : 'Confirm',
+            tone: /^(reactivate|activate|enable|approve)/i.test(label) ? 'accent' : 'danger',
+        }).then((ok) => {
+            if (!ok) return;
+            form.dataset.confirmed = '1';
+            if (form.requestSubmit) form.requestSubmit(submitter && submitter.form === form ? submitter : undefined);
+            else form.submit();
+        });
     }, true);
 }
 
@@ -69,6 +94,7 @@ function initConfirmDialogs() {
 function initConfirmModal() {
     let overlay = null;
     let pendingForm = null;
+    let pendingResolve = null;
     let returnFocus = null;
 
     function build() {
@@ -95,10 +121,19 @@ function initConfirmModal() {
         if (!overlay || overlay.hidden) return;
         overlay.hidden = true;
         pendingForm = null;
+        if (pendingResolve) { const r = pendingResolve; pendingResolve = null; r(false); }
         if (returnFocus && returnFocus.focus) returnFocus.focus();
     }
 
     function accept() {
+        if (pendingResolve) {
+            const r = pendingResolve;
+            pendingResolve = null;
+            overlay.hidden = true;
+            pendingForm = null;
+            r(true);
+            return;
+        }
         const form = pendingForm;
         overlay.hidden = true;
         pendingForm = null;
@@ -137,10 +172,33 @@ function initConfirmModal() {
         const detail = overlay.querySelector('.confirm-dialog-detail');
         detail.textContent = form.dataset.confirmDetail || '';
         detail.hidden = !detail.textContent;
-        overlay.querySelector('[data-confirm-accept]').textContent = form.dataset.confirmOk || 'Confirm';
+        const okBtn = overlay.querySelector('[data-confirm-accept]');
+        okBtn.textContent = form.dataset.confirmOk || 'Confirm';
+        okBtn.className = 'btn btn-danger';
         overlay.hidden = false;
         overlay.querySelector('[data-confirm-cancel]').focus();
     }, true);
+
+    // window.appConfirm({ title, detail, ok, tone }) -> Promise<boolean>.
+    // The styled replacement for the browser's confirm(): same dialog as
+    // Sign out, resolves true on the action button and false on Cancel,
+    // Escape or a click outside.
+    window.appConfirm = function (o) {
+        if (!overlay) build();
+        if (pendingResolve) { const r = pendingResolve; pendingResolve = null; r(false); }
+        pendingForm = null;
+        returnFocus = document.activeElement;
+        overlay.querySelector('.confirm-dialog-title').textContent = o.title || 'Are you sure?';
+        const detail = overlay.querySelector('.confirm-dialog-detail');
+        detail.textContent = o.detail || '';
+        detail.hidden = !detail.textContent;
+        const okBtn = overlay.querySelector('[data-confirm-accept]');
+        okBtn.textContent = o.ok || 'Confirm';
+        okBtn.className = 'btn ' + (o.tone === 'accent' ? 'btn-accent' : 'btn-danger');
+        overlay.hidden = false;
+        overlay.querySelector('[data-confirm-cancel]').focus();
+        return new Promise(function (resolve) { pendingResolve = resolve; });
+    };
 }
 
 // A full-screen, centered "Loading…" dialog (see .loading-overlay in

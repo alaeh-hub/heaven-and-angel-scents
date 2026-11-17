@@ -158,7 +158,7 @@ def branch_performance():
                       SUM(CASE WHEN p.unit <> 'BULK' THEN s.qty_sold ELSE 0 END) AS units_sold,
                       SUM(CASE WHEN p.unit = 'BULK' THEN s.qty_sold ELSE 0 END) AS bulk_ml_sold,
                       SUM(s.qty_sold * s.unit_price) AS revenue, COUNT(*) AS sales_count
-               FROM sales s JOIN products p ON p.sku = s.sku GROUP BY s.branch_id
+               FROM sales s JOIN sale_catalog p ON p.sku = s.sku GROUP BY s.branch_id
            ) sales_agg ON sales_agg.branch_id = b.branch_id
            LEFT JOIN (
                SELECT bi.branch_id,

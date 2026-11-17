@@ -259,3 +259,27 @@ document.addEventListener('DOMContentLoaded', () => {
     safeInit(initHaloWidget, 'haloWidget');
 });
 
+// Phones: the floating assistant button tucks away while the page scrolls down (so it is not parked on
+// top of a row's buttons) and returns when you scroll up, near the top, or at the end of the page.
+(function initHaloTuck() {
+    const widget = document.querySelector('.halo-widget');
+    if (!widget) return;
+    const phone = window.matchMedia('(max-width: 680px)');
+    let lastY = window.scrollY;
+    let ticking = false;
+    function update() {
+        ticking = false;
+        const y = window.scrollY;
+        const dy = y - lastY;
+        const nearEnd = window.innerHeight + y >= document.documentElement.scrollHeight - 80;
+        if (!phone.matches || y < 80 || nearEnd || dy < -6) {
+            widget.classList.remove('is-tucked');
+        } else if (dy > 6) {
+            widget.classList.add('is-tucked');
+        }
+        lastY = y;
+    }
+    window.addEventListener('scroll', () => {
+        if (!ticking) { ticking = true; requestAnimationFrame(update); }
+    }, { passive: true });
+})();

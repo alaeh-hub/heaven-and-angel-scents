@@ -25,7 +25,6 @@ from factories import (get_bulk_batch, get_cogs_logs, get_form_token,
                         login, make_bulk_batch, make_product,
                         make_raw_material, make_user, set_unit_cogs)
 
-ADD_FORMULA_ITEM_URL = "/admin/formulas/add-item"
 
 BULK_BATCHES_URL = "/admin/bulk-batches"
 CREATE_BULK_BATCH_URL = "/admin/bulk-batches/create"
@@ -306,43 +305,18 @@ def test_dashboard_capital_is_cogs_not_raw_material_purchases(client, sql):
         str(after_purchase["raw_materials_purchased"]))
 
 
-def _packaging_total(sql, unit):
-    """Sum of qty_per_unit x current cost_per_unit across every material
-    on file for `unit` — same math as routes/admin/'s own
-    _formula_items_by_unit(), used here to compute an expected delta
-    since other test files sharing this session's database may have
-    already left formula lines on file for the same unit (see this file's
-    own module docstring — nothing is cleaned up between tests)."""
-    cur = sql.cursor(dictionary=True)
-    cur.execute(
-        """SELECT COALESCE(SUM(ufi.qty_per_unit * rm.cost_per_unit), 0) AS total
-           FROM unit_formula_items ufi
-           JOIN raw_materials rm ON rm.material_id = ufi.material_id
-           WHERE ufi.unit = %s""", (unit,))
-    total = cur.fetchone()["total"]
-    cur.close()
-    return Decimal(str(total))
-
-
-def test_bulk_batch_yields_fold_in_the_packaging_formula_as_a_reference_cost(client, sql):
+def test_bulk_batch_yields_show_a_liquid_only_reference_cost(client, sql):
     """Each yield's total_cost_per_bottle is this batch's own liquid
-    cost/mL x the size's mL, plus that size's packaging formula total
-    (see tests/test_formulas.py's own add_formula_item tests) — purely a
-    reference figure, never what production() actually charges (that's
-    still the flat base cost on unit_cogs_settings)."""
+    cost/mL x the size's mL — purely a reference figure, never what
+    production() actually charges (that's still the flat base cost on
+    unit_cogs_settings). Packaging isn't folded in here any more; a
+    formula batch shows its real cost per bottle in the formula summary."""
     _signed_in_admin(client, sql)
     mat_a = make_raw_material(sql)
     # ₱0.10/mL over 1000 mL -> cost_per_ml = 0.10
     make_bulk_batch(sql, [(mat_a, "1000", "0.10")],
-                     input_qty="1000", input_unit="Milliliter",
-                     scent_name="Yield Reference")
-
-    before_85 = _packaging_total(sql, "85ML")
-
-    mat_b = make_raw_material(
-        sql, unit="Piece", package_qty="10.000", package_cost="20.00")  # ₱2.00/piece
-    client.post(ADD_FORMULA_ITEM_URL, data={
-        "unit": "85ML", "material_id": str(mat_b), "qty_per_unit": "1"})
+                    input_qty="1000", input_unit="Milliliter",
+                    scent_name="Yield Reference")
 
     resp = client.get(BULK_BATCHES_URL)
     assert resp.status_code == 200
@@ -354,17 +328,86 @@ def test_bulk_batch_yields_fold_in_the_packaging_formula_as_a_reference_cost(cli
     assert yields_match, "No data-yields attribute rendered on the batch's Details button"
     yields = json.loads(yields_match.group(1))
 
-    yield_85 = next(y for y in yields if y["unit"] == "85ML")
-    # 85mL x ₱0.10/mL liquid (₱8.50) + this unit's packaging total
-    # (whatever was already on file, plus the ₱2.00 line just added).
-    expected_85 = (Decimal("8.50") + before_85 +
-                   Decimal("2.00")).quantize(Decimal("0.01"))
-    assert Decimal(str(yield_85["total_cost_per_bottle"])) == expected_85
+    expected = {"85ML": "8.50", "50ML": "5.00", "10ML": "1.00", "3ML": "0.30"}
+    for y in yields:
+        assert Decimal(str(y["total_cost_per_bottle"])) == Decimal(expected[y["unit"]])
+        assert Decimal(str(y["packaging_cost"])) == Decimal("0")
 
-    # A fresh size with nothing added in this test still gets a reference
-    # figure — just the liquid share, whatever packaging total (if any)
-    # other tests left behind.
-    before_50 = _packaging_total(sql, "50ML")
-    yield_50 = next(y for y in yields if y["unit"] == "50ML")
-    expected_50 = (Decimal("5.00") + before_50).quantize(Decimal("0.01"))
-    assert Decimal(str(yield_50["total_cost_per_bottle"])) == expected_50
+
+# ---------------------------------------------------------------- write-off of leftover mL
+def _leave_ml(sql, batch_id, remaining_ml):
+    cur = sql.cursor()
+    cur.execute("UPDATE bulk_batches SET remaining_ml = %s WHERE batch_id = %s",
+                (remaining_ml, batch_id))
+    sql.commit()
+    cur.close()
+
+
+def _write_off_url(batch_id):
+    return f"/admin/bulk-batches/{batch_id}/write-off"
+
+
+def test_write_off_zeroes_remaining_but_keeps_cost_and_logs_it(client, sql):
+    _signed_in_admin(client, sql)
+    mat_a = make_raw_material(sql)
+    batch_id = make_bulk_batch(sql, [(mat_a, "100", "0.50")], scent_name="Leftover Scent",
+                               input_qty="1000", input_unit="Milliliter")
+    _leave_ml(sql, batch_id, "50.000")
+    before = get_bulk_batch(sql, batch_id)
+
+    resp = client.post(_write_off_url(batch_id),
+                       data={"reason": "Too little to use", "note": "end of the jar"})
+    assert resp.status_code == 302
+
+    after = get_bulk_batch(sql, batch_id)
+    assert Decimal(after["remaining_ml"]) == Decimal("0")
+    # Cost and size are untouched; nothing is written to cost-of-goods.
+    assert after["total_cost"] == before["total_cost"]
+    assert after["cost_per_ml"] == before["cost_per_ml"]
+    assert after["total_volume_ml"] == before["total_volume_ml"]
+
+    cur = sql.cursor(dictionary=True)
+    cur.execute("SELECT details FROM admin_actions WHERE action = 'write_off_bulk_batch' "
+                "AND target = 'Leftover Scent'")
+    rows = cur.fetchall()
+    cur.close()
+    assert len(rows) == 1
+    assert "50" in rows[0]["details"] and "Too little to use" in rows[0]["details"]
+    assert "end of the jar" in rows[0]["details"]
+
+
+def test_write_off_rejects_unknown_reason_and_leaves_batch_alone(client, sql):
+    _signed_in_admin(client, sql)
+    mat_a = make_raw_material(sql)
+    batch_id = make_bulk_batch(sql, [(mat_a, "100", "0.50")], input_qty="1000",
+                               input_unit="Milliliter")
+    _leave_ml(sql, batch_id, "50.000")
+
+    client.post(_write_off_url(batch_id), data={"reason": "because"})
+    assert Decimal(get_bulk_batch(sql, batch_id)["remaining_ml"]) == Decimal("50.000")
+    client.post(_write_off_url(batch_id), data={})
+    assert Decimal(get_bulk_batch(sql, batch_id)["remaining_ml"]) == Decimal("50.000")
+
+
+def test_write_off_of_an_empty_or_missing_batch_is_refused(client, sql):
+    _signed_in_admin(client, sql)
+    mat_a = make_raw_material(sql)
+    batch_id = make_bulk_batch(sql, [(mat_a, "100", "0.50")], scent_name="Already Empty",
+                               input_qty="1000", input_unit="Milliliter")
+    _leave_ml(sql, batch_id, "0")
+
+    assert client.post(_write_off_url(batch_id), data={"reason": "Other"}).status_code == 302
+    assert client.post(_write_off_url(batch_id + 9999), data={"reason": "Other"}).status_code == 302
+
+    cur = sql.cursor()
+    cur.execute("SELECT COUNT(*) FROM admin_actions WHERE action = 'write_off_bulk_batch' "
+                "AND target = 'Already Empty'")
+    assert cur.fetchone()[0] == 0
+    cur.close()
+
+
+def test_bulk_batches_page_offers_write_off_form(client, sql):
+    _signed_in_admin(client, sql)
+    resp = client.get(BULK_BATCHES_URL)
+    assert resp.status_code == 200
+    assert b"bdWriteOffForm" in resp.data

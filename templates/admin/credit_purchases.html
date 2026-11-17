@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% import "_empty.html" as empty %}
 {% import "_macros.html" as m %}
 {% block title %}Credit Purchases{% endblock %}
 {% block heading %}Credit Purchases{% endblock %}
@@ -99,9 +100,7 @@
           {% endfor %}
         </tbody>
       </table>
-      <div class="empty-state smart-no-match" style="display:none;">
-        <p>No names match your search.</p>
-      </div>
+      {{ empty.no_match('names') }}
     </div>
     <div class="smart-pagination" style="display:none;">
       <button type="button" class="btn btn-ghost btn-sm" data-page-prev>Previous</button>
@@ -110,7 +109,7 @@
     </div>
   </div>
   {% else %}
-  <div class="empty-state"><p>No outstanding Credit. Nothing recorded, or it’s all been paid back; a Credit sale on Record Sale adds a row here.</p></div>
+  {{ empty.state('No outstanding credit', 'Credit sales appear here until they are paid back. Right now nothing is owed.', icon='check', tone='clear') }}
   {% endif %}
 </div>
 {% endblock %}

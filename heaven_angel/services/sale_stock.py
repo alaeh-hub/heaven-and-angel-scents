@@ -3,20 +3,25 @@ Record Sale and the Excel sales import, so every way a sale enters the
 system moves stock the same way.
 
 Recording (apply_sale_stock):
-  - Sale / Freebie: the product's own stock at that location goes down
-    by the quantity sold.
-  - Refill: HQ-only (branches never hold bulk). The customer brings their
-    own bottle, so no bottle leaves stock — the scent's *bulk* does: the
-    product with the same base code and unit BULK (A1-50ML -> A1-BULK),
-    by bottles x bottle size in mL, or by the typed mL when the bulk
-    product itself is sold. Blocked when there isn't enough bulk.
+  - Sale / Freebie of a bottle: the product's own stock at that location
+    goes down by the quantity sold.
+  - Bulk sale (sold by the mL, sku '<code>-BULK') and Refill (the customer
+    brings their own bottle): neither takes a bottle, they take the scent's
+    bulk, straight out of its bulk batches (bulk_batches.base_code = the
+    product code, e.g. A1) — a Refill by bottles x bottle size in mL, a
+    bulk sale by the typed mL. HQ-only (batches are HQ's, branches never
+    hold bulk). The OLDEST batch with mL left is used first, then the next
+    one if it runs out, and each batch used is recorded with its cost per
+    mL in sale_batch_usage (that is where the sale's cost comes from).
+    Blocked when the scent's batches don't hold enough.
   Each movement log row carries reference_id = sale_id, so a void can
   reverse exactly what the sale took.
 
-Voiding (void_sale): puts that stock back (logged as SALE_VOID), keeps a
-permanent snapshot in sale_voids with who voided it and why, then deletes
-the sales row so every revenue / units / customer / credit total
-corrects itself without each query having to filter voids out.
+Voiding (void_sale): puts that stock back (logged as SALE_VOID; a bulk sale
+or refill gives its mL back to the batches it came from), keeps a permanent
+snapshot in sale_voids with who voided it and why, then deletes the sales
+row so every revenue / units / customer / credit total corrects itself
+without each query having to filter voids out.
 
 Settling (settle_credit): a Credit sale was never "wrong" the way a voided
 one is — the product really did leave on credit — so this doesn't touch
@@ -28,6 +33,8 @@ All three run inside the caller's transaction() on its dictionary cursor
 and raise TransactionAborted (rolled back, nothing written) with a
 message fit to flash.
 """
+import decimal
+
 from heaven_angel.db import TransactionAborted
 from heaven_angel.utils import bottle_size_ml
 
@@ -36,36 +43,73 @@ HQ_BRANCH_ID = 1
 _MOVEMENT_BY_SALE_TYPE = {"Sale": "SALE", "Refill": "REFILL", "Freebie": "FREEBIE"}
 
 
-def refill_source(product, qty):
-    """(bulk_sku, ml) a refill of `qty` of `product` draws from.
+def base_code_of(product):
+    """The product code (A1) a product or a '<code>-BULK' sale key belongs to."""
+    suffix = f"-{product['unit']}"
+    sku = product["sku"]
+    return sku[:-len(suffix)] if sku.endswith(suffix) else sku
 
-    product: dict with sku and unit. A bulk product is its own source
-    (qty is already mL); a bottle size maps to its scent's BULK SKU.
+
+def bulk_ml_needed(product, qty):
+    """mL of bulk a sale of `qty` of `product` takes, or None if it takes no bulk.
+
+    A bulk sale is already in mL; a Refill of a bottle size takes bottles x
+    that size in mL. Called with the sale type already known to be a Refill
+    for the bottle case (see apply_sale_stock).
     """
     if product["unit"] == "BULK":
-        return product["sku"], qty
-    suffix = f"-{product['unit']}"
-    base = product["sku"][:-len(suffix)] if product["sku"].endswith(suffix) else product["sku"]
-    return f"{base}-BULK", qty * int(bottle_size_ml(product["unit"]))
+        return qty
+    return qty * int(bottle_size_ml(product["unit"]))
+
+
+def take_bulk_from_batches(cur, *, sale_id, base_code, scent_name, ml):
+    """Take `ml` of `base_code`'s bulk out of its batches, oldest first.
+
+    Row-locks the scent's batches, raises TransactionAborted when they don't
+    hold enough, and records each batch used (and its cost per mL) in
+    sale_batch_usage so the sale can be costed and voided exactly.
+    """
+    cur.execute(
+        """SELECT batch_id, remaining_ml, cost_per_ml FROM bulk_batches
+           WHERE base_code = %s AND remaining_ml > 0
+           ORDER BY created_at, batch_id FOR UPDATE""",
+        (base_code,),
+    )
+    batches = cur.fetchall()
+    have = sum((b["remaining_ml"] for b in batches), decimal.Decimal("0"))
+    if have < ml:
+        raise TransactionAborted(
+            f"Not enough {scent_name} bulk in its batches: need {ml:g} mL, have {have:g} mL.")
+    left = decimal.Decimal(ml)
+    for batch in batches:
+        if left <= 0:
+            break
+        take = min(batch["remaining_ml"], left)
+        cur.execute(
+            "UPDATE bulk_batches SET remaining_ml = remaining_ml - %s WHERE batch_id = %s",
+            (take, batch["batch_id"]),
+        )
+        cur.execute(
+            "INSERT INTO sale_batch_usage (sale_id, batch_id, ml, cost_per_ml) VALUES (%s, %s, %s, %s)",
+            (sale_id, batch["batch_id"], take, batch["cost_per_ml"]),
+        )
+        left -= take
 
 
 def apply_sale_stock(cur, *, sale_id, branch_id, product, qty, sale_type, notes, user_id):
     """Deduct the stock a just-inserted sale consumes and log it."""
-    if sale_type == "Refill":
+    if sale_type == "Refill" or product["unit"] == "BULK":
+        # Bulk sale or Refill: no bottle moves, the scent's bulk batches pay.
         if branch_id != HQ_BRANCH_ID:
-            raise TransactionAborted("Refills are only recorded at HQ — branches don't hold bulk stock.")
-        source_sku, amount = refill_source(product, qty)
-        cur.execute("SELECT item_name FROM products WHERE sku = %s", (source_sku,))
-        if not cur.fetchone():
             raise TransactionAborted(
-                f"No bulk product ({source_sku}) exists for {product['item_name']} to refill from.")
-        unit_label = " mL"
-        what = f"{product['item_name']} bulk"
-        notes = f"{notes} · refill of {qty} × {product['unit']}" if product["unit"] != "BULK" else notes
-    else:
-        source_sku, amount = product["sku"], qty
-        unit_label = " mL" if product["unit"] == "BULK" else ""
-        what = product["item_name"]
+                "Bulk sales and refills are only recorded at HQ — branches don't hold bulk stock.")
+        take_bulk_from_batches(
+            cur, sale_id=sale_id, base_code=base_code_of(product), scent_name=product["item_name"],
+            ml=bulk_ml_needed(product, qty))
+        return
+    source_sku, amount = product["sku"], qty
+    unit_label = ""
+    what = product["item_name"]
 
     cur.execute(
         "SELECT stock_qty FROM branch_inventory WHERE branch_id = %s AND sku = %s FOR UPDATE",
@@ -99,7 +143,7 @@ def void_sale(cur, *, sale_id, reason, user_id, username, branch_id=None, today_
     """
     cur.execute(
         """SELECT s.*, p.item_name, p.unit, DATE(s.recorded_at) = CURDATE() AS recorded_today
-           FROM sales s JOIN products p ON p.sku = s.sku
+           FROM sales s JOIN sale_catalog p ON p.sku = s.sku
            WHERE s.sale_id = %s FOR UPDATE""",
         (sale_id,),
     )
@@ -113,13 +157,26 @@ def void_sale(cur, *, sale_id, reason, user_id, username, branch_id=None, today_
     # What this sale actually took out. Sales recorded before sale logs
     # carried reference_id have no linked rows: a Sale/Freebie took its
     # own qty then, and an old Refill took nothing.
+    # A bulk sale or refill took mL from batches (sale_batch_usage): give exactly
+    # that back, capped at each batch's size so a written-off batch can't end up
+    # holding more than it was ever made with.
+    cur.execute(
+        "SELECT batch_id, ml FROM sale_batch_usage WHERE sale_id = %s FOR UPDATE", (sale_id,))
+    batch_usage = cur.fetchall()
+    for use in batch_usage:
+        cur.execute(
+            """UPDATE bulk_batches
+               SET remaining_ml = LEAST(total_volume_ml, remaining_ml + %s) WHERE batch_id = %s""",
+            (use["ml"], use["batch_id"]),
+        )
+
     cur.execute(
         """SELECT branch_id, sku, change_qty FROM stock_movement_logs
            WHERE reference_type = 'SALE' AND reference_id = %s AND change_qty < 0""",
         (sale_id,),
     )
     taken = [(r["branch_id"], r["sku"], -r["change_qty"]) for r in cur.fetchall()]
-    if not taken and sale["sale_type"] != "Refill":
+    if not taken and not batch_usage and sale["sale_type"] != "Refill" and sale["unit"] != "BULK":
         taken = [(sale["branch_id"], sale["sku"], sale["qty_sold"])]
 
     for loc, sku, qty in taken:
@@ -159,7 +216,7 @@ def settle_credit(cur, *, sale_id, username, branch_id=None):
     Returns the settled sale's row.
     """
     cur.execute(
-        """SELECT s.*, p.item_name FROM sales s JOIN products p ON p.sku = s.sku
+        """SELECT s.*, p.item_name FROM sales s JOIN sale_catalog p ON p.sku = s.sku
            WHERE s.sale_id = %s FOR UPDATE""",
         (sale_id,),
     )

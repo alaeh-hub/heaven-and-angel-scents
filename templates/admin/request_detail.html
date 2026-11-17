@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% import "_empty.html" as empty %}
 {% import "_macros.html" as m %}
 {% block title %}{{ req.delivery_number }}{% endblock %}
 {% block heading %}{{ req.delivery_number }}{% endblock %}
@@ -237,6 +238,11 @@
       </tbody>
     </table>
   </div>
+</div>
+{% elif req.status != 'Rejected' %}
+<div class="card rd-history">
+  <div class="card-header"><h2>Shipment history</h2></div>
+  {{ empty.state('Nothing dispatched yet', 'Each dispatch is listed here with its units and when the branch received it.', icon='truck', compact=True) }}
 </div>
 {% endif %}
 {% endblock %}

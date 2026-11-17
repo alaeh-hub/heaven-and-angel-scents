@@ -1,6 +1,6 @@
 """Maps each report type to its builder and runs one (get_report)."""
 from heaven_angel.services.reports.builders_admin import report_accounts, report_admin_log, report_login_activity
-from heaven_angel.services.reports.builders_inventory import report_branch_stock, report_bulk_batches, report_cogs_logs, report_discrepancies, report_formulas, report_inventory_log, report_low_stock, report_materials, report_production_log, report_products, report_stock_requests, report_suppliers
+from heaven_angel.services.reports.builders_inventory import report_branch_stock, report_bulk_batches, report_cogs_logs, report_discrepancies, report_formulas, report_inventory_log, report_low_stock, report_material_prices, report_materials, report_production_log, report_products, report_shipments, report_stock_requests, report_suppliers
 from heaven_angel.services.reports.builders_sales import report_branch_performance, report_credit_purchases, report_customers, report_financial_summary, report_packages, report_partner_inquiries, report_partners, report_sales_history, report_voided_sales
 from heaven_angel.services.reports.definitions import BRANCH_FILTERED_TYPES, REPORT_TYPES
 from heaven_angel.services.reports.totals import compute_totals, split_bulk_quantities
@@ -43,6 +43,8 @@ _BUILDERS = {
     "packages": report_packages,
     "partner_inquiries": report_partner_inquiries,
     "financial_summary": report_financial_summary,
+    "material_prices": report_material_prices,
+    "shipments": report_shipments,
     "admin_log": report_admin_log,
     "login_activity": report_login_activity,
 }

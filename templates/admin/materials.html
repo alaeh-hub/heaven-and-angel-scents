@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% import "_empty.html" as empty %}
 {% import "_macros.html" as m %}
 {% block title %}Materials &amp; Suppliers{% endblock %}
 {% block heading %}Materials &amp; Suppliers{% endblock %}
@@ -165,6 +166,91 @@
   .sup-history-table td.num {
     text-align: right;
   }
+
+  /* Hallmark · checked: 2026-11-16 · shape: app screen · genre: modern-minimal (inferred) · built: the project · redesign: polish */
+  /* Material price trends. Same card, legend, KPI ledger and chart kit as Reports. */
+  .rb-head { display: flex; align-items: flex-start; flex-wrap: wrap; gap: var(--space-sm); justify-content: space-between; }
+  .pt-picker { min-width: 14rem; }
+
+  /* The figures are a ledger row on hairlines, not tiles in a card (as in Reports). */
+  .pt-kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border-top: 1px solid var(--border-strong); margin-bottom: var(--space-md); }
+  .pt-kpis .kpi-tile { background: none; border: 0; border-radius: 0; border-left: 1px solid var(--border); padding: var(--space-md) var(--space-md) 0; }
+  .pt-kpis .kpi-tile:first-child { border-left: 0; padding-left: 0; }
+  .pt-kpis .kpi-tile:not(:has(.kpi-spark)) { padding-bottom: var(--space-sm); }
+  .pt-kpis .kpi-value { font-size: 1.5rem; margin-top: var(--space-3xs); overflow-wrap: anywhere; }
+  .pt-kpis .kpi-meta { min-height: 0; }
+  .pt-kpis .kpi-spark { height: 2rem; margin: var(--space-xs) 0 var(--space-sm); }
+  @media (max-width: 1100px) {
+    .pt-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .pt-kpis .kpi-tile:nth-child(odd) { border-left: 0; padding-left: 0; }
+    .pt-kpis .kpi-tile:nth-child(n+3) { border-top: 1px solid var(--border); }
+  }
+  @media (max-width: 520px) {
+    .pt-kpis { grid-template-columns: minmax(0, 1fr); }
+    .pt-kpis .kpi-tile { border-left: 0; padding-left: 0; padding-right: 0; }
+    .pt-kpis .kpi-tile:nth-child(n+2) { border-top: 1px solid var(--border); }
+  }
+
+  /* Chart stage: the canvas, its loading skeleton and its empty/error message share one box. */
+  .pt-stage { position: relative; }
+  .pt-chart { height: 19rem; }
+  .pt-skeleton, .pt-state { position: absolute; inset: 0; }
+  .pt-skeleton {
+    background: linear-gradient(to bottom, transparent 0, transparent calc(25% - 1px), var(--border) calc(25% - 1px), var(--border) 25%,
+      transparent 25%, transparent calc(50% - 1px), var(--border) calc(50% - 1px), var(--border) 50%,
+      transparent 50%, transparent calc(75% - 1px), var(--border) calc(75% - 1px), var(--border) 75%, transparent 75%);
+    opacity: 0;
+    pointer-events: none;
+  }
+  .pt-skeleton::after { content: ""; position: absolute; left: 4%; right: 4%; top: 38%; height: 0.375rem; border-radius: var(--radius-sm); background: var(--surface-2); }
+  #priceTrends[data-state="loading"] .pt-skeleton { opacity: 1; animation: pt-pulse 1.4s ease-in-out infinite; }
+  #priceTrends[data-state="loading"] .pt-chart,
+  #priceTrends[data-state="empty"] .pt-chart,
+  #priceTrends[data-state="error"] .pt-chart { visibility: hidden; }
+  .pt-state { display: flex; align-items: center; justify-content: center; gap: var(--space-md); padding: var(--space-md); text-align: left; }
+  .pt-state[hidden] { display: none; }
+  .pt-state .empty-body { margin: var(--space-3xs) 0 0; font-size: 0.8438rem; color: var(--ink-soft); }
+  @keyframes pt-pulse { 50% { opacity: 0.45; } }
+  .pt-axis-note { margin: var(--space-xs) 0 0; font-size: 0.75rem; color: var(--ink-faint); min-height: 1rem; }
+
+  /* Movers: a small ledger, one row per material. */
+  .pt-movers { margin-top: var(--space-lg); padding-top: var(--space-md); border-top: 1px solid var(--border-strong); }
+  .pt-movers-title { font-size: var(--text-lg); font-weight: 600; margin: 0 0 var(--space-3xs); }
+  .pt-mover {
+    display: grid;
+    grid-template-columns: minmax(0, 1.4fr) minmax(0, 1.3fr) minmax(5rem, 0.8fr) 5.5rem;
+    align-items: center;
+    gap: var(--space-md);
+    width: 100%;
+    padding: var(--space-xs) var(--space-xs);
+    border: 0;
+    border-bottom: 1px solid var(--border);
+    background: transparent;
+    color: var(--ink);
+    font: inherit;
+    text-align: left;
+  }
+  .pt-mover-head { font-size: 0.75rem; color: var(--ink-faint); padding-top: 0; border-bottom-color: var(--border-strong); }
+  button.pt-mover { cursor: pointer; transition: background var(--dur-micro) var(--ease-out); }
+  button.pt-mover:hover { background: var(--surface-2); }
+  button.pt-mover:active { background: var(--surface-2); }
+  button.pt-mover[aria-pressed="true"] { background: var(--surface-2); box-shadow: inset 2px 0 0 var(--accent); }
+  button.pt-mover:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+  .pt-mover-name { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .pt-mover-unit { display: block; font-size: 0.75rem; font-weight: 400; color: var(--ink-faint); }
+  .pt-mover-prices { font-size: 0.8125rem; color: var(--ink-soft); font-variant-numeric: tabular-nums; }
+  .pt-mover .kpi-spark-svg { width: 100%; height: 1.5rem; display: block; }
+  .pt-num { text-align: right; justify-self: end; }
+  .pt-mover-empty { padding: var(--space-md) var(--space-xs); font-size: 0.875rem; color: var(--ink-soft); }
+  @media (max-width: 680px) {
+    .pt-picker { width: 100%; }
+    .pt-mover, .pt-mover-head { grid-template-columns: minmax(0, 1fr) auto; }
+    .pt-mover-prices, .pt-mover .pt-spark, .pt-mover-head span:nth-child(2), .pt-mover-head span:nth-child(3) { display: none; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    #priceTrends[data-state="loading"] .pt-skeleton { animation: none; opacity: 0.6; }
+    button.pt-mover { transition: none; }
+  }
 </style>
 {% endblock %}
 
@@ -268,9 +354,7 @@
           {% endfor %}
         </tbody>
       </table>
-      <div class="empty-state smart-no-match" style="display:none;">
-        <p>No products match your search.</p>
-      </div>
+      {{ empty.no_match('materials') }}
     </div>
     <div class="smart-pagination" style="display:none;">
       <button type="button" class="btn btn-ghost btn-sm" data-page-prev>Previous</button>
@@ -285,11 +369,90 @@
       fields. It never touches stock on hand.</p>
   </div>
   {% else %}
-  <div class="empty-state">
-    <p>No materials added yet.</p>
-  </div>
+  {{ empty.state('No materials yet', 'Log what you buy to track cost per unit and how prices move over time.', icon='flask') }}
   {% endif %}
 </div>
+
+{% if not materials %}
+<div class="card insight-card mt-24">
+  <div class="rb-head">
+    <div>
+      <h2>Material price trends</h2>
+      <p class="insight-sub">What each purchase cost per unit, and how the blended cost per unit moves.</p>
+    </div>
+  </div>
+  {{ empty.state('No price history yet', 'Add a material, then restock it as prices change. Its price paid per unit and its blended cost are charted here.', icon='chart') }}
+</div>
+{% else %}
+<div class="card insight-card mt-24" id="priceTrends">
+  <div class="rb-head">
+    <div>
+      <h2>Material price trends</h2>
+      <p class="insight-sub" id="ptSub">What each purchase cost per unit, and the blended cost per unit after it.</p>
+    </div>
+    <div class="pt-picker">
+      <label for="ptMaterial" class="sr-only">Material</label>
+      <select id="ptMaterial">
+        {% for mat in materials %}
+        <option value="{{ mat.material_id }}">{{ mat.material_name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+  </div>
+
+  <div class="pt-kpis" id="ptKpis">
+    <div class="kpi-tile" id="ptLatest">
+      <div class="kpi-label">Latest price paid</div>
+      <div class="kpi-value">-</div>
+      <div class="kpi-meta"></div>
+      <div class="kpi-spark"></div>
+    </div>
+    <div class="kpi-tile" id="ptBlended">
+      <div class="kpi-label">Blended cost per unit</div>
+      <div class="kpi-value">-</div>
+      <div class="kpi-meta"></div>
+      <div class="kpi-spark"></div>
+    </div>
+    <div class="kpi-tile" id="ptRange">
+      <div class="kpi-label">Price range</div>
+      <div class="kpi-value">-</div>
+      <div class="kpi-meta"></div>
+    </div>
+    <div class="kpi-tile" id="ptSpent">
+      <div class="kpi-label">Total spent</div>
+      <div class="kpi-value">-</div>
+      <div class="kpi-meta"></div>
+    </div>
+  </div>
+
+  <div class="chart-legend chart-legend-top" id="ptLegend"></div>
+  <div class="pt-stage">
+    <div class="chart-canvas-wrap pt-chart" id="ptChartWrap">
+      <canvas id="ptChart" role="img" aria-label="Line chart of price paid per unit and blended cost per unit over time for the selected material"></canvas>
+    </div>
+    <div class="pt-skeleton" id="ptSkeleton" aria-hidden="true"></div>
+    <div class="pt-state" id="ptState" role="status" hidden>
+      <span class="empty-icon" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path d="M3 3v18h18"/><path d="m7 15 4-4 3 3 5-6"/></svg></span>
+      <div class="empty-text">
+        <h3 class="empty-title" id="ptStateTitle"></h3>
+        <p class="empty-body" id="ptStateText"></p>
+        <div class="empty-actions"><button type="button" class="btn btn-ghost btn-sm" id="ptRetry" hidden>Try again</button></div>
+      </div>
+    </div>
+  </div>
+  <p class="pt-axis-note" id="ptAxisNote"></p>
+  <noscript><p class="pt-axis-note">Turn on JavaScript to see price trends.</p></noscript>
+
+  <div class="pt-movers">
+    <h3 class="pt-movers-title">Price movement by material</h3>
+    <p class="insight-sub">Latest price paid against the first purchase. Select a row to chart it.</p>
+    <div class="pt-mover pt-mover-head" aria-hidden="true">
+      <span>Material</span><span>First and latest price</span><span>Trend</span><span class="pt-num">Change</span>
+    </div>
+    <div id="ptMovers" class="pt-mover-list"></div>
+  </div>
+</div>
+{% endif %}
 
 <div class="card mt-24">
   <div class="card-header">
@@ -354,11 +517,9 @@
               s.last_purchase_at else 'None' }}</td>
             <td data-label="" class="sup-col-actions mobile-inline-action">
               <div class="inline-form">
-                {% if s.materials_supplied %}
                 <button type="button" class="btn btn-ghost btn-sm" data-call="openSupplyHistory"
                   data-supplier-name="{{ s.supplier_name }}"
                   data-materials='{{ s.materials_supplied | tojson }}'>History</button>
-                {% endif %}
                 <button type="button" class="btn btn-ghost btn-sm" data-call="openEditSupplier"
                   data-supplier-id="{{ s.supplier_id }}" data-supplier-name="{{ s.supplier_name }}"
                   data-contact-person="{{ s.contact_person or '' }}" data-phone="{{ s.phone or '' }}"
@@ -370,9 +531,7 @@
           {% endfor %}
         </tbody>
       </table>
-      <div class="empty-state smart-no-match" style="display:none;">
-        <p>No suppliers match your search.</p>
-      </div>
+      {{ empty.no_match('suppliers') }}
     </div>
     <div class="smart-pagination" style="display:none;">
       <button type="button" class="btn btn-ghost btn-sm" data-page-prev>Previous</button>
@@ -385,9 +544,7 @@
       leave it unused. Materials keep their price history even if their supplier is edited or unassigned later.</p>
   </div>
   {% else %}
-  <div class="empty-state">
-    <p>No suppliers added yet.</p>
-  </div>
+  {{ empty.state('No suppliers yet', 'Add the shops you buy from to see spend and supply history for each one.', icon='store') }}
   {% endif %}
 </div>
 
@@ -428,12 +585,12 @@
             <option value="{{ u }}">{{ u }}</option>
             {% endfor %}
           </select>
-          <div class="help" id="volumeEquivPreview" style="display:none;"></div>
+          <div class="help live-slot" id="volumeEquivPreview"></div>
         </div>
         <div class="field">
           <label for="package_cost" id="packageCostLabel">Cost for that package (₱)</label>
           <input type="number" id="package_cost" name="package_cost" step="0.01" min="0" placeholder="490.00" required>
-          <div class="help" id="costPreview" style="display:none;"></div>
+          <div class="help live-slot" id="costPreview"></div>
         </div>
       </div>
       <input type="hidden" name="purchase_mode" id="purchase_mode" value="Package">
@@ -507,12 +664,12 @@
           </select>
           <input type="hidden" id="editUnitValue" name="unit">
           <div class="help" id="editUnitHelp">Unit cannot be changed after creation.</div>
-          <div class="help" id="editVolumeEquivPreview" style="display:none;"></div>
+          <div class="help live-slot" id="editVolumeEquivPreview"></div>
         </div>
         <div class="field">
           <label for="editPackageCost" id="editPackageCostLabel">Cost for that package (₱)</label>
           <input type="number" id="editPackageCost" name="package_cost" step="0.01" min="0" required>
-          <div class="help" id="editCostPreview" style="display:none;"></div>
+          <div class="help live-slot" id="editCostPreview"></div>
         </div>
       </div>
       <input type="hidden" name="purchase_mode" id="editPurchaseMode" value="Package">
@@ -555,7 +712,7 @@
       <div class="field">
         <label for="restockCost">Cost for that purchase (₱)</label>
         <input type="number" id="restockCost" name="cost" step="0.01" min="0" required>
-        <div class="help" id="restockCostPreview" style="display:none;"></div>
+        <div class="help live-slot" id="restockCostPreview"></div>
       </div>
       <div class="field">
         <label for="restockPurchasedAt">Purchase date</label>
@@ -703,6 +860,243 @@
 {% endblock %}
 
 {% block scripts %}
+<script src="{{ url_for('static', filename='js/chart.umd.min.js') }}"></script>
+<script nonce="{{ csp_nonce() }}">
+  // Material price trends: price paid per purchase vs. blended cost per unit.
+  (function () {
+    var card = document.getElementById('priceTrends');
+    if (!card) return;
+    var select = document.getElementById('ptMaterial');
+    var canvas = document.getElementById('ptChart');
+    var stateBox = document.getElementById('ptState');
+    var stateText = document.getElementById('ptStateText');
+    var stateTitle = document.getElementById('ptStateTitle');
+    var retryBtn = document.getElementById('ptRetry');
+    var axisNote = document.getElementById('ptAxisNote');
+    var chart = null;
+    var data = [];
+    var selectedId = null;
+    var reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    var DAY = 86400000;
+
+    function peso4(v) { return '₱' + Number(v).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 4 }); }
+    function dayMs(iso) { return Date.parse(iso + 'T00:00:00'); }
+    function fullDate(ms) {
+      return new Date(ms).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    }
+    function find(id) {
+      for (var i = 0; i < data.length; i++) if (String(data[i].material_id) === String(id)) return data[i];
+      return null;
+    }
+
+    // loading | empty | error | ready: one place decides what the stage shows.
+    function setState(state, message) {
+      card.dataset.state = state;
+      var msg = state === 'empty' || state === 'error';
+      stateBox.hidden = !msg;
+      stateTitle.textContent = state === 'error' ? 'Price history unavailable' : 'Nothing to chart yet';
+      stateText.textContent = msg ? message : '';
+      retryBtn.hidden = state !== 'error';
+      if (state !== 'ready') {
+        if (chart) { chart.destroy(); chart = null; }
+        document.getElementById('ptLegend').innerHTML = '';
+        axisNote.textContent = '';
+      }
+      if (state === 'loading' || state === 'error') {
+        ['ptLatest', 'ptBlended', 'ptRange', 'ptSpent'].forEach(function (id) {
+          var el = document.getElementById(id);
+          el.querySelector('.kpi-value').textContent = '-';
+          el.querySelector('.kpi-meta').innerHTML = '';
+          var sp = el.querySelector('.kpi-spark');
+          if (sp) sp.innerHTML = '';
+        });
+      }
+    }
+
+    function renderMovers() {
+      var box = document.getElementById('ptMovers');
+      box.innerHTML = '';
+      if (!data.length) {
+        box.innerHTML = '<p class="pt-mover-empty">No materials with purchases yet.</p>';
+        return;
+      }
+      var T = chartTheme();
+      var rows = data.slice().sort(function (a, b) {
+        return Math.abs(b.change_pct || 0) - Math.abs(a.change_pct || 0);
+      });
+      rows.forEach(function (m) {
+        var btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'pt-mover';
+        btn.dataset.id = m.material_id;
+        btn.setAttribute('aria-pressed', String(String(m.material_id) === String(selectedId)));
+        var name = document.createElement('span');
+        name.className = 'pt-mover-name';
+        name.textContent = m.name;
+        var unit = document.createElement('span');
+        unit.className = 'pt-mover-unit';
+        unit.textContent = 'per ' + m.unit;
+        name.appendChild(unit);
+        var prices = document.createElement('span');
+        prices.className = 'pt-mover-prices';
+        prices.textContent = m.purchase_count > 1
+          ? peso4(m.first_price) + ' to ' + peso4(m.latest_price)
+          : peso4(m.latest_price) + ', one purchase';
+        var spark = document.createElement('span');
+        spark.className = 'pt-spark';
+        spark.innerHTML = sparklineSVG(m.points.map(function (p) { return p.price; }), T.accent);
+        var chipWrap = document.createElement('span');
+        chipWrap.className = 'pt-num';
+        var c = m.change_pct;
+        if (c === null || m.purchase_count < 2) {
+          chipWrap.innerHTML = '<span class="kpi-chip kpi-chip-flat">No change yet</span>';
+        } else {
+          var flat = Math.abs(c) < 0.05;
+          // A price going up is bad for the business (red), down is good.
+          var cls = flat ? 'flat' : (c > 0 ? 'bad' : 'good');
+          chipWrap.innerHTML = '<span class="kpi-chip kpi-chip-' + cls + '">' +
+            (flat ? '→' : (c > 0 ? '↑' : '↓')) + ' ' + Math.abs(c).toFixed(1) + '%</span>';
+        }
+        btn.appendChild(name); btn.appendChild(prices); btn.appendChild(spark); btn.appendChild(chipWrap);
+        box.appendChild(btn);
+      });
+    }
+
+    function renderSelected() {
+      var m = find(selectedId);
+      if (!m) { setState('empty', 'No purchases logged for this material yet.'); return; }
+      // Chart.js throws if a second chart is attached to a canvas still holding one,
+      // which is what made every pick after the first do nothing.
+      if (chart) { chart.destroy(); chart = null; }
+      setState('ready');
+      var T = chartTheme();
+
+      var prices = m.points.map(function (p) { return p.price; });
+      var blended = m.points.map(function (p) { return p.blended; });
+      var last = m.points[m.points.length - 1];
+      var spent = m.points.reduce(function (a, p) { return a + p.cost; }, 0);
+
+      fillKpiTile(document.getElementById('ptLatest'), {
+        value: peso4(m.latest_price), title: peso4(m.latest_price) + ' per ' + m.unit,
+        delta: m.last_change_pct, goodWhenUp: false,
+        note: 'per ' + m.unit + ', vs. the purchase before',
+        series: prices, color: T.accent,
+      });
+      fillKpiTile(document.getElementById('ptBlended'), {
+        value: peso4(last.blended),
+        delta: blended.length > 1 ? pctChange(blended[blended.length - 1], blended[0]) : null, goodWhenUp: false,
+        note: 'since the first purchase',
+        series: blended, color: T.cream,
+      });
+      fillKpiTile(document.getElementById('ptRange'), {
+        value: peso4(m.lowest_price) + ' to ' + peso4(m.highest_price),
+        delta: null, note: 'per ' + m.unit + ', lowest to highest',
+      });
+      fillKpiTile(document.getElementById('ptSpent'), {
+        value: fullPeso(spent), delta: null,
+        note: m.purchase_count + ' purchase' + (m.purchase_count === 1 ? '' : 's') + ', last on ' + fullDate(dayMs(last.date)),
+      });
+
+      // Real time axis: the gap between two purchases is drawn as long as it was.
+      var xs = m.points.map(function (p) { return dayMs(p.date); });
+      var xMin = xs[0], xMax = xs[xs.length - 1];
+      var xPad = xMax > xMin ? (xMax - xMin) * 0.04 : 7 * DAY;
+      var all = prices.concat(blended);
+      var lo = Math.min.apply(null, all), hi = Math.max.apply(null, all);
+      var yPad = hi > lo ? (hi - lo) * 0.18 : hi * 0.1;
+      var yMin = Math.max(0, lo - yPad), yMax = hi + yPad;
+      var longSpan = (xMax - xMin) > 240 * DAY;
+
+      var o = lineChartOptions(T, peso4);
+      o.animation = reduceMotion ? false : undefined;
+      o.parsing = false;
+      o.scales.x = {
+        type: 'linear', min: xMin - xPad, max: xMax + xPad,
+        border: { display: false }, grid: { display: false },
+        afterBuildTicks: function (scale) {
+          var n = 5, ticks = [];
+          for (var i = 0; i < n; i++) ticks.push({ value: scale.min + (scale.max - scale.min) * i / (n - 1) });
+          scale.ticks = ticks;
+        },
+        ticks: {
+          maxRotation: 0,
+          callback: function (v) {
+            return new Date(v).toLocaleDateString('en-US', longSpan ? { month: 'short', year: '2-digit' } : { month: 'short', day: 'numeric' });
+          }
+        }
+      };
+      o.scales.y.beginAtZero = false;
+      o.scales.y.min = yMin;
+      o.scales.y.max = yMax;
+      o.plugins.tooltip.callbacks.title = function (items) { return fullDate(items[0].parsed.x); };
+      o.plugins.tooltip.callbacks.afterBody = function (items) {
+        var p = m.points[items[0].dataIndex];
+        var lines = [p.kind + ': ' + p.qty + ' ' + m.unit + ' for ' + fullPeso(p.cost)];
+        if (p.supplier) lines.push('From ' + p.supplier);
+        return lines;
+      };
+
+      chart = new Chart(canvas, {
+        type: 'line',
+        data: {
+          datasets: [
+            { label: 'Price paid per ' + m.unit, borderColor: T.accent, backgroundColor: T.accent,
+              data: m.points.map(function (p, i) { return { x: xs[i], y: p.price }; }),
+              pointRadius: 4, pointHoverRadius: 6, cubicInterpolationMode: 'monotone' },
+            { label: 'Blended cost per ' + m.unit, borderColor: T.cream, backgroundColor: T.cream,
+              data: m.points.map(function (p, i) { return { x: xs[i], y: p.blended }; }),
+              borderDash: [6, 4], pointRadius: 3, pointHoverRadius: 5, cubicInterpolationMode: 'monotone' },
+          ]
+        },
+        options: o
+      });
+      renderChartLegend(chart, document.getElementById('ptLegend'));
+      document.getElementById('ptSub').textContent = m.name + ': what each purchase cost per ' + m.unit +
+        ', and the blended cost per ' + m.unit + ' after it.';
+      axisNote.textContent = 'The price axis starts at ' + peso4(yMin) + ', not zero, so small moves are easier to see.';
+    }
+
+    function pick(id) {
+      selectedId = id;
+      if (select.value !== String(id)) select.value = String(id);
+      renderMovers();
+      renderSelected();
+    }
+
+    function load() {
+      if (typeof Chart === 'undefined') {
+        setState('error', 'Charts failed to load.');
+        return;
+      }
+      applyChartDefaults();
+      // Keep what's on screen during a quiet refresh; only a first load shows the skeleton.
+      if (!data.length) setState('loading');
+      fetch("{{ url_for('admin.material_price_trends') }}")
+        .then(function (r) { if (!r.ok) throw new Error('Request failed: ' + r.status); return r.json(); })
+        .then(function (json) {
+          data = json.materials || [];
+          if (!data.length) { setState('empty', 'No purchases logged yet. Add or restock a material to start the chart.'); renderMovers(); return; }
+          var keep = selectedId && find(selectedId) ? selectedId : (find(select.value) ? select.value : data[0].material_id);
+          pick(keep);
+        })
+        .catch(function () {
+          setState('error', 'Could not load the price history.');
+        });
+    }
+
+    select.addEventListener('change', function () { pick(select.value); });
+    retryBtn.addEventListener('click', load);
+    document.getElementById('ptMovers').addEventListener('click', function (e) {
+      var row = e.target.closest('.pt-mover');
+      if (row) pick(row.dataset.id);
+    });
+    setState('loading');
+    load();
+    // Prices change when a restock is logged elsewhere; refresh on return.
+    document.addEventListener('visibilitychange', function () { if (!document.hidden) load(); });
+    window.addEventListener('pageshow', function (e) { if (e.persisted) load(); });
+  })();
+</script>
 <script nonce="{{ csp_nonce() }}">
   (function () {
     var packageQty = document.getElementById('package_qty');
@@ -727,9 +1121,8 @@
       if (qty > 0 && unit && unit !== 'Milliliter' && ML_PER_UNIT[unit]) {
         var ml = qty * ML_PER_UNIT[unit];
         volumeEquivPreview.textContent = '= ' + ml.toLocaleString(undefined, { maximumFractionDigits: 2 }) + ' mL';
-        volumeEquivPreview.style.display = 'block';
       } else {
-        volumeEquivPreview.style.display = 'none';
+        volumeEquivPreview.textContent = '';
       }
     }
 
@@ -740,9 +1133,8 @@
       if (qty > 0 && cost >= 0 && unit) {
         var perUnit = cost / qty;
         costPreview.textContent = '≈ ₱' + perUnit.toFixed(4) + ' per ' + unit.toLowerCase();
-        costPreview.style.display = 'block';
       } else {
-        costPreview.style.display = 'none';
+        costPreview.textContent = '';
       }
       updateVolumeEquivPreview();
     }
@@ -818,9 +1210,8 @@
       if (qty > 0 && unit && unit !== 'Milliliter' && ML_PER_UNIT[unit]) {
         var ml = qty * ML_PER_UNIT[unit];
         volumeEquivPreview.textContent = '= ' + ml.toLocaleString(undefined, { maximumFractionDigits: 2 }) + ' mL';
-        volumeEquivPreview.style.display = 'block';
       } else {
-        volumeEquivPreview.style.display = 'none';
+        volumeEquivPreview.textContent = '';
       }
     }
 
@@ -830,9 +1221,8 @@
       var unit = unitSelect.value;
       if (qty > 0 && cost >= 0 && unit) {
         costPreview.textContent = '≈ ₱' + (cost / qty).toFixed(4) + ' per ' + unit.toLowerCase();
-        costPreview.style.display = 'block';
       } else {
-        costPreview.style.display = 'none';
+        costPreview.textContent = '';
       }
       updateEditVolumeEquivPreview();
     }
@@ -909,9 +1299,8 @@
       var cost = parseFloat(costInput.value);
       if (qty > 0 && cost >= 0) {
         costPreview.textContent = '≈ ₱' + (cost / qty).toFixed(4) + ' per ' + unit.toLowerCase() + ' for this purchase';
-        costPreview.style.display = 'block';
       } else {
-        costPreview.style.display = 'none';
+        costPreview.textContent = '';
       }
     }
     [qtyInput, costInput].forEach(function (el) {
@@ -927,7 +1316,7 @@
       qtyInput.value = '';
       costInput.value = '';
       purchasedAtInput.value = purchasedAtInput.dataset.today;
-      costPreview.style.display = 'none';
+      costPreview.textContent = '';
       openOverlay(overlay);
     };
 
@@ -992,6 +1381,15 @@
       nameEl.textContent = btn.dataset.supplierName;
       var materials = [];
       try { materials = JSON.parse(btn.dataset.materials || '[]'); } catch (e) { materials = []; }
+      if (!materials.length) {
+        body.innerHTML = '<tr><td colspan="4"><div class="empty-state empty-compact">' +
+          '<span class="empty-icon" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path d="M3 3v18h18"/><path d="m7 15 4-4 3 3 5-6"/></svg></span>' +
+          '<div class="empty-text"><h3 class="empty-title">Nothing supplied yet</h3>' +
+          '<p class="empty-body">Assign this supplier to a material, or log a purchase from them, and it is listed here.</p></div>' +
+          '</div></td></tr>';
+        openOverlay(overlay);
+        return;
+      }
       body.innerHTML = materials.map(function (mat) {
         return '<tr>' +
           '<td>' + esc(mat.material_name) + '</td>' +

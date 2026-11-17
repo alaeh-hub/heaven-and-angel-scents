@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% import "_empty.html" as empty %}
 {% import "_macros.html" as m %}
 {% block title %}Products{% endblock %}
 {% block heading %}Products{% endblock %}
@@ -17,6 +18,33 @@
   }
   .pg-split > * { min-width: 0; }
   .pg-aside { display: grid; gap: var(--space-md); }
+  /* Wide layout: All Products is exactly as tall as the Add a product card
+     (the CSV tools sit in a second row under it). The list card is height:0 +
+     min-height:100% so its own rows never set the row height; the page script
+     below then fits as many rows as that height holds. */
+  @media (min-width: 64.0625rem) {
+    .pg-aside { display: contents; }
+    .pg-split > .card:first-child {
+      grid-column: 1; grid-row: 1;
+      align-self: stretch; height: 0; min-height: 100%;
+      display: flex; flex-direction: column;
+    }
+    .pg-aside > :nth-child(1) { grid-column: 2; grid-row: 1; }
+    .pg-aside > :nth-child(2) { grid-column: 2; grid-row: 2; }
+    .pg-split > .card:first-child > [data-smart-table] {
+      flex: 1; min-height: 0; display: flex; flex-direction: column;
+    }
+    /* The shared .table-wrap caps itself at 32.5rem and scrolls inside that,
+       which clipped the table short of the pagination bar. The page script
+       already sizes the rows to fit, so no cap and no inner scroll here. */
+    .pg-split > .card:first-child .table-wrap { flex: 0 0 auto; max-height: none; overflow: visible; }
+    /* No inner scroll here, so a sticky head would stick to the page instead. */
+    .pg-split > .card:first-child .table-wrap thead th { position: static; }
+    .pg-split > .card:first-child .smart-pagination { margin-top: auto; }
+    /* Rows share out the leftover pixels so the table ends flush with the
+       pagination bar instead of leaving a gap (--fit-row-h set by script). */
+    [data-fit-to] tbody tr { height: var(--fit-row-h, auto); }
+  }
   .pg-aside h2 { font-size: 1.125rem; margin: 0 0 var(--space-2xs); text-wrap: balance; }
   .pg-note { font-size: 0.875rem; color: var(--ink-soft); margin: 0 0 var(--space-sm); }
   .pg-aside .form-row { display: grid; grid-template-columns: 1fr; }
@@ -69,7 +97,6 @@
   #editUnitDisplay { background: var(--bg); color: var(--ink-faint); }
   #editImagePreviewWrap { margin-bottom: var(--space-xs); }
   .pg-check { display: flex; align-items: center; gap: var(--space-xs); font-weight: 500; }
-  .pg-check input { width: auto; }
   .pg-edit-img { width: 4rem; height: 4rem; object-fit: cover; border-radius: var(--radius); border: 1px solid var(--border-strong); }
   .pg-edit-avatar { width: 4rem; height: 4rem; font-size: 1.6rem; }
   .pg-edit-note { font-size: 0.875rem; margin-top: var(--space-2xs); }
@@ -101,7 +128,7 @@
       <span class="hint" id="catalogCount">{{ sku_total }} SKU{{ 's' if sku_total != 1 }}</span>
     </div>
     {% if catalog %}
-    <div data-smart-table data-page-size="{{ page_size }}" data-count-target="catalogCount" data-count-label="SKU"
+    <div data-smart-table data-fit-to=".pg-aside > .card" data-page-size="{{ page_size }}" data-count-target="catalogCount" data-count-label="SKU"
       data-count-distinct>
       <div class="table-toolbar">
         <div class="table-search">
@@ -117,7 +144,6 @@
             {% for u in unit_choices %}
             <option value="{{ u }}" {{ 'selected' if u == '85ML' }}>{{ u }}</option>
             {% endfor %}
-            <option value="BULK">Bulk/Refill</option>
           </select>
         </div>
       </div>
@@ -150,7 +176,7 @@
                   {{ m.product_thumb(p.image_path, p.item_name) }}
                   <div>
                     <div class="item-name">{{ p.item_name }}</div>
-                    <div class="item-sub mono"><span>{{ p.sku }}</span><span class="item-sub-unit">{{ 'Bulk' if p.unit == 'BULK' else p.unit }}</span></div>
+                    <div class="item-sub mono"><span>{{ p.sku }}</span><span class="item-sub-unit">{{ p.unit }}</span></div>
                     <div class="item-sub item-sub-badge">
                       {{ m.variant_badge(p.variant) }}
                     </div>
@@ -158,7 +184,7 @@
                 </div>
               </td>
               <td class="mobile-fold" data-label="Variant">{{ m.variant_badge(p.variant) }}</td>
-              <td class="mono text-soft mobile-fold" data-label="Unit" style="white-space:nowrap;">{{ 'Bulk' if p.unit == 'BULK' else p.unit }}</td>
+              <td class="mono text-soft mobile-fold" data-label="Unit" style="white-space:nowrap;">{{ p.unit }}</td>
               <td class="num mono" data-label="Price">{{ p.price|peso }}</td>
               <td class="num mono" data-label="Total stock">{{ p.total_stock }}</td>
               <td data-label="" class="mobile-inline-action">
@@ -171,9 +197,7 @@
             {% endfor %}
           </tbody>
         </table>
-        <div class="empty-state smart-no-match"{% if initial_rows %} style="display:none;"{% endif %}>
-          <p>No products match your search.</p>
-        </div>
+        {{ empty.no_match('products', show=not initial_rows) }}
       </div>
       <div class="smart-pagination" style="display:{{ 'flex' if initial_rows|length > page_size else 'none' }};">
         <button type="button" class="btn btn-ghost btn-sm" data-page-prev disabled>Previous</button>
@@ -182,9 +206,7 @@
       </div>
     </div>
     {% else %}
-    <div class="empty-state">
-      <p>No products yet. Add the first fragrance to the catalog with the form beside this list.</p>
-    </div>
+    {{ empty.state('No products yet', 'Add the first fragrance to the catalog with the form beside this list. Branches, production and sales all build on it.', icon='tag') }}
     {% endif %}
   </div>
 
@@ -199,11 +221,22 @@
         <div class="form-row">
           <div class="field">
             <label for="base_code">Product code</label>
-            <input type="text" id="base_code" name="base_code" placeholder="A1" required>
+            <input type="text" id="base_code" name="base_code" placeholder="A1" required
+              list="baseCodeList" autocomplete="off">
+            {# Existing codes (with their fragrance), for adding another size of a known product. #}
+            <datalist id="baseCodeList">
+              {% set seen_codes = namespace(codes=[]) %}
+              {% for p in catalog %}{% set code = p.sku.rsplit('-', 1)[0] %}{% if code not in seen_codes.codes %}{% set seen_codes.codes = seen_codes.codes + [code] %}<option value="{{ code }}" label="{{ p.item_name }}"></option>{% endif %}{% endfor %}
+            </datalist>
           </div>
           <div class="field">
             <label for="item_name">Fragrance name</label>
-            <input type="text" id="item_name" name="item_name" placeholder="Golden Hour" required>
+            <input type="text" id="item_name" name="item_name" placeholder="Golden Hour" required
+              list="itemNameList" autocomplete="off">
+            {# Existing fragrance names, so a new size of a known scent is spelled the same way. #}
+            <datalist id="itemNameList">
+              {% for n in catalog|map(attribute='item_name')|unique|sort %}<option value="{{ n }}"></option>{% endfor %}
+            </datalist>
           </div>
         </div>
         <div class="form-row">
@@ -213,14 +246,6 @@
               <option value="">Select…</option>
               <option value="Male">Male</option>
               <option value="Female">Female</option>
-            </select>
-          </div>
-          <div class="field">
-            <label for="category">Category</label>
-            <select id="category" name="category" required>
-              {% for c in category_choices %}
-              <option value="{{ c }}">{{ c }}</option>
-              {% endfor %}
             </select>
           </div>
           <div class="field" id="unitField">
@@ -238,10 +263,6 @@
             <label for="price">Price for this unit (₱)</label>
             <input type="number" id="price" name="price" step="0.01" min="0" placeholder="1450.00" required>
           </div>
-          <div class="field" id="bulkNoticeField" style="display:none;">
-            <div class="help">Bulk/Refill has no fixed size or catalog price. It’s produced and sold at a custom mL
-              amount, priced off the shared rate on the <a href="{{ url_for('admin.formulas') }}">Formulas page</a>.</div>
-          </div>
         </div>
         <div class="form-row">
           <div class="field">
@@ -249,7 +270,7 @@
             <input type="file" id="image" name="image" accept="image/png,image/jpeg,image/webp">
             <div class="help">JPG, PNG, or WEBP. This is per size: reusing the code for another size needs its own image too.</div>
           </div>
-          <div class="field" id="skuPreviewField" style="display:none;">
+          <div class="field live-slot" id="skuPreviewField" style="visibility:hidden;">
             <div class="help">Will be saved as SKU <strong id="skuPreviewValue" class="mono"></strong></div>
           </div>
         </div>
@@ -270,18 +291,18 @@
           Export the current catalog, edit it in a spreadsheet, then import it back. A row whose
           product code + unit already exists updates that product’s name/variant/price; a new
           combination adds it to the catalog with zero stock everywhere, same as adding one by hand.
-          Unit can be a bottle size or BULK (a BULK row is added as Bulk/Refill).
+          Unit is a bottle size. Bulk isn’t a product: it’s sold by the mL from the bulk batches.
           A new size for a code that already has other sizes on file takes that product’s existing
           name and variant, so a typo in one row can’t rename it differently across its own sizes.
         </p>
         <div class="form-row">
           <div class="field">
             <label for="csvFile">CSV file</label>
-            <input type="file" id="csvFile" name="csv_file" accept=".csv,text/csv" form="importProductsForm" required>
+            <input type="file" id="csvFile" name="csv_file" accept=".csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" form="importProductsForm" required>
           </div>
           <div class="field csv-actions">
             <button type="submit" form="importProductsForm" class="btn btn-accent">Upload CSV</button>
-            <a href="{{ url_for('admin.export_products') }}" class="btn btn-ghost" target="_blank" data-generate-file>Download CSV</a>
+            <a href="{{ url_for('admin.export_products') }}" class="btn btn-ghost" target="_blank" data-generate-file>Download Excel</a>
           </div>
         </div>
         <div class="help">Columns: base_code, item_name, variant, unit, price, in the same order as Download CSV.</div>
@@ -305,7 +326,7 @@
       <div class="form-row">
         <div class="field">
           <label for="editItemName">Fragrance name</label>
-          <input type="text" id="editItemName" name="item_name" required>
+          <input type="text" id="editItemName" name="item_name" required list="itemNameList" autocomplete="off">
         </div>
         <div class="field">
           <label for="editPrice">Price for this unit (₱)</label>
@@ -353,7 +374,7 @@
     // Mirrors utils.py's _PRODUCT_UNIT_SUFFIXES — display-only preview,
     // the server always computes the real SKU itself on submit.
     var UNIT_SUFFIXES = {
-      '85ML': '85ML', '50ML': '50ML', '10ML': '10ML', '3ML': '3ML', 'BULK': 'BULK'
+      '85ML': '85ML', '50ML': '50ML', '10ML': '10ML', '3ML': '3ML'
     };
     var baseInput = document.getElementById('base_code');
     var unitSelect = document.getElementById('unit');
@@ -361,37 +382,6 @@
     var previewValue = document.getElementById('skuPreviewValue');
     var itemNameInput = document.getElementById('item_name');
     var variantSelect = document.getElementById('variant');
-
-    // ---- Category: a Bulk/Refill product has no fixed size or catalog
-    // price to pick (see products.html's own field comments above) —
-    // the server always forces unit to BULK for it regardless of what's
-    // submitted (see admin.py's products()), so the Unit field is just
-    // hidden and excused from validation rather than pointed at a real
-    // choice. ----
-    (function () {
-      var categorySelect = document.getElementById('category');
-      var unitField = document.getElementById('unitField');
-      var priceInput = document.getElementById('price');
-      var priceField = document.getElementById('priceField');
-      var bulkNoticeField = document.getElementById('bulkNoticeField');
-      if (!categorySelect) return;
-
-      function applyCategory() {
-        var isBulk = categorySelect.value === 'Bulk/Refill';
-        unitField.style.display = isBulk ? 'none' : '';
-        unitSelect.required = !isBulk;
-        unitSelect.disabled = isBulk;
-        if (isBulk) unitSelect.value = '';
-        priceField.style.display = isBulk ? 'none' : '';
-        priceInput.required = !isBulk;
-        if (isBulk) priceInput.value = '0';
-        bulkNoticeField.style.display = isBulk ? '' : 'none';
-        if (unitSelect.dispatchEvent) unitSelect.dispatchEvent(new Event('change'));
-      }
-
-      categorySelect.addEventListener('change', applyCategory);
-      applyCategory();
-    })();
 
     // Reuse the SAME product code for another size (e.g. A1-85ML already
     // exists, now adding A1-1L) auto-fills the fragrance name and variant
@@ -432,7 +422,7 @@
         if (base && suffix) {
           previewValue.textContent = base + '-' + suffix;
           if (!skuPreviewVisible) {
-            previewField.style.display = '';
+            previewField.style.visibility = 'visible';
             skuPreviewVisible = true;
             if (window.anime && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
               window.anime.animate(previewField, {
@@ -441,7 +431,7 @@
             }
           }
         } else if (skuPreviewVisible) {
-          previewField.style.display = 'none';
+          previewField.style.visibility = 'hidden';
           skuPreviewVisible = false;
         }
       }

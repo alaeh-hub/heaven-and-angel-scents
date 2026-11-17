@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% import "_empty.html" as empty %}
 {% import "_macros.html" as m %}
 {% block title %}Production Log{% endblock %}
 {% block heading %}Production Log{% endblock %}
@@ -86,6 +87,28 @@
   }
   .pg-split > * { min-width: 0; }
   .pg-aside { display: grid; gap: var(--space-md); }
+  /* Wide layout: Main Stock is exactly as tall as the Log a production run
+     card beside it. The list card is height:0 + min-height:100% so its own
+     rows never set the row height; tables.js (data-fit-to) then fits as many
+     rows as that height holds. */
+  @media (min-width: 64.0625rem) {
+    .pg-split > .card:first-child {
+      grid-column: 1; grid-row: 1;
+      align-self: stretch; height: 0; min-height: 100%;
+      display: flex; flex-direction: column;
+    }
+    .pg-aside { grid-column: 2; grid-row: 1; }
+    .pg-split > .card:first-child > [data-smart-table] {
+      flex: 1; min-height: 0; display: flex; flex-direction: column;
+    }
+    /* The shared .table-compact .table-wrap caps itself at 25rem and scrolls
+       inside that, which would clip the table short of the pagination bar. */
+    .pg-split > .card:first-child .table-wrap { flex: 0 0 auto; max-height: none; overflow: visible; }
+    /* No inner scroll here, so a sticky head would stick to the page instead. */
+    .pg-split > .card:first-child .table-wrap thead th { position: static; }
+    .pg-split > .card:first-child .smart-pagination { margin-top: auto; }
+    [data-fit-to] tbody tr { height: var(--fit-row-h, auto); }
+  }
   .pg-aside .form-row { display: grid; grid-template-columns: 1fr; }
   .pg-aside .form-row > * { flex: none; }
   .pg-sub-unit { margin-inline-start: var(--space-xs); }
@@ -96,26 +119,12 @@
 {% endblock %}
 
 {% block content %}
-<!-- A Bulk/Refill SKU's stock_qty/qty_produced counts mL, not bottles
-     (see products.category) — summing it straight into the same total
-     as every bottle-counted SKU would silently mix the two units into
-     one meaningless number (e.g. "20 bottles + 5,000 mL" reading as
-     "5,020 units"). Every aggregate below is split by category instead;
-     see fill_bar's own unit_label param (_macros.html) for the same fix
-     on the Main Stock table's individual rows. -->
-{% set bottle_stock_rows = hq_stock|selectattr('category', 'ne', 'Bulk/Refill')|list if hq_stock else [] %}
-{% set bulk_stock_rows = hq_stock|selectattr('category', 'equalto', 'Bulk/Refill')|list if hq_stock else [] %}
-{% set total_hq_bottles = bottle_stock_rows|sum(attribute='stock_qty') %}
-{% set total_hq_bulk_ml = bulk_stock_rows|sum(attribute='stock_qty') %}
-{% set max_bottle_stock = (bottle_stock_rows|map(attribute='stock_qty')|list)|max if bottle_stock_rows else 1 %}
-{% set max_bulk_stock = (bulk_stock_rows|map(attribute='stock_qty')|list)|max if bulk_stock_rows else 1 %}
-
-{% set bottle_logs = logs|selectattr('category', 'ne', 'Bulk/Refill')|list if logs else [] %}
-{% set bulk_logs = logs|selectattr('category', 'equalto', 'Bulk/Refill')|list if logs else [] %}
-{% set total_produced_bottles = bottle_logs|sum(attribute='qty_produced') %}
-{# SKUs counted by base code (A1-85ML/A1-BULK = one "A1"), not per size row. #}
+{# Every product here is a bottle, so stock and production totals are plain counts. #}
+{% set total_hq_bottles = hq_stock|sum(attribute='stock_qty') if hq_stock else 0 %}
+{% set max_bottle_stock = (hq_stock|map(attribute='stock_qty')|list)|max if hq_stock else 1 %}
+{% set total_produced_bottles = logs|sum(attribute='qty_produced') if logs else 0 %}
+{# SKUs counted by base code (A1-85ML and A1-50ML = one "A1"), not per size row. #}
 {% set hq_sku_total = hq_stock|map(attribute='base_code')|unique|list|length %}
-{% set total_produced_bulk_ml = bulk_logs|sum(attribute='qty_produced') %}
 
 <div class="grid grid-4 stack">
   <div class="card stat-tile">
@@ -126,7 +135,7 @@
   <div class="card stat-tile">
     <div class="stat-label">Bottles on hand</div>
     <div class="stat-value accent">{{ total_hq_bottles }}</div>
-    <div class="stat-foot">{{ '+ ' ~ total_hq_bulk_ml ~ ' mL bulk on hand' if total_hq_bulk_ml else 'across the warehouse' }}</div>
+    <div class="stat-foot">across the warehouse</div>
   </div>
   <div class="card stat-tile">
     <div class="stat-label">Runs logged</div>
@@ -136,7 +145,7 @@
   <div class="card stat-tile">
     <div class="stat-label">Bottles produced</div>
     <div class="stat-value">{{ total_produced_bottles }}</div>
-    <div class="stat-foot">{{ '+ ' ~ total_produced_bulk_ml ~ ' mL bulk produced' if total_produced_bulk_ml else 'across logged runs' }}</div>
+    <div class="stat-foot">across logged runs</div>
   </div>
 </div>
 
@@ -147,7 +156,7 @@
         != 1 }}</span>
     </div>
     {% if hq_stock %}
-    <div class="table-compact" data-smart-table data-page-size="5" data-count-target="hqStockCount"
+    <div class="table-compact" data-smart-table data-fit-to=".pg-aside > .card" data-page-size="5" data-count-target="hqStockCount"
       data-count-label="SKU" data-count-distinct>
       <div class="table-toolbar">
         <div class="table-search">
@@ -183,19 +192,13 @@
                 </div>
               </td>
               <td class="mobile-fold" data-label="Variant">{{ m.variant_badge(row.variant) }}</td>
-              <td class="mono text-soft mobile-fold" data-label="Unit" style="white-space:nowrap;">{{ 'Bulk' if row.unit == 'BULK' else row.unit }}</td>
-              {% if row.category == 'Bulk/Refill' %}
-              <td data-label="On hand">{{ m.fill_bar(row.stock_qty, max_bulk_stock, 'mL') }}</td>
-              {% else %}
+              <td class="mono text-soft mobile-fold" data-label="Unit" style="white-space:nowrap;">{{ row.unit }}</td>
               <td data-label="On hand">{{ m.fill_bar(row.stock_qty, max_bottle_stock) }}</td>
-              {% endif %}
             </tr>
             {% endfor %}
           </tbody>
         </table>
-        <div class="empty-state smart-no-match" style="display:none;">
-          <p>No SKUs match your search.</p>
-        </div>
+        {{ empty.no_match('SKUs') }}
       </div>
       <div class="smart-pagination" style="display:none;">
         <button type="button" class="btn btn-ghost btn-sm" data-page-prev>Previous</button>
@@ -204,12 +207,10 @@
       </div>
     </div>
     <div class="pg-foot">
-      <p>Bars are relative to your best-stocked SKU within the same category (bottles compared to bottles, Bulk/Refill mL compared to mL). A short bar isn’t necessarily out of stock.</p>
+      <p>Bars are relative to your best-stocked SKU. A short bar isn’t necessarily out of stock. Bulk isn’t listed here: it lives in the <a href="{{ url_for('admin.bulk_batches') }}">bulk batches</a> and is sold by the mL from them.</p>
     </div>
     {% else %}
-    <div class="empty-state">
-      <p>No products in the catalog yet.</p>
-    </div>
+    {{ empty.state('No products in the catalog', 'Add products first, then production can stock them.', icon='box', action='Add a product', href=url_for('admin.products')) }}
     {% endif %}
   </div>
 
@@ -235,7 +236,7 @@
         <select id="sku" name="sku" required disabled data-hq-stock='{{ hq_stock | tojson }}'>
           <option value="">Select a product first…</option>
         </select>
-        <div class="help" id="stockPreview" style="display:none;"></div>
+        <div class="help live-slot" id="stockPreview"></div>
       </div>
       <div class="form-row">
         <div class="field">
@@ -247,23 +248,14 @@
           <input type="text" id="batch_code" name="batch_code" placeholder="B-2026-08-A">
         </div>
       </div>
-      <!-- Bulk/Refill has no formula (see utils.PRODUCT_CATEGORIES) — its
-           cost is this batch's own hand-typed rate per mL x the mL amount
-           above, not a shared per-bottle recipe, so this field only shows
-           up for that category (toggled below). -->
-      <div class="field" id="rateField" style="display:none;">
-        <label for="rate_per_ml">Rate per mL (₱)</label>
-        <input type="number" id="rate_per_ml" name="rate_per_ml" step="0.0001" min="0">
-      </div>
-      <!-- Every other (Bottled) size must still draw from a bulk batch
-           (see bulk_batches in schema.sql) — this is what deducts its
-           remaining mL, enforcing "materials go into a batch before
-           they're bottled". Cost of goods, though, comes from the flat
-           base price set per size on the Formulas page (see
-           unit_cogs_settings) — not this batch's own real cost/mL, which
-           stays informational (shown on the Bulk Batches page only).
-           Shown for every category except Bulk/Refill (toggled below). -->
-      <div class="field" id="batchField" style="display:none;">
+      <!-- Every run draws from a bulk batch (see bulk_batches in
+           schema.sql) — this is what deducts its remaining mL, enforcing
+           "materials go into a batch before they're bottled". Cost of
+           goods, though, comes from the flat base price set per size on
+           the Formulas page (see unit_cogs_settings) — not this batch's
+           own real cost/mL, which stays informational (shown on the Bulk
+           Batches page only). -->
+      <div class="field" id="batchField">
         <label for="bulk_batch_id">Bulk batch</label>
         <select id="bulk_batch_id" name="bulk_batch_id">
           <option value="">Select a batch…</option>
@@ -279,13 +271,12 @@
             first</a>.</div>
         {% endif %}
       </div>
-      <!-- Cost of goods is computed automatically — from the flat base
-           price set per packaging size on the Formulas page for a
-           Bottled run, or from Rate per mL x mL produced for Bulk/Refill
-           — this is only a live preview; the authoritative figure is
-           recomputed and frozen server-side in production() when the run
-           is actually logged. -->
-      <div class="help" id="cogsPreview" style="margin-bottom:var(--space-md);"></div>
+      <!-- Cost of goods is computed automatically from the flat base
+           price set per packaging size on the Formulas page — this is
+           only a live preview; the authoritative figure is recomputed
+           and frozen server-side in production() when the run is
+           actually logged. -->
+      <div class="help live-slot live-slot-2" id="cogsPreview" style="margin-bottom:var(--space-md);"></div>
       <button type="submit" class="btn btn-accent" style="width:100%;">Save production</button>
     </form>
   </div>
@@ -336,11 +327,11 @@
                 {% else %}
                 <span class="text-faint">None</span>
                 {% endif %}
-                <span class="mono">{{ 'Bulk' if l.unit == 'BULK' else l.unit }}</span>
+                <span class="mono">{{ l.unit }}</span>
                 <span class="mono">{{ l.produced_at.strftime('%b %d, %Y %I:%M %p') }}</span>
               </div>
             </td>
-            <td class="mono text-soft mobile-fold" data-label="Unit" style="white-space:nowrap;">{{ 'Bulk' if l.unit == 'BULK' else l.unit }}</td>
+            <td class="mono text-soft mobile-fold" data-label="Unit" style="white-space:nowrap;">{{ l.unit }}</td>
             <td class="mobile-fold" data-label="Batch">
               {% if l.batch_code %}
               <span class="badge badge-pending">{{ l.batch_code }}</span>
@@ -348,7 +339,7 @@
               <span class="text-faint">None</span>
               {% endif %}
             </td>
-            <td class="num mono qty-up" data-label="Qty">+{{ l.qty_produced }}{{ ' mL' if l.category == 'Bulk/Refill' }}</td>
+            <td class="num mono qty-up" data-label="Qty">+{{ l.qty_produced }}</td>
             {% if l.total_cogs is not none %}
             <td class="num mono" data-label="Cost / unit">₱{{ '%.4f'|format(l.cogs_per_unit) }}</td>
             <td class="num mono" data-label="Total (capital)">{{ l.total_cogs|peso }}</td>
@@ -360,9 +351,7 @@
           {% endfor %}
         </tbody>
       </table>
-      <div class="empty-state smart-no-match" style="display:none;">
-        <p>No production runs match your search.</p>
-      </div>
+      {{ empty.no_match('production runs') }}
     </div>
     <div class="smart-pagination" style="display:none;">
       <button type="button" class="btn btn-ghost btn-sm" data-page-prev>Previous</button>
@@ -374,13 +363,11 @@
     <p>Cost of goods for a Bottled size is the flat base price set for it
       on the <a href="{{ url_for('admin.formulas') }}">Formulas page</a>; the
       <a href="{{ url_for('admin.bulk_batches') }}">bulk batch</a> it’s filled from only decides how much of that
-      batch’s mL gets used up. Bulk/Refill uses its own rate per mL instead. Either way, the moment it's logged, a
+      batch’s mL gets used up. The moment it's logged, a
       run's total is "capital" on the dashboard, kept separate from what's been spent buying raw materials.</p>
   </div>
   {% else %}
-  <div class="empty-state">
-    <p>No production runs logged yet.</p>
-  </div>
+  {{ empty.state('No production runs yet', 'Each run you log is kept here with its quantity and date.', icon='flask') }}
   {% endif %}
 </div>
 {% endblock %}
@@ -443,6 +430,12 @@
     // beats a code match, and a match at the very start beats one
     // buried in the middle.
     function scoreProduct(name, query) {
+      // Shared smart matcher (any word order, SKUs without dashes, one
+      // small typo); the plain logic below is only a fallback.
+      if (window.SmartMatch) {
+        var extra = (byProduct[name] || []).map(function (r) { return r.sku + ' ' + r.unit; }).join(' ');
+        return window.SmartMatch.score(query, name, extra);
+      }
       var lowerName = name.toLowerCase();
       var skus = (byProduct[name] || []).map(function (r) { return r.sku.toLowerCase(); });
 
@@ -571,15 +564,12 @@
     function updatePreview() {
       var sku = skuSelect.value;
       if (!sku) {
-        preview.style.display = 'none';
+        preview.textContent = '';
         return;
       }
-      if (Object.prototype.hasOwnProperty.call(stockMap, sku)) {
-        preview.textContent = stockMap[sku] + ' unit(s) currently on hand.';
-      } else {
-        preview.textContent = 'No stock recorded yet for this SKU.';
-      }
-      preview.style.display = 'block';
+      preview.textContent = Object.prototype.hasOwnProperty.call(stockMap, sku)
+        ? stockMap[sku] + ' on hand.'
+        : 'No stock yet.';
     }
 
     // ---- Cost of goods preview: the flat base price set for the
@@ -588,33 +578,10 @@
     // the real figure server-side when the run is actually logged. ----
     var qtyProducedInput = document.getElementById('qty_produced');
     var cogsPreview = document.getElementById('cogsPreview');
-    var rateField = document.getElementById('rateField');
-    var rateInput = document.getElementById('rate_per_ml');
-    var batchField = document.getElementById('batchField');
     var batchSelect = document.getElementById('bulk_batch_id');
-    var qtyProducedLabel = document.getElementById('qtyProducedLabel');
 
     function formatPeso(n) {
       return '₱' + Number(n).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-    }
-
-    // ---- Bulk/Refill (see utils.PRODUCT_CATEGORIES): no formula — cost
-    // is this batch's own hand-typed rate per mL x the mL amount above,
-    // shown/required only for that category. Toggled here rather than
-    // left to updateCogsPreview() alone since it also changes what
-    // "Units produced" means and whether Rate per mL is even required. ----
-    function isBulkSelected() {
-      var opt = skuSelect.options[skuSelect.selectedIndex];
-      return !!(opt && opt.value && opt.dataset.category === 'Bulk/Refill');
-    }
-
-    function applyCategoryFields() {
-      var isBulk = isBulkSelected();
-      rateField.style.display = isBulk ? '' : 'none';
-      rateInput.required = isBulk;
-      batchField.style.display = isBulk ? 'none' : '';
-      batchSelect.required = !isBulk;
-      qtyProducedLabel.textContent = isBulk ? 'Volume produced (mL)' : 'Units produced';
     }
 
     // "85ML" -> 85. Mirrors utils.bottle_size_ml() server-side.
@@ -622,42 +589,41 @@
       return parseFloat(String(unit).replace(/ML$/i, ''));
     }
 
+    function formatMl(n) {
+      return Number(n).toLocaleString('en-PH', { maximumFractionDigits: 1 });
+    }
+
+    // One short line: what a unit costs, then the run's total and the mL it takes from the batch. The note sits in a
+    // reserved slot (see .live-slot), so changing it never moves the form or the Main Stock list beside it.
     function updateCogsPreview() {
       if (!cogsPreview) return;
+      cogsPreview.classList.remove('help-warn');
       var opt = skuSelect.options[skuSelect.selectedIndex];
       if (!opt || !opt.value) {
         cogsPreview.textContent = '';
         return;
       }
-      var qty = parseFloat(qtyProducedInput.value);
-      if (isBulkSelected()) {
-        var rate = parseFloat(rateInput.value);
-        if (isNaN(rate) || rate < 0) {
-          cogsPreview.textContent = 'Enter a rate per mL to preview cost of goods for this batch.';
-          return;
-        }
-        var bulkTotalText = (qty > 0) ? formatPeso(rate * qty) + ' total cost of goods for ' + qty + ' mL.' : '';
-        cogsPreview.textContent = formatPeso(rate) + ' per mL' + (bulkTotalText ? ', ' + bulkTotalText : '.');
-        return;
-      }
       var batchOpt = batchSelect.options[batchSelect.selectedIndex];
       if (!batchOpt || !batchOpt.value) {
-        cogsPreview.textContent = 'Select a bulk batch to draw this run\'s mL from.';
+        cogsPreview.textContent = 'Pick a bulk batch to draw the mL from.';
         return;
       }
-      // Cost of goods is the flat base price set for this packaging size
-      // on the Formulas page — not this batch's own cost/mL, which only
-      // decides how much of the batch gets used up (see updateCogsPreview
-      // and production()'s own comment for why).
-      var bottleMl = bottleSizeMl(opt.dataset.unit);
+      // Cost of goods is the flat base price set for this packaging size on the Formulas page, not the batch's own
+      // cost per mL, which only decides how much of the batch gets used up (see production()'s own comment).
+      var qty = parseFloat(qtyProducedInput.value);
       var cogsPerUnit = parseFloat(opt.dataset.cogsPerUnit);
-      var remainingMl = parseFloat(batchOpt.dataset.remainingMl);
-      var neededMl = (qty > 0) ? qty * bottleMl : 0;
-      var totalText = (qty > 0) ? formatPeso(cogsPerUnit * qty) + ' total cost of goods for ' + qty + ' unit(s), using ' + neededMl.toFixed(1) + ' mL of this batch.' : '';
-      cogsPreview.textContent = formatPeso(cogsPerUnit) + ' cost per unit' + (totalText ? ', ' + totalText : '.');
-      if (neededMl > remainingMl) {
-        cogsPreview.textContent += ' This batch only has ' + remainingMl.toFixed(1) + ' mL left.';
+      if (!(qty > 0)) {
+        cogsPreview.textContent = formatPeso(cogsPerUnit) + ' per unit.';
+        return;
       }
+      var neededMl = qty * bottleSizeMl(opt.dataset.unit);
+      var remainingMl = parseFloat(batchOpt.dataset.remainingMl);
+      if (neededMl > remainingMl) {
+        cogsPreview.textContent = 'Needs ' + formatMl(neededMl) + ' mL, batch has ' + formatMl(remainingMl) + '.';
+        cogsPreview.classList.add('help-warn');
+        return;
+      }
+      cogsPreview.textContent = formatPeso(cogsPerUnit * qty) + ' total, ' + formatMl(neededMl) + ' mL from the batch.';
     }
 
     var populatedFor = null;
@@ -675,7 +641,6 @@
         placeholder.textContent = 'Select a product first…';
         skuSelect.appendChild(placeholder);
         updatePreview();
-        applyCategoryFields();
         updateCogsPreview();
         return;
       }
@@ -683,14 +648,13 @@
       rows.forEach(function (row) {
         var opt = document.createElement('option');
         opt.value = row.sku;
-        opt.textContent = row.category === 'Bulk/Refill' ? 'Bulk/Refill' : row.unit;
+        opt.textContent = row.unit;
         opt.dataset.unit = row.unit;
         opt.dataset.category = row.category;
         opt.dataset.cogsPerUnit = row.cogs_per_unit;
         skuSelect.appendChild(opt);
       });
       updatePreview();
-      applyCategoryFields();
       updateCogsPreview();
     }
 
@@ -757,10 +721,8 @@
     });
 
     skuSelect.addEventListener('change', updatePreview);
-    skuSelect.addEventListener('change', applyCategoryFields);
     skuSelect.addEventListener('change', updateCogsPreview);
     if (qtyProducedInput) qtyProducedInput.addEventListener('input', updateCogsPreview);
-    if (rateInput) rateInput.addEventListener('input', updateCogsPreview);
     if (batchSelect) batchSelect.addEventListener('change', updateCogsPreview);
 
     if (productNames.length) {

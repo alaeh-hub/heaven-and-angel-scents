@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% import "_empty.html" as empty %}
 {% import "_macros.html" as m %}
 {% block title %}Record Sale{% endblock %}
 {% block heading %}Record Sale{% endblock %}
@@ -59,7 +60,6 @@
   }
 
   .rs-check input {
-    width: auto;
     margin: 0;
   }
 
@@ -103,6 +103,7 @@
   /* Total as a ledger line: a rule above, the working and the figure in
      tabular numerals. Empty until there is something to total. */
   .price-hint {
+    min-height: calc(1.5em + var(--space-xs) + 1px);   /* reserved, so the dialog does not jump */
     font-size: var(--text-sm);
     color: var(--ink-soft);
     font-variant-numeric: tabular-nums;
@@ -454,6 +455,7 @@
       </div>
     </div>
 
+    {% include "_order_basket.html" %}
     </div>
 
     <div>
@@ -512,6 +514,7 @@
         their address from the first sale it was recorded on. Edit it if it’s changed.</div>
     </div>
 
+    {% include "_order_basket_list.html" %}
     <button type="submit" class="btn btn-accent rs-submit">Record sale</button>
     </div>
     </div>
@@ -527,7 +530,8 @@
   </div>
   <p class="rs-lede">
     Got a backlog of sales to log? Download the template, fill in one row per sale, then upload it here.
-    Every row is inserted at once instead of typing each one in by hand.
+    Every row is inserted at once instead of typing each one in by hand. To put several scents on one receipt,
+    give those rows the same text in the Receipt column (A, B, 1, 2...); leave it blank for a receipt of its own.
   </p>
   <a href="{{ url_for('branch.sales_import_template') }}" class="btn btn-ghost rs-wide-btn" data-generate-file>
     Download import template (.xlsx)
@@ -608,7 +612,7 @@
             <td class="num mono mobile-detail" data-label="Total">{{ (s.qty_sold * s.unit_price)|peso }}</td>
             <td class="mobile-detail" data-label="Payment">{{ m.payment_method_badge(s.payment_method, s.buyer_username) }}</td>
             <td data-label="" class="mobile-inline-action">
-              <a href="{{ url_for('branch.sale_receipt', sale_id=s.sale_id) }}" class="btn btn-ghost btn-sm" target="_blank" data-generate-file>Receipt</a>
+              {{ m.receipt_button(s, 'branch.sale_receipt') }}
             </td>
             <!-- Mobile-only — see .mobile-toggle-row/.row-toggle-btn in
                  style.css. Hidden on desktop, where every cell above is
@@ -625,9 +629,7 @@
           {% endfor %}
         </tbody>
       </table>
-      <div class="empty-state smart-no-match" style="display:none;">
-        <p>No sales match your search.</p>
-      </div>
+      {{ empty.no_match('sales') }}
     </div>
     <div class="smart-pagination" style="display:none;">
       <button type="button" class="btn btn-ghost btn-sm" data-page-prev><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m15 6-6 6 6 6"/></svg>Previous</button>
@@ -636,9 +638,7 @@
     </div>
   </div>
   {% else %}
-  <div class="empty-state">
-    <p>No sales recorded yet. Use New sale above to record the first one.</p>
-  </div>
+  {{ empty.state('No sales recorded yet', 'Record your first sale and it shows up here with its payment and receipt.', icon='receipt', action='New sale', trigger='openNewSaleBtn') }}
   {% endif %}
 </div>
 {% endblock %}
@@ -837,6 +837,8 @@
       var opt = document.createElement('option');
       opt.value = name;
       opt.textContent = name;
+      // Lets the dropdown's search find a product by any of its SKUs.
+      opt.dataset.search = byProduct[name].map(function (r) { return r.sku; }).join(' ');
       productSelect.appendChild(opt);
     });
 
@@ -864,7 +866,7 @@
         priceHint.textContent = '';
         return;
       }
-      priceHint.textContent = formatPeso(rate) + ' × ' + qty + ' = ' + formatPeso(rate * qty) + ' total. Edit price if this sale used a different rate.';
+      priceHint.textContent = formatPeso(rate) + ' × ' + qty + ' = ' + formatPeso(rate * qty);
     }
 
     function applySuggestedPrice() {

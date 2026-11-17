@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% import "_empty.html" as empty %}
 {% block title %}AI Drafts{% endblock %}
 {% block eyebrow %}{{ 'Organization' if session.role == 'Admin' else session.branch_name }}{% endblock %}
 {% block heading %}AI-Proposed Stock Requests{% endblock %}
@@ -103,6 +104,12 @@
      away on mobile. */
   .dr-resulting-note {
     display: none;
+  }
+
+  /* The Status cell keeps its badge on one line, which also stopped this short note
+     from wrapping: in a wider font (Retro Terminal) it ran 7px past the cell. */
+  .dr-table td .item-sub {
+    white-space: normal;
   }
 
   .dr-intro {
@@ -260,9 +267,7 @@
           {% endfor %}
         </tbody>
       </table>
-      <div class="empty-state smart-no-match" style="display:none;">
-        <p>No drafts match your search.</p>
-      </div>
+      {{ empty.no_match('drafts') }}
     </div>
     <div class="smart-pagination" style="display:none;">
       <button type="button" class="btn btn-ghost btn-sm" data-page-prev>Previous</button>
@@ -271,9 +276,7 @@
     </div>
   </div>
   {% else %}
-  <div class="empty-state">
-    <p>No AI-proposed drafts yet. Ask Halo to put together a reorder.</p>
-  </div>
+  {{ empty.state('No AI drafts yet', 'Ask Halo to put together a reorder, and the proposed draft is kept here for your review.', icon='mail', action='Open Halo', href=url_for('ai.chat_page')) }}
   {% endif %}
 </div>
 {% endblock %}

@@ -3,8 +3,9 @@ sale leaves every total, and a permanent sale_voids record keeps who and
 why. HQ can void any location's sale; branch staff only their own, and
 only on the day it was recorded. A voided refill returns its bulk mL.
 """
-from factories import (count_sales, get_form_token, get_inventory_qty, last_movement_log, login,
-                        make_branch, make_inventory, make_product, make_user, unique_suffix)
+from factories import (count_sales, get_batch_remaining, get_form_token, get_inventory_qty,
+                        last_movement_log, login, make_branch, make_inventory, make_product,
+                        make_scent, make_scent_batch, make_user, unique_suffix)
 
 HQ = 1
 
@@ -121,29 +122,39 @@ def test_admin_voids_any_sale_including_old_ones(client, sql):
     assert "Customer returned it" in client.get("/admin/sales-history").get_data(as_text=True)
 
 
-def test_voiding_a_refill_returns_its_bulk_ml(client, sql):
-    base = f"VD{unique_suffix().upper()}"
-    cur = sql.cursor()
-    cur.execute(
-        """INSERT INTO products (sku, item_name, variant, category, unit, price) VALUES
-           (%s, 'Void Scent', 'Male', 'Bottled', '10ML', 20.00),
-           (%s, 'Void Scent', 'Male', 'Bulk/Refill', 'BULK', 2.00)""",
-        (f"{base}-10ML", f"{base}-BULK"),
-    )
-    sql.commit()
-    cur.close()
-    make_inventory(sql, HQ, f"{base}-10ML", stock_qty=0)
-    make_inventory(sql, HQ, f"{base}-BULK", stock_qty=100)
+def test_voiding_a_refill_returns_its_bulk_ml_to_the_batches_it_came_from(client, sql):
+    bottle, base = make_scent(sql, unit="10ML")
+    make_inventory(sql, HQ, bottle, stock_qty=0)
+    old = make_scent_batch(sql, base, 20, created_at="2026-01-01 08:00:00")
+    new = make_scent_batch(sql, base, 100, created_at="2026-01-02 08:00:00")
     _admin(client, sql)
 
-    _sell(client, "/admin/record-sale", f"{base}-10ML", 3, sale_type="Refill", unit_price="15.00")
-    assert get_inventory_qty(sql, HQ, f"{base}-BULK") == 70
-    sale_id = _last_sale_id(sql, HQ, f"{base}-10ML")
+    # 3 x 10 mL = 30 mL: 20 from the old batch, 10 from the new one.
+    _sell(client, "/admin/record-sale", bottle, 3, sale_type="Refill", unit_price="15.00")
+    assert (get_batch_remaining(sql, old), get_batch_remaining(sql, new)) == (0, 90)
+    sale_id = _last_sale_id(sql, HQ, bottle)
 
     client.post(f"/admin/sales/{sale_id}/void", data={"reason": "Wrong scent"})
 
-    assert get_inventory_qty(sql, HQ, f"{base}-BULK") == 100
-    assert get_inventory_qty(sql, HQ, f"{base}-10ML") == 0
+    assert (get_batch_remaining(sql, old), get_batch_remaining(sql, new)) == (20, 100)
+    assert get_inventory_qty(sql, HQ, bottle) == 0
+    assert count_sales(sql, HQ, bottle) == 0
+
+
+def test_voiding_a_bulk_sale_returns_its_ml(client, sql):
+    bottle, base = make_scent(sql, unit="10ML")
+    batch = make_scent_batch(sql, base, 100)
+    _admin(client, sql)
+
+    _sell(client, "/admin/record-sale", f"{base}-BULK", 40, unit_price="1.00")
+    assert get_batch_remaining(sql, batch) == 60
+    sale_id = _last_sale_id(sql, HQ, f"{base}-BULK")
+
+    client.post(f"/admin/sales/{sale_id}/void", data={"reason": "Customer changed mind"})
+
+    assert get_batch_remaining(sql, batch) == 100
+    assert count_sales(sql, HQ, f"{base}-BULK") == 0
+    assert _void_record(sql, sale_id)["sku"] == f"{base}-BULK"
 
 
 def test_admin_void_redirect_stays_inside_admin(client, sql):

@@ -1,30 +1,17 @@
 """routes/admin/'s Formulas page — the Bulk/Refill rate per mL
 (save_bulk_rate(), unchanged), a flat base cost of goods per Bottled
 packaging size (save_unit_cogs(), see unit_cogs_settings in schema.sql —
-this is what production() actually charges a Bottled run), plus a
-reference-only packaging-materials formula per size (add_formula_item()/
-delete_formula_item(), see unit_formula_items in schema.sql).
-
-The formula's line costs are computed LIVE from each material's current
-cost_per_unit (never trusted stale from unit_formula_items.line_cost
-itself) — it exists purely so an admin can see "what does one 85ML
-bottle's packaging actually cost right now" without re-typing the math,
-and to help them decide what to hand-type into unit_cogs_settings above.
-It plays no part in what production() logs as cogs_per_unit — a bulk
-batch already records exactly which raw materials and quantities went
-into the liquid (see bulk_batches/bulk_batch_materials and
-tests/test_bulk_batches.py), so nothing here is re-derived into an
-actual cost automatically.
+this is what production() actually charges a Bottled run). The old
+"packaging materials per bottle" reference table was removed: a built-in
+bulk batch formula now carries its own packaging (see
+tests/test_batch_formulas.py).
 """
 from decimal import Decimal
 
-from factories import (login, make_product,
-                        make_raw_material, make_user)
+from factories import login, make_product, make_user
 
 SAVE_UNIT_COGS_URL = "/admin/formulas/save-unit-cogs"
 SAVE_BULK_RATE_URL = "/admin/formulas/save-bulk-rate"
-ADD_FORMULA_ITEM_URL = "/admin/formulas/add-item"
-DELETE_FORMULA_ITEM_URL = "/admin/formulas/delete-item"
 PRODUCTION_URL = "/admin/production"
 MATERIALS_URL = "/admin/materials"
 FORMULAS_URL = "/admin/formulas"
@@ -134,89 +121,3 @@ def test_dashboard_and_reports_pages_render(client, sql):
     assert client.get("/admin/").status_code == 200
     assert client.get("/admin/reports").status_code == 200
     assert client.get("/admin/api/reports-data").status_code == 200
-
-
-def test_add_formula_item_computes_line_cost_from_current_material_cost(client, sql):
-    _signed_in_admin(client, sql)
-    # ₱4.00/gram
-    mat = make_raw_material(
-        sql, unit="Gram", package_qty="50.000", package_cost="200.00")
-
-    resp = client.post(ADD_FORMULA_ITEM_URL, data={
-        "unit": "85ML",
-        "material_id": str(mat),
-        "qty_per_unit": "2.5",
-    })
-    assert resp.status_code == 302
-
-    # Only this test's own material: other test files leave 85ML formula rows
-    # behind in the shared test database.
-    rows = [r for r in _formula_items(sql, "85ML") if r["material_id"] == mat]
-    assert len(rows) == 1
-    assert Decimal(rows[0]["qty_per_unit"]) == Decimal("2.5000")
-    # 2.5g x ₱4.00/g = ₱10.00 — computed, not hand-typed.
-    assert Decimal(rows[0]["line_cost"]) == Decimal("10.0000")
-
-
-def test_formulas_page_shows_the_computed_packaging_total(client, sql):
-    _signed_in_admin(client, sql)
-    mat_a = make_raw_material(
-        sql, unit="Piece", package_qty="10.000", package_cost="50.00")  # ₱5.00/piece
-    mat_b = make_raw_material(
-        sql, unit="Gram", package_qty="20.000", package_cost="40.00")  # ₱2.00/gram
-
-    client.post(ADD_FORMULA_ITEM_URL, data={
-        "unit": "50ML", "material_id": str(mat_a), "qty_per_unit": "1"})
-    client.post(ADD_FORMULA_ITEM_URL, data={
-        "unit": "50ML", "material_id": str(mat_b), "qty_per_unit": "3"})
-
-    resp = client.get(FORMULAS_URL)
-    assert resp.status_code == 200
-    # ₱5.00 x 1 + ₱2.00 x 3 = ₱11.00 total for the 50ML packaging formula.
-    assert b"11.0000" in resp.data
-
-
-def test_add_formula_item_upserts_the_same_material(client, sql):
-    """Re-adding the same material to the same size updates its qty/line
-    cost in place (see unit_formula_items' UNIQUE KEY on unit+material_id)
-    rather than creating a duplicate line."""
-    _signed_in_admin(client, sql)
-    mat = make_raw_material(
-        sql, unit="Piece", package_qty="10.000", package_cost="10.00")  # ₱1.00/piece
-
-    client.post(ADD_FORMULA_ITEM_URL, data={
-        "unit": "10ML", "material_id": str(mat), "qty_per_unit": "1"})
-    client.post(ADD_FORMULA_ITEM_URL, data={
-        "unit": "10ML", "material_id": str(mat), "qty_per_unit": "4"})
-
-    rows = _formula_items(sql, "10ML")
-    assert len(rows) == 1
-    assert Decimal(rows[0]["qty_per_unit"]) == Decimal("4.0000")
-    assert Decimal(rows[0]["line_cost"]) == Decimal("4.0000")
-
-
-def test_delete_formula_item_removes_it(client, sql):
-    _signed_in_admin(client, sql)
-    mat = make_raw_material(sql)
-
-    client.post(ADD_FORMULA_ITEM_URL, data={
-        "unit": "3ML", "material_id": str(mat), "qty_per_unit": "1"})
-    formula_item_id = _formula_items(sql, "3ML")[0]["formula_item_id"]
-
-    resp = client.post(DELETE_FORMULA_ITEM_URL, data={
-        "formula_item_id": str(formula_item_id),
-    })
-    assert resp.status_code == 302
-    assert _formula_items(sql, "3ML") == []
-
-
-def test_add_formula_item_rejects_an_invalid_unit(client, sql):
-    _signed_in_admin(client, sql)
-    mat = make_raw_material(sql)
-    resp = client.post(ADD_FORMULA_ITEM_URL, data={
-        "unit": "BULK",  # Bulk/Refill has no fixed-size formula
-        "material_id": str(mat),
-        "qty_per_unit": "1",
-    }, follow_redirects=True)
-    assert resp.status_code == 200
-    assert b"select a valid packaging size" in resp.data.lower()

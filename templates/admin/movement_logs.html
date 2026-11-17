@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% import "_empty.html" as empty %}
 {% import "_macros.html" as m %}
 {% block title %}Inventory Log{% endblock %}
 {% block heading %}Inventory Log{% endblock %}
@@ -76,9 +77,7 @@
           {% endfor %}
         </tbody>
       </table>
-      <div class="empty-state smart-no-match" style="display:none;">
-        <p>No ledger entries match your search.</p>
-      </div>
+      {{ empty.no_match('ledger entries') }}
     </div>
     <div class="smart-pagination" style="display:none;">
       <button type="button" class="btn btn-ghost btn-sm" data-page-prev>Previous</button>
@@ -87,7 +86,7 @@
     </div>
   </div>
   {% else %}
-  <div class="empty-state"><p>No ledger entries yet. They appear here once production, a sale or a refill is recorded.</p></div>
+  {{ empty.state('No ledger entries yet', 'Every production run, sale and refill is written to the ledger as it happens.', icon='clock') }}
   {% endif %}
 </div>
 {% endblock %}

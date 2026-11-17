@@ -90,6 +90,9 @@ def fmt_cell(value, ctype):
         return "—"
     if ctype == "money":
         return f"₱{float(value):,.2f}"
+    if ctype == "price":
+        # A per-unit price (₱0.1321 per mL of alcohol): 2 decimals would round it to ₱0.13.
+        return f"₱{float(value):,.4f}"
     if ctype == "int":
         return f"{int(value):,}"
     if ctype == "num":
@@ -101,5 +104,27 @@ def fmt_cell(value, ctype):
         # truncate e.g. 2.5 grams down to 2.
         return f"{float(value):,.3f}"
     if ctype == "datetime":
-        return value.strftime("%b %d, %Y %I:%M %p") if isinstance(value, (datetime.date, datetime.datetime)) else str(value)
+        return fmt_datetime(value)
     return str(value)
+
+
+def fmt_datetime(value):
+    """Nov 8, 2026 1:13 PM (no leading zeros). A plain date has no time of day to show."""
+    if isinstance(value, datetime.datetime):
+        hour = value.hour % 12 or 12
+        return f"{value.strftime('%b')} {value.day}, {value.year} {hour}:{value.minute:02d} {'AM' if value.hour < 12 else 'PM'}"
+    if isinstance(value, datetime.date):
+        return f"{value.strftime('%b')} {value.day}, {value.year}"
+    return str(value)
+
+
+def sentence_case(label):
+    """Column heads read in sentence case ("Stock on hand", not "Stock On Hand"). Words that are already
+    all capitals (SKU, HQ), contain a digit or a symbol, or are not a plain Capitalised word stay as they are."""
+    words = str(label).split(" ")
+    out = []
+    for i, w in enumerate(words):
+        if i > 0 and len(w) > 1 and w[0].isupper() and w[1:].islower() and w.isalpha():
+            w = w.lower()
+        out.append(w)
+    return " ".join(out)

@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% import "_empty.html" as empty %}
 {% import "_macros.html" as m %}
 {% block title %}Partner Inquiries{% endblock %}
 {% block heading %}Partner Inquiries{% endblock %}
@@ -319,9 +320,7 @@
           {% endfor %}
         </tbody>
       </table>
-      <div class="empty-state smart-no-match" style="display:none;">
-        <p>No inquiries match your search.</p>
-      </div>
+      {{ empty.no_match('inquiries') }}
     </div>
     <div class="smart-pagination" style="display:none;">
       <button type="button" class="btn btn-ghost btn-sm" data-page-prev>Previous</button>
@@ -330,9 +329,7 @@
     </div>
   </div>
   {% else %}
-  <div class="empty-state">
-    <p>No inquiries in this view yet. They land here when a partner sends one from the private partner portal.</p>
-  </div>
+  {{ empty.state('No inquiries in this view', 'They land here when a partner sends one from the private partner portal.', icon='mail') }}
   {% endif %}
 </div>
 

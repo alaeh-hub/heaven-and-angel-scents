@@ -88,3 +88,26 @@ promo-video/
 
 # Opening data import notes (local only)
 docs/OPENING_DATA_IMPORT.md
+
+# Open design questions and working notes (local only)
+docs/OPEN_QUESTION_*.md
+
+# Costing reference files: the formulas are seeded in schema.sql, these are only the source sheets
+Costing_Calculator_By_Formula.xlsx
+formula.txt
+
+# Product catalogue exports (re-importable CSV downloads)
+products_*.csv
+
+# Temporary copy of schema.sql that the test suite writes into the repo root
+# (deleted when the run ends; a crashed run can leave it behind)
+_test_schema_*.sql
+
+# Private keys and certificates: never commit
+*.pem
+*.key
+
+# OS folder metadata
+desktop.ini
+Thumbs.db
+.DS_Store

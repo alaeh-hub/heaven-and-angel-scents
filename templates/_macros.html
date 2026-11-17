@@ -13,7 +13,7 @@
      own while the badge always stays whole (see .loc-cell in style.css);
      a bare "name <badge>" cell would be exempt from truncation as a
      badge cell and spill long names out of the column. #}
-  {% macro location_cell(name, is_hq) %}<span class="loc-cell"><span class="loc-name">{{ name }}</span>{% if is_hq %}<span class="badge badge-transit">HQ</span>{% endif %}</span>{% endmacro %}
+  {% macro location_cell(name, is_hq) %}<span class="loc-cell"><span class="loc-name" title="{{ name }}">{{ name }}</span>{% if is_hq and not (name|string).startswith('HQ') %}<span class="badge badge-transit">HQ</span>{% endif %}</span>{% endmacro %}
 
   {# Bottles on one line, bulk mL on its own muted line beneath, for a
      table cell where "2 · 100 mL" squeezed onto one line would get cut
@@ -156,6 +156,7 @@
   'update_inquiry_remarks': 'Remarks Updated',
   'approve_ai_stock_request': 'AI Draft Approved',
   'reject_ai_stock_request': 'AI Draft Rejected',
+  'write_off_bulk_batch': 'Batch Written Off',
   'clear_all_data': 'All Data Cleared'
   } %}
 
@@ -170,7 +171,18 @@
   'toggle_user': 'pending', 'edit_product': 'transit', 'edit_material': 'transit', 'edit_supplier': 'transit',
   'reset_password': 'transit', 'edit_package': 'transit', 'update_inquiry_status': 'transit',
   'update_inquiry_remarks': 'transit', 'approve_ai_stock_request': 'fulfilled',
-  'reject_ai_stock_request': 'rejected'
+  'reject_ai_stock_request': 'rejected', 'write_off_bulk_batch': 'rejected'
   } %}
   <span class="badge badge-{{ map.get(action, 'pending') }}">{{ action_label(action) }}</span>
   {% endmacro %}
+
+{# One Receipt button per receipt. A receipt of several scents is several sales rows; only its first row
+   shows the button (it opens the whole receipt) and the others say which receipt they are on. `s` needs
+   the receipt_* fields from sale_entry.annotate_receipts(). #}
+{% macro receipt_button(s, endpoint) %}
+{%- if s.is_receipt_head -%}
+<a href="{{ url_for(endpoint, sale_id=s.sale_id) }}" class="btn btn-ghost btn-sm" target="_blank" data-generate-file{% if s.receipt_lines > 1 %} title="One receipt for all {{ s.receipt_lines }} products"{% endif %}>Receipt{% if s.receipt_lines > 1 %} <span class="receipt-count">({{ s.receipt_lines }})</span>{% endif %}</a>
+{%- else -%}
+<span class="receipt-same" title="This product is on receipt SR-{{ '%06d'|format(s.receipt_no) }}">on SR-{{ '%06d'|format(s.receipt_no) }}</span>
+{%- endif -%}
+{% endmacro %}

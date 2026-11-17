@@ -25,8 +25,22 @@ UNIT_COST_SQL = """(SELECT sku, SUM(total_cogs) / NULLIF(SUM(qty_produced), 0) A
 # inquiry came in for rows that predate partner_inquiries.closed_at.
 PACKAGE_DATE_SQL = "COALESCE(pi.closed_at, pi.created_at)"
 
-SALES_COGS_SQL = f"""SELECT COALESCE(SUM(s.qty_sold * COALESCE(uc.unit_cost, 0)), 0) AS v
-                     FROM sales s LEFT JOIN {UNIT_COST_SQL} uc ON uc.sku = s.sku"""
+# What a bulk sale or refill cost: the mL it took from each bulk batch times that
+# batch's cost per mL (see sale_batch_usage). Every other sale has no such rows and
+# costs its SKU's average production cost per unit instead.
+SALE_BATCH_COST_SQL = """(SELECT sale_id, SUM(ml * cost_per_ml) AS cost
+                          FROM sale_batch_usage GROUP BY sale_id)"""
+
+# The cost of one sales row (alias s), given the two LEFT JOINs below.
+SALE_COST_EXPR = "COALESCE(su.cost, s.qty_sold * COALESCE(uc.unit_cost, 0))"
+
+# `FROM sales s` plus the two joins SALE_COST_EXPR needs.
+SALES_WITH_COST_SQL = f"""sales s
+                     LEFT JOIN {UNIT_COST_SQL} uc ON uc.sku = s.sku
+                     LEFT JOIN {SALE_BATCH_COST_SQL} su ON su.sale_id = s.sale_id"""
+
+SALES_COGS_SQL = f"""SELECT COALESCE(SUM({SALE_COST_EXPR}), 0) AS v
+                     FROM {SALES_WITH_COST_SQL}"""
 
 PACKAGE_COGS_SQL = f"""SELECT COALESCE(SUM(pii.qty * COALESCE(uc.unit_cost, 0)), 0) AS v
                        FROM partner_inquiry_items pii

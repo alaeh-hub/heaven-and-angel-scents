@@ -1,0 +1,260 @@
+{# The "Generate a report" builder, shared by the admin and branch Reports pages.
+
+   Needs: report_catalog (services.reports.report_catalog), report_groups, unit_choices,
+          and for admins also branch_list.
+   Set rb_admin (true/false), rb_generate_url and rb_preview_url before including.
+   Its behaviour is in _report_builder_script.html, which each page includes from {% block scripts %}
+   (soft navigation re-runs that block, but never a script inside .content).
+
+   Pick a report from grouped cards, narrow it with choice chips and a date preset, and see
+   in plain words (and a live row count) what you will get before you download it.
+   The real <select> and <input> controls stay in the form, so the download is still the
+   same GET the server already understands. #}
+<section class="card card-pad rbx" id="reportBuilder" aria-labelledby="rbxTitle">
+  {# Until the script has set the builder up, the raw form is hidden (no flash of every dropdown). #}
+  <noscript><style>.rbx .rbx-step, .rbx .rbx-bar, .rbx .rbx-foot { visibility: visible !important; }</style></noscript>
+  <div class="rbx-head">
+    <div>
+      <h2 class="rbx-title" id="rbxTitle">Generate a report</h2>
+      <p class="rbx-lede">Choose a report, narrow it down if you want, then download it as PDF or Excel{% if not rb_admin %} for {{ session.branch_name }}{% endif %}.</p>
+    </div>
+  </div>
+
+  <form method="GET" action="{{ rb_generate_url }}" id="reportForm" data-generate-file data-preview-url="{{ rb_preview_url }}">
+    {# ---------------------------------------------------------------- 1. report #}
+    <div class="rbx-step">
+      <div class="rbx-step-head">
+        <h3 class="rbx-step-title">1. Report</h3>
+        <div class="rbx-search">
+          <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+          <input type="search" id="rbxFind" placeholder="Find a report…" autocomplete="off" aria-label="Find a report">
+        </div>
+      </div>
+
+      <div class="rbx-tabs" id="rbxTabs" role="group" aria-label="Report groups">
+        {% for g in report_groups %}
+        {% if report_catalog|selectattr('group', 'equalto', g)|list %}
+        <button type="button" class="rbx-tab" data-group="{{ g }}" aria-pressed="false">{{ g }}</button>
+        {% endif %}
+        {% endfor %}
+      </div>
+
+      <div class="rbx-panels" id="rbxPanels">
+        {% for g in report_groups %}
+        {% set items = report_catalog|selectattr('group', 'equalto', g)|list %}
+        {% if items %}
+        <div class="rbx-panel" data-group="{{ g }}" role="radiogroup" aria-label="{{ g }}" hidden>
+          <p class="rbx-panel-title">{{ g }}</p>
+          <div class="rbx-options">
+            {% for rt in items %}
+            <label class="rbx-option" data-key="{{ rt.key }}" data-windowed="{{ 'true' if rt.windowed else 'false' }}"
+                   data-find="{{ (rt.label ~ ' ' ~ rt.description ~ ' ' ~ rt.group)|lower }}">
+              <input type="radio" name="type" value="{{ rt.key }}" data-label="{{ rt.label }}">
+              <span class="rbx-option-title">{{ rt.label }}</span>
+              <span class="rbx-option-desc">{{ rt.description }}</span>
+            </label>
+            {% endfor %}
+          </div>
+        </div>
+        {% endif %}
+        {% endfor %}
+        <p class="rbx-nofind" id="rbxNoFind" hidden>No report matches that. Try a word like sales, stock, price or deliveries.</p>
+      </div>
+    </div>
+
+    {# ---------------------------------------------------------------- 2. narrow it down #}
+    <div class="rbx-step" id="rbxOptions">
+      <div class="rbx-step-head">
+        <h3 class="rbx-step-title">2. Narrow it down</h3>
+        <button type="button" class="btn btn-ghost btn-sm" id="rbxReset">Reset options</button>
+      </div>
+
+      <div class="rbx-filters">
+        {% if rb_admin %}
+        <div class="field" data-filter="branch_id">
+          <span class="rbx-label" id="lbl_branch_id">Branch</span>
+          <select id="rb_branch_id" name="branch_id" aria-labelledby="lbl_branch_id">
+            <option value="all">All branches</option>
+            {# Main Branch is HQ Main Warehouse (branch_id 1). It is left out of branch_list (the Branches
+               page lists retail branches only), but it has its own sales, stock and movements, so reports
+               need to filter down to it. Listed here rather than changing branch_list, which other pages share. #}
+            <option value="1">Main Branch (HQ Warehouse)</option>
+            {% for b in branch_list %}
+            <option value="{{ b.branch_id }}">{{ b.branch_name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        {% endif %}
+        <div class="field" data-filter="status">
+          <span class="rbx-label" id="lbl_status">Status</span>
+          <select id="rb_status" name="status" aria-labelledby="lbl_status">
+            <option value="all">All statuses</option>
+            <option value="Pending">Pending</option>
+            <option value="In Transit">In Transit</option>
+            <option value="Partially Fulfilled">Partially fulfilled</option>
+            <option value="Fulfilled">Fulfilled</option>
+            <option value="Rejected">Rejected</option>
+          </select>
+        </div>
+        <div class="field" data-filter="movement_type">
+          <span class="rbx-label" id="lbl_movement_type">Movement type</span>
+          <select id="rb_movement_type" name="movement_type" aria-labelledby="lbl_movement_type">
+            <option value="all">All types</option>
+            {% if rb_admin %}
+            <option value="PRODUCTION">Production</option>
+            <option value="DISPATCH">Dispatch</option>
+            {% endif %}
+            <option value="RECEIPT">Receipt</option>
+            <option value="SALE">Sale</option>
+            <option value="REFILL">Refill</option>
+            <option value="FREEBIE">Freebie</option>
+            <option value="ADJUSTMENT">Adjustment</option>
+            <option value="DAMAGE">Damage</option>
+            {% if rb_admin %}
+            <option value="PACKAGE_ORDER">Package order</option>
+            <option value="PACKAGE_RETURN">Package return</option>
+            {% endif %}
+            <option value="SALE_VOID">Sale void</option>
+          </select>
+        </div>
+        <div class="field" data-filter="sale_type">
+          <span class="rbx-label" id="lbl_sale_type">Sale type</span>
+          <select id="rb_sale_type" name="sale_type" aria-labelledby="lbl_sale_type">
+            <option value="all">All sale types</option>
+            <option value="Sale">Sales</option>
+            <option value="Refill">Refills</option>
+            <option value="Freebie">Freebies</option>
+          </select>
+        </div>
+        <div class="field" data-filter="payment_method">
+          <span class="rbx-label" id="lbl_payment_method">Payment</span>
+          <select id="rb_payment_method" name="payment_method" aria-labelledby="lbl_payment_method">
+            <option value="all">Cash and credit</option>
+            <option value="Cash">Cash only</option>
+            <option value="Credit">Credit only</option>
+          </select>
+        </div>
+        <div class="field" data-filter="variant">
+          <span class="rbx-label" id="lbl_variant">Variant</span>
+          <select id="rb_variant" name="variant" aria-labelledby="lbl_variant">
+            <option value="all">All variants</option>
+            <option value="Male">Male</option>
+            <option value="Female">Female</option>
+          </select>
+        </div>
+        <div class="field" data-filter="unit">
+          <span class="rbx-label" id="lbl_unit">Unit</span>
+          <select id="rb_unit" name="unit" aria-labelledby="lbl_unit">
+            <option value="all">All units</option>
+            {% for u in unit_choices %}
+            <option value="{{ u }}">{{ u }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="field" data-filter="low_stock_only">
+          <span class="rbx-label" id="lbl_low_stock_only">Stock level</span>
+          <select id="rb_low_stock_only" name="low_stock_only" aria-labelledby="lbl_low_stock_only">
+            <option value="">All stock levels</option>
+            <option value="1">Low stock only</option>
+          </select>
+        </div>
+        {% if rb_admin %}
+        <div class="field" data-filter="role">
+          <span class="rbx-label" id="lbl_role">Role</span>
+          <select id="rb_role" name="role" aria-labelledby="lbl_role">
+            <option value="all">All roles</option>
+            <option value="Admin">Admin</option>
+            <option value="Branch">Branch</option>
+          </select>
+        </div>
+        <div class="field" data-filter="account_status">
+          <span class="rbx-label" id="lbl_account_status">Account status</span>
+          <select id="rb_account_status" name="account_status" aria-labelledby="lbl_account_status">
+            <option value="all">Active and deactivated</option>
+            <option value="active">Active only</option>
+            <option value="inactive">Deactivated only</option>
+          </select>
+        </div>
+        <div class="field" data-filter="partner_type">
+          <span class="rbx-label" id="lbl_partner_type">Partner type</span>
+          <select id="rb_partner_type" name="partner_type" aria-labelledby="lbl_partner_type">
+            <option value="all">Distributors and resellers</option>
+            <option value="Distributor">Distributors only</option>
+            <option value="Reseller">Resellers only</option>
+          </select>
+        </div>
+        <div class="field" data-filter="package_scope">
+          <span class="rbx-label" id="lbl_package_scope">Available to</span>
+          <select id="rb_package_scope" name="package_scope" aria-labelledby="lbl_package_scope">
+            <option value="all">All scopes</option>
+            <option value="Both">Both</option>
+            <option value="Distributor">Distributors only</option>
+            <option value="Reseller">Resellers only</option>
+          </select>
+        </div>
+        <div class="field" data-filter="package_status">
+          <span class="rbx-label" id="lbl_package_status">Package status</span>
+          <select id="rb_package_status" name="package_status" aria-labelledby="lbl_package_status">
+            <option value="all">Active and retired</option>
+            <option value="Active">Active only</option>
+            <option value="Retired">Retired only</option>
+          </select>
+        </div>
+        <div class="field" data-filter="inquiry_status">
+          <span class="rbx-label" id="lbl_inquiry_status">Inquiry status</span>
+          <select id="rb_inquiry_status" name="inquiry_status" aria-labelledby="lbl_inquiry_status">
+            <option value="all">All statuses</option>
+            <option value="New">New</option>
+            <option value="Contacted">Contacted</option>
+            <option value="Follow-up">Follow-up</option>
+            <option value="On Hold">On hold</option>
+            <option value="Closed">Closed</option>
+            <option value="Declined">Declined</option>
+          </select>
+        </div>
+        {% endif %}
+        <div class="field rbx-wide" data-filter="search">
+          <label class="rbx-label" for="rb_search" id="rb_search_label">Search item / SKU</label>
+          <input type="text" id="rb_search" name="search" placeholder="e.g. Golden Hour or HAS-001" autocomplete="off">
+        </div>
+      </div>
+
+      {# Time window: one row of presets instead of a mode switch plus a dropdown plus dates. #}
+      <div class="field rbx-window" data-filter="window">
+        <span class="rbx-label" id="lbl_window">When</span>
+        <div class="rbx-chips" id="rbxPresets" role="radiogroup" aria-labelledby="lbl_window"></div>
+        <div class="rbx-sub" id="rbxRecent" hidden>
+          <span class="rbx-sub-label" id="lbl_recent">How many entries</span>
+          <div class="rbx-chips" id="rbxRecentChips" role="radiogroup" aria-labelledby="lbl_recent"></div>
+        </div>
+        <div class="rbx-sub rbx-dates" id="rbxDates" hidden>
+          <div class="field">
+            <label for="rb_date_from">From</label>
+            <input type="date" id="rb_date_from" name="date_from">
+          </div>
+          <div class="field">
+            <label for="rb_date_to">To</label>
+            <input type="date" id="rb_date_to" name="date_to">
+          </div>
+        </div>
+        <input type="hidden" name="mode" id="rb_mode" value="recent">
+        <input type="hidden" name="recent_n" id="rb_recent_n" value="50">
+        <input type="hidden" name="month" id="rb_month" value="" disabled>
+      </div>
+      <p class="rbx-none" id="rbxNoOptions" hidden>This report has nothing to narrow down. It always shows everything.</p>
+    </div>
+
+    {# ---------------------------------------------------------------- 3. summary and download #}
+    <div class="rbx-bar" id="rbxBar">
+      <div class="rbx-summary" aria-live="polite">
+        <p class="rbx-summary-text" id="rbxSummary">Choose a report to begin.</p>
+        <p class="rbx-count" id="rbxCount"></p>
+      </div>
+      <div class="rbx-actions">
+        <button type="submit" name="format" value="pdf" class="btn btn-accent" formtarget="_blank" id="rbxPdf">Download PDF</button>
+        <button type="submit" name="format" value="xlsx" class="btn btn-ghost" formtarget="_blank" id="rbxXlsx">Download Excel</button>
+      </div>
+    </div>
+    <p class="rbx-foot">Reports are capped at 1,000 rows. Narrow the date range or add a search to focus on what you need.</p>
+  </form>
+</section>

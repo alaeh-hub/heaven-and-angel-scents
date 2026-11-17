@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% import "_empty.html" as empty %}
 {% import "_macros.html" as m %}
 {% block title %}Bulk Batches{% endblock %}
 {% block heading %}Bulk Batches{% endblock %}
@@ -20,6 +21,74 @@
   .pg-note { font-size: 0.875rem; color: var(--ink-soft); margin: 0 0 var(--space-md); }
   .pg-actions { display: flex; gap: var(--space-xs); margin-top: var(--space-xs); }
   .pg-actions .btn { flex: 1; }
+  /* The batch code + Active/Depleted chips live under the name. The global
+     .item-sub-badge is mobile-only (hidden on desktop because most tables
+     have a separate Status column) — this table doesn't, so show it always. */
+  .bat-table .item-sub-badge {
+    display: flex; align-items: center; gap: var(--space-xs); flex-wrap: wrap;
+  }
+  /* ---- Produce from a formula ---- */
+  .fm-form { padding: 0 var(--space-lg) var(--space-lg); }
+  .fm-alert { margin: 0 var(--space-lg) var(--space-md); color: var(--red-ink); font-size: 0.875rem; font-weight: 500; }
+  .fm-pick { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); gap: var(--space-lg); align-items: start; }
+  .fm-step .field, .fm-step select { margin: 0; }
+  .fm-step-label { display: block; margin-bottom: var(--space-xs); font-size: 0.875rem; font-weight: 500; color: var(--ink-soft); }
+  .fm-hint { margin: var(--space-xs) 0 0; font-size: 0.8125rem; color: var(--ink-faint); }
+  .fm-auto { margin: var(--space-xs) 0 0; font-size: 0.875rem; font-weight: 500; color: var(--ink); }
+  .fm-seg { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-xs); }
+  .fm-step > .fm-seg + .fm-seg { margin-top: var(--space-xs); }
+  #fmFormulaPicker { margin-top: var(--space-sm); }
+  .fm-choice {
+    min-height: 2.25rem; padding: var(--space-xs) var(--space-md);
+    border: 1px solid var(--field-edge); border-radius: var(--radius);
+    background: var(--field); color: var(--ink); font: inherit; text-align: center; cursor: pointer;
+    transition: border-color var(--dur-micro) var(--ease-out), background-color var(--dur-micro) var(--ease-out);
+  }
+  .fm-choice:hover { border-color: var(--border-strong); }
+  .fm-choice:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 2px; }
+  .fm-choice:active { transform: translateY(1px); }
+  .fm-choice[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); font-weight: 600; }
+  .fm-choice:disabled { opacity: .55; cursor: not-allowed; }
+  .fm-choice-name { white-space: nowrap; }
+
+  .fm-summary { margin-top: var(--space-lg); padding-top: var(--space-lg); border-top: 1px solid var(--border); }
+  .fm-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 21rem); gap: var(--space-xl); align-items: start; }
+  .fm-main .bb-h3:first-child { margin-top: 0; }
+  .fm-table { min-width: 34rem; }
+  .fm-table td, .fm-table th { font-variant-numeric: tabular-nums; }
+  .fm-sub { display: block; font-size: 0.75rem; color: var(--ink-faint); }
+  .fm-dl { display: grid; grid-template-columns: minmax(0, max-content) minmax(0, 1fr); gap: var(--space-2xs) var(--space-lg); margin: 0; font-size: 0.875rem; }
+  .fm-dl dt { color: var(--ink-faint); }
+  .fm-dl dd { margin: 0; font-variant-numeric: tabular-nums; }
+
+  .fm-result { display: grid; gap: var(--space-md); padding: var(--space-md); border-radius: var(--radius-lg); background: var(--surface-2); }
+  .fm-status { display: flex; align-items: flex-start; gap: var(--space-xs); margin: 0; font-size: 0.875rem; font-weight: 500; }
+  .fm-status svg { flex: 0 0 auto; width: 1rem; height: 1rem; margin-top: var(--space-3xs); }
+  .fm-ok { color: var(--success); }
+  .fm-short { color: var(--red-ink); }
+  .fm-fig { font-size: 1.5rem; font-weight: 600; font-variant-numeric: tabular-nums; line-height: 1.2; }
+  .fm-fig-label { font-size: 0.8125rem; color: var(--ink-faint); }
+  .fm-headline { margin: 0; font-size: 0.875rem; color: var(--ink-soft); }
+  .fm-totals { display: grid; }
+  .fm-total { display: flex; justify-content: space-between; gap: var(--space-md); padding: var(--space-xs) 0; border-top: 1px solid var(--border); font-size: 0.875rem; font-variant-numeric: tabular-nums; }
+  .fm-total-strong { font-weight: 600; }
+  .fm-fields { display: grid; gap: var(--space-sm); margin-top: var(--space-md); }
+  .fm-fields .field { margin: 0; }
+  .fm-fields .fm-hint { margin: 0; }
+  .fm-submit { width: 100%; }
+  .fm-submit:disabled { opacity: .55; cursor: not-allowed; }
+
+  .fm-setup { margin: 0 var(--space-lg) var(--space-lg); padding-top: var(--space-md); border-top: 1px solid var(--border); }
+  .fm-setup summary { cursor: pointer; font-size: 0.875rem; font-weight: 500; }
+  .fm-setup summary:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 2px; }
+  .fm-setup[open] summary { margin-bottom: var(--space-sm); }
+  .fm-roles { display: grid; grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr)); gap: var(--space-sm); margin-bottom: var(--space-md); }
+  .fm-roles .field { margin: 0; }
+
+  @media (min-width: 64.0625rem) { .fm-side { position: sticky; top: var(--space-md); } }
+  @media (max-width: 64rem) { .fm-grid { grid-template-columns: minmax(0, 1fr); gap: var(--space-lg); } }
+  @media (max-width: 48rem) { .fm-pick { grid-template-columns: minmax(0, 1fr); gap: var(--space-md); } .fm-form { padding-inline: var(--space-md); } }
+  @media (prefers-reduced-motion: reduce) { .fm-choice { transition: none; } .fm-choice:active { transform: none; } }
   .pg-foot { padding: var(--space-2xs) var(--space-lg) var(--space-md); }
   .pg-foot p { font-size: 0.875rem; color: var(--ink-faint); margin: 0; }
   .pg-head-tools { display: flex; align-items: center; gap: var(--space-md); }
@@ -308,7 +377,7 @@
 {% block content %}
 {% set active_batches_count = batches|selectattr('depleted', 'equalto', false)|list|length %}
 {% set active_ml_total = batches|rejectattr('depleted')|sum(attribute='remaining_ml') %}
-{% set active_capital_total = batches|rejectattr('depleted')|sum(attribute='total_cost') %}
+{% set capital_total = batches|sum(attribute='total_cost') %}
 
 <div class="grid grid-4 stack">
   <div class="card stat-tile">
@@ -323,14 +392,157 @@
   </div>
   <div class="card stat-tile">
     <div class="stat-label">Capital tied up in batches</div>
-    <div class="stat-value">{{ active_capital_total|peso }}</div>
-    <div class="stat-foot">sum of active batches’ real cost</div>
+    <div class="stat-value">{{ capital_total|peso }}</div>
+    <div class="stat-foot">total cost of every batch made, depleted ones included</div>
   </div>
   <div class="card stat-tile">
     <div class="stat-label">Materials tracked</div>
     <div class="stat-value">{{ materials|length }}</div>
     <div class="stat-foot"><a href="{{ url_for('admin.materials') }}" class="text-soft">Manage stock</a></div>
   </div>
+</div>
+
+<div class="card mt-24" id="formulasCard">
+  <div class="card-header">
+    <h2>Produce a batch from a formula</h2>
+  </div>
+  <p class="bb-intro">Pick a scent, then a size. The formula, the amounts and the costs are filled in for you.</p>
+
+  {% if missing_roles %}
+  <p class="fm-alert" role="alert">
+    Set up the materials first: none is chosen yet for {{ missing_roles|join(', ') }}. Use “Materials used by the
+    formulas” below.
+  </p>
+  {% endif %}
+
+  <form method="POST" action="{{ url_for('admin.produce_batch_formula') }}" class="fm-form" id="fmProduceForm">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="form_token" value="{{ form_token }}">
+    <input type="hidden" name="formula" id="fmFormula" value="">
+    <input type="hidden" name="size" id="fmSize" value="">
+    <input type="hidden" name="scent_code" id="fmScentCode" value="">
+
+    <div class="fm-pick">
+      <div class="fm-step">
+        <label class="fm-step-label" for="fmScentSelect">Scent</label>
+        <select id="fmScentSelect">
+          <option value="">Choose a scent</option>
+          {% for s in scent_choices %}
+          <option value="{{ s.code }}" data-name="{{ s.name }}" data-formula="{{ s.formula or '' }}">{{ s.name }} ({{ s.code }})</option>
+          {% endfor %}
+          <option value="__other">Other scent, choose the formula myself</option>
+        </select>
+        {% if not scent_choices %}<div class="help">No scents in the catalog yet. <a href="{{ url_for('admin.products') }}">Add products</a> to pick one here, or choose “Other scent”.</div>{% endif %}
+        <div class="help">A batch of one of these scents can also be sold by the mL on Record Sale and used for refills,
+          oldest batch first. An “Other scent” batch can only be bottled.</div>
+        <p id="fmAutoFormula" class="fm-auto" role="status" style="display:none;"></p>
+        <div class="fm-seg" id="fmFormulaPicker" role="group" aria-label="Formula" style="display:none;">
+          {% for f, spec in formula_specs.items() %}
+          <button type="button" class="fm-choice" data-formula="{{ f }}" aria-pressed="false">
+            <span class="fm-choice-name">Formula {{ f }}</span>
+          </button>
+          {% endfor %}
+        </div>
+      </div>
+
+      <div class="fm-step">
+        <span class="fm-step-label" id="fmSizeLabel">Size, in mL of oil scent</span>
+        <p class="fm-hint" id="fmSizeHint">Choose a scent first.</p>
+        {% for f, spec in formula_specs.items() %}
+        <div class="fm-seg" role="group" aria-labelledby="fmSizeLabel" data-sizes-for="{{ f }}" style="display:none;">
+          {% for size in spec.sizes %}
+          <button type="button" class="fm-choice" data-size="{{ size }}" aria-pressed="false">
+            <span class="fm-choice-name">{{ size }} mL</span>
+          </button>
+          {% endfor %}
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+
+    <div id="fmSummary" class="fm-summary" style="display:none;">
+      <div class="fm-grid">
+        <div class="fm-main">
+          <h3 class="bb-h3">Formula</h3>
+          <div class="bb-detail-scroll">
+            <table class="bb-table fm-table">
+              <colgroup><col style="width:34%"><col style="width:15%"><col style="width:21%"><col style="width:14%"><col style="width:16%"></colgroup>
+              <thead><tr><th>Material</th><th class="num">Needed</th><th class="num">In stock</th><th class="num">Rate</th><th class="num">Cost</th></tr></thead>
+              <tbody id="fmLines"></tbody>
+            </table>
+          </div>
+
+          <h3 class="bb-h3">Packaging, one of each per bottle</h3>
+          <div class="bb-detail-scroll">
+            <table class="bb-table fm-table">
+              <colgroup><col style="width:34%"><col style="width:15%"><col style="width:21%"><col style="width:14%"><col style="width:16%"></colgroup>
+              <thead><tr><th>Item</th><th class="num">Needed</th><th class="num">In stock</th><th class="num">Rate</th><th class="num">Cost</th></tr></thead>
+              <tbody id="fmPackaging"></tbody>
+            </table>
+          </div>
+
+          <h3 class="bb-h3">Mixing</h3>
+          <dl class="fm-dl" id="fmMixing"></dl>
+        </div>
+
+        <aside class="fm-side" aria-label="Result">
+          <div class="fm-result">
+            <p class="fm-status" id="fmStock" role="status"></p>
+            <div>
+              <div class="fm-fig" id="fmPerBottle"></div>
+              <div class="fm-fig-label">cost per new bottle</div>
+            </div>
+            <p class="fm-headline" id="fmHeadline"></p>
+            <div class="fm-totals" id="fmTotals"></div>
+          </div>
+          <div class="fm-fields">
+            <div class="field">
+              <label for="fmScent">Scent or batch name</label>
+              <input type="text" id="fmScent" name="scent_name" placeholder="Rose Garden" required
+                list="scentNameList" autocomplete="off">
+              {# Known scents and past batch names, to keep spelling consistent. #}
+              <datalist id="scentNameList">
+                {% for n in (scent_choices|map(attribute='name')|list + batches|map(attribute='scent_name')|list)|unique|sort %}<option value="{{ n }}"></option>{% endfor %}
+              </datalist>
+            </div>
+            <div class="field">
+              <label for="fmCode">Batch code <span class="text-faint">(optional)</span></label>
+              <input type="text" id="fmCode" name="batch_code" placeholder="B-2026-09-A">
+            </div>
+            <div class="field">
+              <label for="fmNotes">Notes <span class="text-faint">(optional)</span></label>
+              <input type="text" id="fmNotes" name="notes" maxlength="255">
+            </div>
+            <button type="submit" class="btn btn-accent fm-submit" id="fmSubmit">Produce batch</button>
+            <p class="fm-hint">Stock is deducted from each material, and the bottle packaging is added to the batch’s cost.</p>
+          </div>
+        </aside>
+      </div>
+    </div>
+  </form>
+
+  <details class="fm-setup" {% if missing_roles %}open{% endif %}>
+    <summary>Materials used by the formulas</summary>
+    <form method="POST" action="{{ url_for('admin.save_formula_materials') }}" class="bb-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <p class="fm-hint">Which raw material is each ingredient. Set once; costs come from the Materials page.</p>
+      {% if not materials %}<p class="fm-hint">No materials yet. <a href="{{ url_for('admin.materials') }}">Add your raw materials</a> first, then pick them here.</p>{% endif %}
+      <div class="fm-roles">
+        {% for r in formula_roles %}
+        <div class="field">
+          <label for="role_{{ r.role }}">{{ r.label }}</label>
+          <select id="role_{{ r.role }}" name="{{ r.role }}" required>
+            <option value="">Select</option>
+            {% for mat in materials %}
+            <option value="{{ mat.material_id }}" {{ 'selected' if mat.material_id == r.material_id }}>{{ mat.material_name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        {% endfor %}
+      </div>
+      <button type="submit" class="btn btn-ghost">Save materials</button>
+    </form>
+  </details>
 </div>
 
 <div class="card mt-24">
@@ -375,14 +587,14 @@
                 {% if b.target_unit %}<span class="badge badge-pending">{{ b.target_bottle_qty }}&times; {{ b.target_unit }}</span>{% endif %}
               </div>
             </td>
-            <td class="mono text-soft" data-label="Size">{{ b.input_qty|round(3)|string|replace('.000','') }} {{ b.input_unit.lower() }}
-              <div class="item-sub">{{ b.total_volume_ml|round(1)|string|replace('.0','') }} mL total</div>
+            <td class="num" data-label="Size">{{ b.total_volume_ml|round(1)|string|replace('.0','') }} mL
+              {% if b.input_unit != 'Milliliter' %}<div class="item-sub">{{ b.input_qty|round(3)|string|replace('.000','') }} {{ b.input_unit.lower() }}</div>{% endif %}
             </td>
             <td data-label="Remaining">{{ m.fill_bar(b.remaining_ml, b.total_volume_ml, 'mL') }}</td>
             <td class="num mono" data-label="Cost / mL">₱{{ '%.6f'|format(b.all_in_cost_per_ml) }}</td>
             <td data-label="" class="mobile-inline-action">
               <button type="button" class="btn btn-ghost btn-sm" data-call="openBatchDetails"
-                data-scent-name="{{ b.scent_name }}" data-batch-code="{{ b.batch_code or '' }}"
+                data-batch-id="{{ b.batch_id }}" data-scent-name="{{ b.scent_name }}" data-batch-code="{{ b.batch_code or '' }}"
                 data-total-cost="{{ b.total_cost }}" data-cost-per-ml="{{ b.all_in_cost_per_ml }}"
                 data-remaining-ml="{{ b.remaining_ml }}" data-notes="{{ b.notes or '' }}"
                 data-target-unit="{{ b.target_unit or '' }}" data-target-bottle-qty="{{ b.target_bottle_qty or '' }}"
@@ -396,9 +608,7 @@
           {% endfor %}
         </tbody>
       </table>
-      <div class="empty-state smart-no-match" style="display:none;">
-        <p>No batches match your search.</p>
-      </div>
+      {{ empty.no_match('batches') }}
     </div>
     <div class="smart-pagination" style="display:none;">
       <button type="button" class="btn btn-ghost btn-sm" data-page-prev>Previous</button>
@@ -414,141 +624,9 @@
       reference).</p>
   </div>
   {% else %}
-  <div class="empty-state">
-    <p>No batches logged yet. Use the “Log a new batch” form below to mix your first one.</p>
-  </div>
+  {{ empty.state('No batches yet', 'A batch turns raw materials into bulk perfume. Produce one from a formula above and it is tracked here from the first mL to the last.', icon='flask') }}
   {% endif %}
 </div>
-
-<details class="card mt-24 pg-disclosure" {% if not batches %}open{% endif %}>
-  <summary class="card-header">
-    <h2>Log a new batch</h2>
-    <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6" /></svg>
-  </summary>
-  <p class="text-faint bb-intro">
-    Mix specific raw materials, at specific quantities, into one bulk batch (e.g. 500ml or 1 gallon). Stock is
-    deducted from each material used, and the batch's total cost, cost per mL, and how many bottles of each size it
-    can fill are all computed from what was actually used, not typed in by hand.
-  </p>
-  <form method="POST" action="{{ url_for('admin.create_bulk_batch') }}" class="bb-form">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-    <input type="hidden" name="form_token" value="{{ form_token }}">
-    <div class="form-row">
-      <div class="field">
-        <label for="scent_name">Scent / batch name</label>
-        <input type="text" id="scent_name" name="scent_name" placeholder="Rose Garden" required>
-      </div>
-      <div class="field">
-        <label for="batch_code">Batch code <span class="text-faint">(optional)</span></label>
-        <input type="text" id="batch_code" name="batch_code" placeholder="B-2026-09-A">
-      </div>
-    </div>
-    <div class="form-row">
-      <div class="field">
-        <label for="input_qty">Batch size</label>
-        <input type="number" id="input_qty" name="input_qty" step="0.001" min="0.001" placeholder="1" required>
-      </div>
-      <div class="field">
-        <label for="input_unit">Unit</label>
-        <select id="input_unit" name="input_unit" required>
-          {% for u in batch_units %}
-          <option value="{{ u }}" {{ 'selected' if u=='Gallon' }}>{{ u }}</option>
-          {% endfor %}
-        </select>
-      </div>
-    </div>
-    <div class="field">
-      <label for="target_unit">Target bottle size <span class="text-faint">(optional)</span></label>
-      <select id="target_unit" name="target_unit">
-        <option value="">None, liquid only, no packaging folded in</option>
-        {% for u in bottle_ml_map %}
-        <option value="{{ u }}">{{ u }}</option>
-        {% endfor %}
-      </select>
-      <div class="help">
-        Picking a size also folds that size’s packaging formula (bottle, sticker, seal, see the
-        <a href="{{ url_for('admin.formulas') }}">Formulas page</a>) into THIS batch: qty = however many bottles of
-        that size this batch’s whole volume can fill, deducted from stock and added to the batch’s total cost right
-        away, same as how the liquid materials below work.
-      </div>
-    </div>
-    <div class="field">
-      <label for="notes">Notes <span class="text-faint">(optional)</span></label>
-      <input type="text" id="notes" name="notes" maxlength="255">
-    </div>
-
-    <div class="bb-add-row" style="margin-top:var(--space-sm);">
-      <div class="field field-material">
-        <label for="bbMaterialSelect">Material</label>
-        <select id="bbMaterialSelect">
-          <option value="">Select…</option>
-          {% for mat in materials %}
-          <option value="{{ mat.material_id }}" data-name="{{ mat.material_name }}" data-unit="{{ mat.unit }}"
-            data-cost-per-unit="{{ mat.cost_per_unit }}" data-stock-qty="{{ mat.stock_qty }}">
-            {{ mat.material_name }} ({{ mat.stock_qty|round(3)|string|replace('.000','') }} {{ mat.unit.lower() }} in
-            stock)
-          </option>
-          {% endfor %}
-        </select>
-      </div>
-      <div class="field field-qty">
-        <label for="bbQtyInput">Qty used</label>
-        <input type="number" id="bbQtyInput" step="0.001" min="0.001" value="1">
-      </div>
-      <div class="field field-unit">
-        <label for="bbQtyUnit">In</label>
-        <select id="bbQtyUnit" disabled>
-          <option value="">Select a material first…</option>
-        </select>
-      </div>
-      <button type="button" class="btn btn-ghost" id="bbAddBtn">Add</button>
-    </div>
-    <p class="bb-hint">
-      A material bought by the Gallon or Liter can still have its per-batch amount logged in mL: pick whichever
-      unit matches how you actually measured it; the cost is converted automatically.
-    </p>
-
-    <div class="bb-table-wrap">
-      <table class="bb-table table-fixed">
-        <colgroup>
-          <col style="width:30%"><col style="width:18%"><col style="width:14%"><col style="width:20%"><col style="width:18%"><col style="width:40px">
-        </colgroup>
-        <thead>
-          <tr>
-            <th>Material</th>
-            <th class="num">Qty used</th>
-            <th>Unit</th>
-            <th class="num">Cost / unit</th>
-            <th class="num">Line cost</th>
-            <th></th>
-          </tr>
-        </thead>
-        <tbody id="bbBody">
-          <tr class="bb-empty-row" id="bbEmptyRow">
-            <td colspan="6">No materials added yet. Pick one above.</td>
-          </tr>
-        </tbody>
-        <tfoot>
-          <tr class="bb-total-row" id="bbTotalRow">
-            <td colspan="4" class="bb-total-label">Total cost</td>
-            <td class="num mono" id="bbTotal">₱0.00</td>
-            <td></td>
-          </tr>
-        </tfoot>
-      </table>
-    </div>
-
-    <div class="bb-preview" id="bbPreview" style="display:none;">
-      <div><strong id="bbPreviewVolume"></strong></div>
-      <div id="bbPreviewCostPerMl"></div>
-      <div class="bb-calc-box" id="bbTargetPreview" style="display:none;"></div>
-    </div>
-    <p id="bbMaterialConflict" class="bb-conflict" role="alert"></p>
-
-    <div id="bbInputs"></div>
-    <button id="bbSubmitBtn" type="submit" class="btn btn-accent bb-submit">Save batch</button>
-  </form>
-</details>
 
 <div id="batchDetailsOverlay"
   class="pg-overlay">
@@ -562,9 +640,8 @@
       <div id="bdPlanResults" class="bb-plan-gap"></div>
     </div>
     <p class="text-faint" id="bdNoPlan" style="font-size:12.5px; margin:0 0 var(--space-md); display:none;">
-      No target bottle size was picked for this batch, so its total cost is liquid ingredients only, and packaging
-      isn’t folded in (see the <a href="{{ url_for('admin.bulk_batches') }}">Log a new batch</a> form's own
-      "Target bottle size" field).
+      This batch has no target bottle size, so its total cost is liquid ingredients only and packaging
+      isn’t folded in. Batches produced from a formula always include their bottle packaging.
     </p>
 
     <h3 class="bb-h3">Materials used</h3>
@@ -589,6 +666,28 @@
     <h3 class="bb-h3">Bottle yield from what's left</h3>
     <div class="bb-yield-grid" id="bdYields"></div>
 
+    <form method="POST" id="bdWriteOffForm" class="bd-writeoff" style="display:none; margin-top:var(--space-md);"
+      data-action-template="{{ url_for('admin.write_off_bulk_batch', batch_id=0) }}"
+      data-confirm-dialog="Write off the leftover mL?" data-confirm-ok="Write off">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <h3 class="bb-h3">Write off what's left</h3>
+      <p class="text-faint" style="font-size:12.5px; margin:0 0 var(--space-xs);">
+        Sets the remaining mL to 0 and marks the batch Depleted. Its cost and past production are not changed,
+        and no loss is recorded in profit reports; only the audit log keeps the reason.
+      </p>
+      <div class="field">
+        <label for="bdWriteOffReason">Reason</label>
+        <select id="bdWriteOffReason" name="reason" required>
+          {% for r in write_off_reasons %}<option value="{{ r }}">{{ r }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="field">
+        <label for="bdWriteOffNote">Note (optional)</label>
+        <input type="text" id="bdWriteOffNote" name="note" maxlength="150" autocomplete="off">
+      </div>
+      <button type="submit" class="btn btn-ghost" style="width:100%;">Write off remaining mL</button>
+    </form>
+
     <div style="margin-top:var(--space-md);">
       <button type="button" class="btn btn-ghost" style="width:100%;" id="bdCloseBtn">Close</button>
     </div>
@@ -599,374 +698,159 @@
 {% block scripts %}
 <script nonce="{{ csp_nonce() }}">
   (function () {
-    var mlPerBatchUnit = {{ ml_per_batch_unit | tojson }};
-    var bottleMlMap = {{ bottle_ml_map | tojson }};
-    // Packaging formula per size (see load_formula_items_by_unit() in
-    // routes/admin/formulas.py) — drives the "this will also add ..." preview
-    // below when a target bottle size is picked, same live-computed
-    // source the Formulas page itself reads.
-    var formulaItemsByUnit = {{ formula_items_by_unit | tojson }};
-    var FORMULAS_URL = {{ url_for('admin.formulas') | tojson }};
-    // Which units a material's usage can be logged in, keyed by the
-    // material's own raw_materials.unit (see utils.compatible_material_units)
-    // — e.g. a Gallon-stocked material offers Milliliter/Liter/Gallon.
-    var materialUnitOptions = {{ material_unit_options | tojson }};
+    var CATALOG = {{ formula_catalog_json | tojson }};
+    var form = document.getElementById('fmProduceForm');
+    if (!form) return;
+    var formulaInput = document.getElementById('fmFormula');
+    var sizeInput = document.getElementById('fmSize');
+    var summary = document.getElementById('fmSummary');
+    var submitBtn = document.getElementById('fmSubmit');
+    var formulaBtns = form.querySelectorAll('#fmFormulaPicker [data-formula]');
+    var sizeBtns = form.querySelectorAll('[data-size]');
+    var sizeGroups = form.querySelectorAll('[data-sizes-for]');
+    var sizeHint = document.getElementById('fmSizeHint');
+    var scentSelect = document.getElementById('fmScentSelect');
+    var scentCodeInput = document.getElementById('fmScentCode');
+    var scentNameInput = document.getElementById('fmScent');
+    var formulaPicker = document.getElementById('fmFormulaPicker');
+    var autoFormula = document.getElementById('fmAutoFormula');
 
-    function convertQty(qty, fromUnit, toUnit) {
-      if (fromUnit === toUnit) return qty;
-      return qty * mlPerBatchUnit[fromUnit] / mlPerBatchUnit[toUnit];
-    }
-
-    var materialSelect = document.getElementById('bbMaterialSelect');
-    var qtyInput = document.getElementById('bbQtyInput');
-    var qtyUnitSelect = document.getElementById('bbQtyUnit');
-    var addBtn = document.getElementById('bbAddBtn');
-    var body = document.getElementById('bbBody');
-    var emptyRow = document.getElementById('bbEmptyRow');
-    var totalEl = document.getElementById('bbTotal');
-    var inputsHolder = document.getElementById('bbInputs');
-    var inputQty = document.getElementById('input_qty');
-    var inputUnit = document.getElementById('input_unit');
-    var preview = document.getElementById('bbPreview');
-    var previewVolume = document.getElementById('bbPreviewVolume');
-    var previewCostPerMl = document.getElementById('bbPreviewCostPerMl');
-    var targetUnitSelect = document.getElementById('target_unit');
-    var targetPreview = document.getElementById('bbTargetPreview');
-    var conflictEl = document.getElementById('bbMaterialConflict');
-    var submitBtn = document.getElementById('bbSubmitBtn');
-    if (!materialSelect || !addBtn || !body) return;
-
-    var materialsById = {};
-    Array.prototype.forEach.call(materialSelect.options, function (opt) {
-      if (!opt.value) return;
-      opt.dataset.baseLabel = opt.textContent.trim();
-      materialsById[opt.value] = {
-        name: opt.dataset.name,
-        unit: opt.dataset.unit,
-        costPerUnit: parseFloat(opt.dataset.costPerUnit),
-        stockQty: parseFloat(opt.dataset.stockQty),
-      };
-    });
-
-    // material_id -> { qty, unit } — unit is whatever the amount was
-    // actually typed in (see compatible_material_units), not necessarily
-    // the material's own purchase unit.
-    var lines = {};
-
-    function syncPackagingChoices() {
-      var packagingIds = {};
-      var formulaItems = targetUnitSelect
-        ? (formulaItemsByUnit[targetUnitSelect.value] || [])
-        : [];
-      formulaItems.forEach(function (item) {
-        packagingIds[String(item.material_id)] = true;
-      });
-
-      Array.prototype.forEach.call(materialSelect.options, function (opt) {
-        if (!opt.value) return;
-        var isPackaging = !!packagingIds[opt.value];
-        opt.disabled = isPackaging;
-        opt.textContent = opt.dataset.baseLabel + (isPackaging
-          ? ', included in selected packaging formula'
-          : '');
-      });
-      if (materialSelect.value && packagingIds[materialSelect.value]) {
-        materialSelect.value = '';
-        resetUnitSelect(qtyUnitSelect);
-        materialSelect.dispatchEvent(new Event('change', { bubbles: true }));
-      }
-
-      var conflicts = Object.keys(lines).filter(function (id) {
-        return !!packagingIds[id];
-      });
-      if (conflicts.length) {
-        var names = conflicts.map(function (id) {
-          return materialsById[id] ? materialsById[id].name : id;
-        });
-        conflictEl.textContent = names.join(', ') +
-          ' is already in this size\'s packaging formula. Remove it from the ingredient list or choose another bottle size.';
-        conflictEl.style.display = 'block';
-      } else {
-        conflictEl.textContent = '';
-        conflictEl.style.display = 'none';
-      }
-      if (submitBtn) submitBtn.disabled = conflicts.length > 0;
-      return conflicts;
-    }
-
-    function formatPeso(n) {
-      return '₱' + Number(n).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-    }
-
-    // Rounds like Python's Decimal.quantize() at each step
-    // create_bulk_batch() rounds at — matching those same steps here is
-    // what keeps this preview equal to what the Batches page shows once
-    // the batch is actually logged (see that route's own line_cost/
-    // liquid_subtotal/packaging_subtotal quantize() calls).
-    function round(n, dp) {
-      var factor = Math.pow(10, dp);
-      return Math.round((n + Number.EPSILON) * factor) / factor;
-    }
-
-    // Cost per whatever unit a line's qty is expressed in, converted from
-    // the material's own cost_per_unit — matches
-    // create_bulk_batch()'s server-side math exactly.
-    function costPerLineUnit(mat, unit) {
-      return mat.costPerUnit * convertQty(1, unit, mat.unit);
-    }
-
-    // Rounded to 4dp per line, same as create_bulk_batch()'s own
-    // line_cost quantize(0.0001).
-    function lineCost(mat, line) {
-      return round(line.qty * costPerLineUnit(mat, line.unit), 4);
-    }
-
-    // Liquid subtotal — sum of 4dp line costs, then rounded to 2dp,
-    // same as create_bulk_batch()'s own liquid_subtotal quantize(0.01).
-    function totalCost() {
-      var total = 0;
-      Object.keys(lines).forEach(function (id) {
-        var mat = materialsById[id];
-        if (!mat) return;
-        total += lineCost(mat, lines[id]);
-      });
-      return round(total, 2);
-    }
-
-    // No material picked: show a disabled placeholder instead of an empty,
-    // still-clickable dropdown that opens onto "No options".
-    function resetUnitSelect(select) {
-      select.innerHTML = '<option value="">Select a material first…</option>';
-      select.disabled = true;
-    }
-
-    function populateUnitSelect(select, materialUnit, selected) {
-      select.disabled = false;
-      var options = materialUnitOptions[materialUnit] || [materialUnit];
-      select.innerHTML = options.map(function (u) {
-        return '<option value="' + u + '">' + u + '</option>';
-      }).join('');
-      // Milliliter is the most useful default for a liquid material bought
-      // in a bigger unit (Liter/Gallon) — small per-batch doses are almost
-      // always measured in mL, not fractions of a jug.
-      select.value = selected && options.indexOf(selected) !== -1
-        ? selected
-        : (options.indexOf('Milliliter') !== -1 ? 'Milliliter' : options[0]);
-    }
-
-    materialSelect.addEventListener('change', function () {
-      var mat = materialsById[materialSelect.value];
-      if (mat) populateUnitSelect(qtyUnitSelect, mat.unit);
-      else resetUnitSelect(qtyUnitSelect);
-    });
-
-    function updatePreview() {
-      syncPackagingChoices();
-      var qty = parseFloat(inputQty.value);
-      var unit = inputUnit.value;
-      var perUnitMl = mlPerBatchUnit[unit];
-      if (!(qty > 0) || !perUnitMl) {
-        preview.style.display = 'none';
-        return;
-      }
-      var totalMl = qty * perUnitMl;
-      var liquidCost = totalCost();
-      var costPerMl = totalMl > 0 ? liquidCost / totalMl : 0;
-      previewVolume.textContent = totalMl.toLocaleString('en-PH', { maximumFractionDigits: 1 }) + ' mL total, ' + formatPeso(liquidCost) + ' liquid cost';
-      previewCostPerMl.textContent = '≈ ₱' + costPerMl.toFixed(6) + ' per mL (liquid only)';
-
-      var targetUnit = targetUnitSelect ? targetUnitSelect.value : '';
-
-      // If a target bottle size is picked, preview exactly what
-      // create_bulk_batch() will fold into this batch: that size's
-      // packaging formula, qty = this batch's own yield for that size
-      // (total mL // bottle size) — highlighted since this is the
-      // actual answer the form produces.
-      if (targetUnit && bottleMlMap[targetUnit]) {
-        var targetQty = Math.floor(totalMl / bottleMlMap[targetUnit]);
-        var items = formulaItemsByUnit[targetUnit] || [];
-        var packagingCostRaw = 0;
-        var linesHtml = items.map(function (it) {
-          // qty rounded to 3dp, line cost to 4dp — same two steps
-          // create_bulk_batch() quantizes a packaging line at.
-          var qtyNeeded = round(it.qty_per_unit * targetQty, 3);
-          var lineCost = round(qtyNeeded * it.cost_per_unit, 4);
-          packagingCostRaw += lineCost;
-          return '<div class="bb-preview-yield">' + esc(it.material_name) + ': ' +
-            qtyNeeded.toLocaleString('en-PH', { maximumFractionDigits: 3 }) + ' ' +
-            it.material_unit.toLowerCase() + ' (' + formatPeso(lineCost) + ')</div>';
-        }).join('');
-        // Rounded to 2dp, same as create_bulk_batch()'s own
-        // packaging_subtotal quantize(0.01).
-        var packagingCost = round(packagingCostRaw, 2);
-        var grandTotal = liquidCost + packagingCost;
-        var costPerNew = targetQty > 0 ? round(grandTotal / targetQty, 2) : 0;
-        var costPerRefill = targetQty > 0 ? round(liquidCost / targetQty, 2) : 0;
-        // All-in price per mL — grand total (liquid + packaging) ÷ this
-        // batch's own volume, not liquid cost alone (see
-        // all_in_cost_per_ml in bulk_batches() for the stored-batch
-        // equivalent shown once this batch is logged).
-        var allInCostPerMl = totalMl > 0 ? round(grandTotal / totalMl, 6) : 0;
-        targetPreview.innerHTML =
-          '<div class="bb-calc-grid">' +
-            '<div class="bb-calc-item"><div class="bb-calc-label">Grand total</div><div class="bb-calc-value">' + formatPeso(grandTotal) + '</div></div>' +
-            '<div class="bb-calc-item"><div class="bb-calc-label">Cost / new bottle</div><div class="bb-calc-value">' + formatPeso(costPerNew) + '</div></div>' +
-            '<div class="bb-calc-item"><div class="bb-calc-label">Cost / refill</div><div class="bb-calc-value">' + formatPeso(costPerRefill) + '</div></div>' +
-            '<div class="bb-calc-item"><div class="bb-calc-label">Cost / mL (all-in)</div><div class="bb-calc-value">₱' + allInCostPerMl.toFixed(6) + '</div></div>' +
-          '</div>' +
-          '<div class="bb-calc-sub">' + targetQty + '&times; ' + esc(targetUnit) + ' planned: liquid ' + formatPeso(liquidCost) +
-          ' + packaging ' + formatPeso(packagingCost) + ' = ' + formatPeso(grandTotal) + '</div>' +
-          (items.length
-            ? '<div class="bb-preview-yields">' + linesHtml + '</div>'
-            : '<div class="text-faint bb-plan-gap">No packaging formula on file for ' + targetUnit +
-              ' yet. Add one on the <a href="' + FORMULAS_URL + '">Formulas page</a> first, or this batch will fold in ₱0 packaging.</div>');
-        targetPreview.style.display = 'block';
-      } else {
-        targetPreview.style.display = 'none';
-        targetPreview.innerHTML = '';
-      }
-
-      preview.style.display = 'block';
-    }
+    var UNIT = { Milliliter: 'mL', Gram: 'g', Liter: 'L', Gallon: 'gal', Piece: 'pcs' };
+    var ICON_OK = '<svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m5 12 5 5 9-10"/></svg>';
+    var ICON_WARN = '<svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 9v4M12 17h.01M10.3 3.9 2.5 17a2 2 0 0 0 1.7 3h15.6a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg>';
 
     function esc(value) {
       var div = document.createElement('div');
       div.textContent = String(value);
       return div.innerHTML;
     }
-
-    function render() {
-      var ids = Object.keys(lines);
-      body.innerHTML = '';
-
-      if (!ids.length) {
-        body.appendChild(emptyRow);
-        totalEl.textContent = '₱0.00';
-      } else {
-        ids.forEach(function (id) {
-          var mat = materialsById[id];
-          if (!mat) return;
-          var line = lines[id];
-
-          var tr = document.createElement('tr');
-
-          var nameTd = document.createElement('td');
-          nameTd.setAttribute('data-label', 'Material');
-          nameTd.textContent = mat.name;
-          tr.appendChild(nameTd);
-
-          var qtyTd = document.createElement('td');
-          qtyTd.className = 'num';
-          qtyTd.setAttribute('data-label', 'Qty used');
-          var qtyEl = document.createElement('input');
-          qtyEl.type = 'number';
-          qtyEl.step = '0.001';
-          qtyEl.min = '0.001';
-          qtyEl.value = line.qty;
-          qtyEl.className = 'bb-qty-input mono';
-          qtyEl.addEventListener('change', function () {
-            var v = parseFloat(qtyEl.value);
-            if (!v || v <= 0) v = 0.001;
-            line.qty = v;
-            render();
-          });
-          qtyTd.appendChild(qtyEl);
-          tr.appendChild(qtyTd);
-
-          var unitTd = document.createElement('td');
-          unitTd.setAttribute('data-label', 'Unit');
-          var unitEl = document.createElement('select');
-          unitEl.className = 'mono';
-          populateUnitSelect(unitEl, mat.unit, line.unit);
-          unitEl.addEventListener('change', function () {
-            line.unit = unitEl.value;
-            render();
-          });
-          unitTd.appendChild(unitEl);
-          tr.appendChild(unitTd);
-
-          var costPerUnitTd = document.createElement('td');
-          costPerUnitTd.className = 'num mono text-soft';
-          costPerUnitTd.setAttribute('data-label', 'Cost / unit');
-          costPerUnitTd.textContent = '₱' + costPerLineUnit(mat, line.unit).toFixed(4) + ' / ' + line.unit.toLowerCase();
-          tr.appendChild(costPerUnitTd);
-
-          var lineCostTd = document.createElement('td');
-          lineCostTd.className = 'num mono';
-          lineCostTd.setAttribute('data-label', 'Line cost');
-          lineCostTd.textContent = formatPeso(lineCost(mat, line));
-          tr.appendChild(lineCostTd);
-
-          var removeTd = document.createElement('td');
-          var removeBtn = document.createElement('button');
-          removeBtn.type = 'button';
-          removeBtn.className = 'bb-remove';
-          removeBtn.innerHTML = '&times;';
-          removeBtn.title = 'Remove';
-          removeBtn.setAttribute('aria-label', 'Remove ' + mat.name);
-          removeBtn.addEventListener('click', function () {
-            delete lines[id];
-            render();
-          });
-          removeTd.appendChild(removeBtn);
-          tr.appendChild(removeTd);
-
-          body.appendChild(tr);
-        });
-        totalEl.textContent = formatPeso(totalCost());
-      }
-
-      inputsHolder.innerHTML = '';
-      Object.keys(lines).forEach(function (id) {
-        var idInput = document.createElement('input');
-        idInput.type = 'hidden';
-        idInput.name = 'material_id[]';
-        idInput.value = id;
-        inputsHolder.appendChild(idInput);
-
-        var qtyHidden = document.createElement('input');
-        qtyHidden.type = 'hidden';
-        qtyHidden.name = 'qty_used[]';
-        qtyHidden.value = lines[id].qty;
-        inputsHolder.appendChild(qtyHidden);
-
-        var unitHidden = document.createElement('input');
-        unitHidden.type = 'hidden';
-        unitHidden.name = 'qty_unit[]';
-        unitHidden.value = lines[id].unit;
-        inputsHolder.appendChild(unitHidden);
+    function unit(u) { return UNIT[u] || String(u).toLowerCase(); }
+    function peso(n) {
+      return '₱' + Number(n).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+    // Rates keep their small decimals (₱0.1321 per mL, not ₱0.13).
+    function rate(n) {
+      return '₱' + Number(n).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 4 });
+    }
+    function num(n) {
+      return Number(n).toLocaleString('en-PH', { maximumFractionDigits: 3 });
+    }
+    function row(cells) {
+      return '<tr>' + cells.map(function (c, i) {
+        return '<td' + (i ? ' class="num"' : '') + '>' + c + '</td>';
+      }).join('') + '</tr>';
+    }
+    function totalRow(label, value, strong) {
+      return '<div class="fm-total' + (strong ? ' fm-total-strong' : '') + '"><span>' + esc(label) +
+        '</span><span>' + value + '</span></div>';
+    }
+    function stockCell(have, short, u) {
+      var text = num(have) + (u ? ' ' + esc(unit(u)) : '');
+      return short > 0
+        ? '<span class="fm-short">' + text + '<span class="fm-sub">short by ' + num(short) + '</span></span>'
+        : text;
+    }
+    function setPressed(btns, attr, value) {
+      Array.prototype.forEach.call(btns, function (b) {
+        b.setAttribute('aria-pressed', b.dataset[attr] === value ? 'true' : 'false');
       });
-
-      updatePreview();
     }
 
-    addBtn.addEventListener('click', function () {
-      var id = materialSelect.value;
-      if (!id) return;
-      if (materialSelect.options[materialSelect.selectedIndex].disabled) return;
-      var qty = parseFloat(qtyInput.value);
-      if (!qty || qty <= 0) qty = 1;
-      lines[id] = { qty: qty, unit: qtyUnitSelect.value };
-      qtyInput.value = 1;
-      // Back to "Select…" so the next material is a fresh pick; the change
-      // event keeps the custom-select trigger label in sync.
-      materialSelect.value = '';
-      resetUnitSelect(qtyUnitSelect);
-      materialSelect.dispatchEvent(new Event('change', { bubbles: true }));
+    function render() {
+      var f = formulaInput.value, s = sizeInput.value;
+      // Show only the chosen formula's sizes; drop a size that formula doesn't have.
+      var haveSize = false, haveGroup = false;
+      Array.prototype.forEach.call(sizeGroups, function (g) {
+        var on = g.dataset.sizesFor === f;
+        g.style.display = on ? '' : 'none';
+        if (on) haveGroup = true;
+        if (on && g.querySelector('[data-size="' + s + '"]')) haveSize = true;
+      });
+      sizeHint.style.display = haveGroup ? 'none' : '';
+      if (!haveSize) { s = ''; sizeInput.value = ''; }
+      setPressed(formulaBtns, 'formula', f);
+      setPressed(sizeBtns, 'size', s);
+      var c = f && s && CATALOG[f] ? CATALOG[f][s] : null;
+      if (!f || !s) { summary.style.display = 'none'; return; }
+      summary.style.display = '';
+      var stockEl = document.getElementById('fmStock');
+      if (!c) {
+        stockEl.className = 'fm-status fm-short';
+        stockEl.innerHTML = ICON_WARN + '<span>Materials are not set up yet.</span>';
+        ['fmLines', 'fmPackaging', 'fmTotals', 'fmMixing', 'fmPerBottle', 'fmHeadline'].forEach(function (id) {
+          document.getElementById(id).innerHTML = '';
+        });
+        submitBtn.disabled = true;
+        return;
+      }
+      document.getElementById('fmPerBottle').textContent = peso(c.cost_per_new_bottle);
+      document.getElementById('fmHeadline').textContent =
+        c.bottles + ' bottles of ' + num(c.bottle_ml) + ' mL from ' + num(c.total_ml) + ' mL of liquid.';
+
+      document.getElementById('fmLines').innerHTML = c.lines.map(function (ln) {
+        // "Alcohol (in the mix)" becomes "Alcohol, in the mix"; the role is only shown when it adds something.
+        var role = ln.label.replace(/\s*\((.*)\)/, ', $1');
+        var sub = role.toLowerCase() === ln.material.toLowerCase() ? '' : '<span class="fm-sub">' + esc(role) + '</span>';
+        return row([esc(ln.material) + sub, num(ln.qty) + ' ' + esc(unit(ln.unit)),
+          stockCell(ln.stock, ln.short_by, ln.unit), rate(ln.rate), peso(ln.line_cost)]);
+      }).join('');
+      document.getElementById('fmPackaging').innerHTML = c.packaging.map(function (p) {
+        return row([esc(p.name), num(p.qty) + ' ' + esc(unit(p.unit)), stockCell(p.stock, p.short_by, p.unit),
+          rate(p.rate), peso(p.line_cost)]);
+      }).join('');
+
+      document.getElementById('fmMixing').innerHTML =
+        '<dt>Alcohol and water</dt><dd>' + num(c.mix_ml) + ' mL, split into ' + num(c.alcohol_ml) + ' mL alcohol and ' +
+          num(c.water_ml) + ' mL distilled water</dd>' +
+        '<dt>Ratio</dt><dd>' + num(c.alcohol_parts) + ' to ' + num(c.water_parts) + '</dd>' +
+        '<dt>Mixing batches</dt><dd>' + c.mix_batches + ' of ' + num(c.mix_batch_ml) + ' mL (' + num(c.alcohol_parts) +
+          ' mL alcohol and ' + num(c.water_parts) + ' mL water), ' + num(c.mix_prepared_ml) + ' mL prepared</dd>' +
+        '<dt>Mix left to keep</dt><dd>' + num(c.mix_leftover_ml) + ' mL</dd>' +
+        '<dt>Left after bottling</dt><dd>' + num(c.leftover_ml) + ' mL</dd>';
+
+      stockEl.className = 'fm-status ' + (c.enough_stock ? 'fm-ok' : 'fm-short');
+      stockEl.innerHTML = (c.enough_stock ? ICON_OK : ICON_WARN) + '<span>' + (c.enough_stock
+        ? 'Enough materials in stock to produce this batch.'
+        : 'Not enough materials. Short: ' + c.shortages.map(function (x) {
+          return esc(x.name) + ' (' + num(x.short_by) + ' ' + esc(unit(x.unit)) + ')';
+        }).join(', ') + '.') + '</span>';
+
+      document.getElementById('fmTotals').innerHTML =
+        totalRow('Liquid ingredients', peso(c.liquid_cost)) +
+        totalRow('Packaging, ' + c.bottles + ' bottles', peso(c.packaging_cost)) +
+        totalRow('Total cost to produce', peso(c.total_cost), true) +
+        totalRow('Cost per refill, liquid only', peso(c.cost_per_refill_bottle));
+      submitBtn.disabled = !c.enough_stock;
+    }
+
+    formulaBtns.forEach(function (b) {
+      b.addEventListener('click', function () { formulaInput.value = b.dataset.formula; render(); });
+    });
+    sizeBtns.forEach(function (b) {
+      b.addEventListener('click', function () { sizeInput.value = b.dataset.size; render(); });
+    });
+    // Choosing a scent picks its formula automatically; only the size is left to choose.
+    scentSelect.addEventListener('change', function () {
+      var opt = scentSelect.options[scentSelect.selectedIndex];
+      var v = scentSelect.value;
+      scentCodeInput.value = '';
+      formulaInput.value = '';
+      autoFormula.style.display = 'none';
+      formulaPicker.style.display = 'none';
+      if (v === '__other') {
+        formulaPicker.style.display = '';
+        scentNameInput.value = '';
+      } else if (v) {
+        scentCodeInput.value = v;
+        formulaInput.value = opt.dataset.formula || '';
+        scentNameInput.value = opt.dataset.name || '';
+        autoFormula.style.display = '';
+        autoFormula.textContent = opt.dataset.formula
+          ? 'Uses Formula ' + opt.dataset.formula + '.'
+          : 'No formula is set for this scent.';
+      }
       render();
     });
-
-    inputQty.addEventListener('input', updatePreview);
-    inputUnit.addEventListener('change', updatePreview);
-    if (targetUnitSelect) targetUnitSelect.addEventListener('change', updatePreview);
-
-    // Seed the unit dropdown for whichever material is selected first
-    // (the browser may already have one picked on page reload).
-    (function () {
-      var mat = materialsById[materialSelect.value];
-      if (mat) populateUnitSelect(qtyUnitSelect, mat.unit);
-    })();
-
     render();
   })();
 
@@ -996,6 +880,17 @@
     window.openBatchDetails = function (btn) {
       scentEl.textContent = btn.dataset.scentName;
       var remainingMl = parseFloat(btn.dataset.remainingMl);
+
+      // Write-off form: only for a batch that still has mL left.
+      var writeOffForm = document.getElementById('bdWriteOffForm');
+      if (writeOffForm) {
+        writeOffForm.style.display = remainingMl > 0 ? '' : 'none';
+        writeOffForm.action = writeOffForm.dataset.actionTemplate.replace(/\/0\/write-off$/, '/' + btn.dataset.batchId + '/write-off');
+        writeOffForm.dataset.confirmDetail = remainingMl.toLocaleString('en-PH', { maximumFractionDigits: 1 }) +
+          ' mL of ' + btn.dataset.scentName + (btn.dataset.batchCode ? ' (' + btn.dataset.batchCode + ')' : '') +
+          ' will be set to 0. This can’t be undone from the app.';
+        writeOffForm.reset();
+      }
       summaryEl.textContent = (btn.dataset.batchCode ? btn.dataset.batchCode + ', ' : '') +
         remainingMl.toLocaleString('en-PH', { maximumFractionDigits: 1 }) + ' mL left, ' +
         formatPeso(btn.dataset.totalCost) + ' total cost, ₱' + parseFloat(btn.dataset.costPerMl).toFixed(6) + '/mL' +

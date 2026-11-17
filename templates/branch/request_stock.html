@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% import "_empty.html" as empty %}
 {% import "_macros.html" as m %}
 {% block title %}Request Stock{% endblock %}
 {% block heading %}Request Stock{% endblock %}
@@ -78,9 +79,14 @@
     flex: 0 0 5.5rem;
   }
 
+  .cart-add-row :is(select, input, .btn) {
+    height: 2.25rem;
+    min-height: 2.25rem;
+    box-sizing: border-box;
+  }
+
   .cart-add-row .btn {
     flex: 0 0 auto;
-    min-height: 2.5rem;
   }
 
   .cart-table-wrap {
@@ -390,7 +396,7 @@
         </thead>
         <tbody id="cartBody">
           <tr class="cart-empty-row" id="cartEmptyRow">
-            <td colspan="6">No items added yet. Pick a product above.</td>
+            <td colspan="6">{{ empty.state('No items yet', 'Pick a product above and it is added to this request.', icon='box', compact=True) }}</td>
           </tr>
         </tbody>
         <tfoot>
@@ -464,7 +470,7 @@
         </table>
     </div>
     {% else %}
-    <div class="empty-state"><p>No open requests: everything you’ve asked for has been delivered or closed.</p></div>
+    {{ empty.state('No open requests', 'Everything you’ve asked for has been delivered or closed.', icon='check', tone='clear', compact=True) }}
     {% endif %}
   </div>
 {% endblock %}
@@ -500,6 +506,8 @@
       var opt = document.createElement('option');
       opt.value = name;
       opt.textContent = name;
+      // Lets the dropdown's search find a product by any of its SKUs.
+      opt.dataset.search = byProduct[name].map(function (r) { return r.sku; }).join(' ');
       productSelect.appendChild(opt);
     });
 

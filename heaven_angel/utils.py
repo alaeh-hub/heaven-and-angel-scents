@@ -20,35 +20,31 @@ from flask import current_app, has_app_context, request, session
 # form validates against, what every <select> is built from, and what
 # reports.py filters against.
 #
-# BULK is the packaging size for every Bulk/Refill-category product (see
-# PRODUCT_CATEGORIES below) — there's no fixed bottle size to pick since
-# it's sold/produced at whatever custom mL amount is typed in on
-# Production/Record Sale, priced off bulk_rate_settings.rate_per_ml
-# rather than a formula. It's never offered in a plain <select> the way
-# the other four are — see BOTTLE_UNITS.
-PRODUCT_UNITS = ("85ML", "50ML", "10ML", "3ML", "BULK")
+# The bottle sizes a product comes in. Bulk is not a product: it is made as
+# a bulk batch and sold by the mL straight out of the batches, at the single
+# shared rate on bulk_rate_settings.rate_per_ml (see sale_stock.py).
+PRODUCT_UNITS = ("85ML", "50ML", "10ML", "3ML")
 
-# The four fixed bottle sizes — PRODUCT_UNITS minus BULK. This is what
-# the "Unit" dropdown on Add Product actually offers (a Bulk/Refill
-# product's unit is forced to BULK server-side instead of picked), and
-# what CSV import/export restricts itself to.
-BOTTLE_UNITS = tuple(u for u in PRODUCT_UNITS if u != "BULK")
+# Same list, under the name the bottle-only code reads better with.
+BOTTLE_UNITS = PRODUCT_UNITS
 
-# What the Formulas (cost of goods) page covers — every fixed bottle
-# size. BULK is deliberately excluded: a Bulk/Refill product's cost is
-# rate_per_ml × mL produced (typed in on Production), not one shared
-# per-bottle recipe, so it has nothing to put on this page.
+# What a sale line can be in: a bottle size, or BULK for a sale by the mL
+# (recorded under the key '<code>-BULK', which exists only as a label in
+# sales and the sale_catalog view, never in products). Sales reports filter
+# on this; nothing that lists products does.
+SALE_UNITS = PRODUCT_UNITS + ("BULK",)
+
+# What the Formulas (cost of goods) page covers — every bottle size.
 FORMULA_UNITS = BOTTLE_UNITS
 
-# A product is either a fixed-size bottle (one of BOTTLE_UNITS, priced
-# and costed the normal formula-driven way) or Bulk/Refill — sold and
-# produced by a custom mL amount at a single shared rate per mL (see
-# bulk_rate_settings in schema.sql) instead of a fixed unit/formula.
-PRODUCT_CATEGORIES = ("Bottled", "Bulk/Refill")
+# Every product is a fixed-size bottle (one of BOTTLE_UNITS), priced and
+# costed the normal formula-driven way.
+PRODUCT_CATEGORIES = ("Bottled",)
 
 # Short, filename/SKU-safe suffix for each unit (no spaces), used only to
 # build the stored SKU from an admin-entered base product code — see
-# build_sku() below. Keys must exactly match PRODUCT_UNITS.
+# build_sku() below. Keys are PRODUCT_UNITS plus BULK, which is never a
+# product but is read back by base_code_from_sku() for a '<code>-BULK' sale key.
 _PRODUCT_UNIT_SUFFIXES = {
     "85ML": "85ML",
     "50ML": "50ML",
@@ -455,11 +451,14 @@ def percent_change(current, previous):
 
 def compact_peso(value):
     """Short peso amount for tight spots (the phone top bar chip):
-    ₱850, ₱12.4k, ₱10k, ₱1.2M."""
+    ₱850, ₱4.03k, ₱12.4k, ₱10k, ₱1.25M. Under ten of a unit it keeps two decimals, so
+    ₱4,030 reads ₱4.03k rather than rounding away to ₱4k."""
     amount = float(value or 0)
     for limit, suffix in ((1_000_000, "M"), (1_000, "k")):
         if abs(amount) >= limit:
-            return f"₱{amount / limit:,.1f}".removesuffix(".0") + suffix
+            scaled = amount / limit
+            text = f"{scaled:,.2f}" if abs(scaled) < 10 else f"{scaled:,.1f}"
+            return "₱" + text.rstrip("0").rstrip(".") + suffix
     return f"₱{amount:,.0f}"
 
 

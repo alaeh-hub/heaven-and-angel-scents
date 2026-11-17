@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% import "_empty.html" as empty %}
 {% block title %}Receive Shipment{% endblock %}
 {% block heading %}Receive Shipment{% endblock %}
 
@@ -285,10 +286,7 @@
   </div>
   {% else %}
   <div class="card">
-    <div class="empty-state">
-      <p>Nothing currently in transit to your branch.</p>
-      <p><a href="{{ url_for('branch.requests_list') }}" class="btn btn-ghost btn-sm">View requests</a></p>
-    </div>
+    {{ empty.state('Nothing in transit', 'Deliveries from HQ appear here while they are on the way, ready to be received.', icon='truck', action='View requests', href=url_for('branch.requests_list')) }}
   </div>
   {% endif %}
 </div>

@@ -56,7 +56,7 @@ function initNotificationBell() {
         }
 
         if (!items.length) {
-            list.innerHTML = '<div class="notif-empty">No notifications yet.</div>';
+            list.innerHTML = '<div class="notif-empty"><strong>You’re all caught up</strong><span>New requests, deliveries and low-stock alerts show up here.</span></div>';
             return;
         }
 
@@ -322,7 +322,7 @@ function initRealtime(notifBell) {
         { match: /^\/admin\/packages(\/\d+)?\/?$/, scopes: ['packages'] },
         { match: /^\/admin\/partners\/inquiries\/?$/, scopes: ['partner_inquiries'] },
         { match: /^\/admin\/users\/?$/, scopes: ['users'] },
-        { match: /^\/admin\/(materials|suppliers|formulas)\/?$/, scopes: ['materials'] },
+        { match: /^\/admin\/(materials|suppliers|formulas|tools)\/?$/, scopes: ['materials'] },
         { match: /^\/admin\/bulk-batches\/?$/, scopes: ['materials', 'production'] },
         { match: /^\/admin\/partners\/\d+\/?$/, scopes: ['partners'] },
         { match: /^\/admin\/requests\/\d+\/?$/, scopes: ['requests'] },
@@ -450,7 +450,33 @@ function initRealtime(notifBell) {
         retryTimer = setTimeout(softRefresh, ms);
     }
 
+    // A dialog opened inside .content (New Sale, Import, ...) is only a
+    // style="display:flex" on a node that the refresh below replaces with a
+    // fresh server render, where it is closed again. Tabbing away and back
+    // fires visibilitychange -> softRefresh, so the dialog (and anything
+    // typed in it) vanished. Hold the refresh while one is open.
+    // Covers role="dialog" plus the page-specific overlays (.pg-overlay,
+    // .pi-modal-overlay, .void-overlay, .temp-overlay, ...): any
+    // fixed-position overlay/modal inside .content that is currently shown.
+    const DIALOG_SELECTOR = '.content [role="dialog"], .content [class*="overlay"], .content [class*="modal"]';
+
+    function hasOpenDialog() {
+        return Array.from(document.querySelectorAll(DIALOG_SELECTOR)).some((el) => {
+            if (el.hidden) return false;
+            const cs = getComputedStyle(el);
+            return cs.display !== 'none' && cs.visibility !== 'hidden' && cs.position === 'fixed';
+        });
+    }
+
+    let lastSig = null;
+    let lastSigUrl = null;
+
     function softRefresh() {
+        if (hasOpenDialog()) {
+            pendingRefresh = true;
+            scheduleRetry(3000);
+            return;
+        }
         const wait = suppressUntil - Date.now();
         if (wait > 0) {
             // Our own submit just happened; don't drop the update, replay it after.
@@ -465,6 +491,20 @@ function initRealtime(notifBell) {
             .then((r) => (r.ok ? r.text() : Promise.reject(r.status)))
             .then((html) => {
                 const fresh = new DOMParser().parseFromString(html, 'text/html');
+
+                // Same page content as the last refresh: nothing to show, so
+                // don't swap it (a swap re-runs the page and replays its
+                // entrance animation, which looks like a reload). The
+                // sidebar/topbar sit outside .content, so keep those current.
+                const freshContent = fresh.querySelector('.content');
+                const sig = freshContent ? freshContent.innerHTML : null;
+                if (sig !== null && lastSigUrl === window.location.href && sig === lastSig) {
+                    patchSidebarNav(fresh);
+                    patchTopbar(fresh);
+                    return;
+                }
+                lastSig = sig;
+                lastSigUrl = window.location.href;
 
                 // A form the user is part-way through filling in is carried
                 // over as-is (same node, so values, listeners and custom
@@ -497,8 +537,22 @@ function initRealtime(notifBell) {
     // Safety net: if the socket was down (sleep, Wi-Fi switch, container
     // restart) any pushes were lost, so catch up when it reconnects or the
     // tab becomes visible again.
+    //
+    // Not on EVERY return to the tab though: each refresh swaps the whole
+    // page content and replays its reveal animation, which read as the page
+    // reloading itself on every alt-tab. Live pushes keep a connected tab
+    // current, so only catch up after a long absence or a dropped socket.
+    const STALE_AFTER_HIDDEN_MS = 2 * 60 * 1000;
+    let hiddenAt = 0;
     document.addEventListener('visibilitychange', () => {
-        if (document.visibilityState === 'visible') softRefresh();
+        if (document.visibilityState === 'hidden') {
+            hiddenAt = Date.now();
+            return;
+        }
+        const away = hiddenAt ? Date.now() - hiddenAt : 0;
+        hiddenAt = 0;
+        const socketDown = typeof socket !== 'undefined' && !socket.connected;
+        if (away >= STALE_AFTER_HIDDEN_MS || socketDown) softRefresh();
     });
 
     function refreshBadgesOnly() {

@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% import "_empty.html" as empty %}
 {% import "_macros.html" as m %}
 {% block title %}Reports{% endblock %}
 {% block heading %}Reports{% endblock %}
@@ -93,217 +94,8 @@
 {% endblock %}
 
 {% block content %}
-<div class="card card-pad mt-24" id="reportBuilder">
-  <h2 class="rb-title">Generate a report</h2>
-  <p class="rb-lede">
-    Pick what to report on, narrow it down, then download as PDF or Excel. Reports are capped at 1,000 rows.
-  </p>
-
-  <form method="GET" action="{{ url_for('admin.generate_report') }}" id="reportForm" data-generate-file>
-    <div class="field">
-      <label for="rb_type">Report</label>
-      <select id="rb_type" name="type">
-        {% for rt in report_types %}
-        <option value="{{ rt.key }}" data-windowed="{{ 'true' if rt.windowed else 'false' }}">{{ rt.label }}</option>
-        {% endfor %}
-      </select>
-    </div>
-
-    <div class="rb-grid">
-      <div class="field" data-filter="branch_id" style="display:none;">
-        <label for="rb_branch_id">Branch</label>
-        <select id="rb_branch_id" name="branch_id">
-          <option value="all">All branches</option>
-          <!-- Main Branch is HQ Main Warehouse (branch_id 1) — it's
-               deliberately left out of branch_list (see Branches page,
-               which only lists retail branches), but it has its own
-               sales, inventory, and movement history just like any
-               other branch, so reports need to be able to filter down
-               to it specifically. Listed here explicitly rather than
-               changing branch_list itself, so nothing else that reuses
-               branch_list (Branches page, per-branch stock tabs, etc.)
-               is affected. -->
-          <option value="1">Main Branch (HQ Warehouse)</option>
-          {% for b in branch_list %}
-          <option value="{{ b.branch_id }}">{{ b.branch_name }}</option>
-          {% endfor %}
-        </select>
-      </div>
-      <div class="field" data-filter="status" style="display:none;">
-        <label for="rb_status">Status</label>
-        <select id="rb_status" name="status">
-          <option value="all">All statuses</option>
-          <option value="Pending">Pending</option>
-          <option value="In Transit">In Transit</option>
-          <option value="Fulfilled">Fulfilled</option>
-          <option value="Rejected">Rejected</option>
-        </select>
-      </div>
-      <div class="field" data-filter="movement_type" style="display:none;">
-        <label for="rb_movement_type">Movement type</label>
-        <select id="rb_movement_type" name="movement_type">
-          <option value="all">All types</option>
-          <option value="PRODUCTION">Production</option>
-          <option value="DISPATCH">Dispatch</option>
-          <option value="RECEIPT">Receipt</option>
-          <option value="SALE">Sale</option>
-          <option value="REFILL">Refill</option>
-          <option value="FREEBIE">Freebie</option>
-          <option value="ADJUSTMENT">Adjustment</option>
-          <option value="DAMAGE">Damage</option>
-          <option value="PACKAGE_ORDER">Package order</option>
-          <option value="PACKAGE_RETURN">Package return</option>
-          <option value="SALE_VOID">Sale void</option>
-        </select>
-      </div>
-      <div class="field" data-filter="sale_type" style="display:none;">
-        <label for="rb_sale_type">Sale type</label>
-        <select id="rb_sale_type" name="sale_type">
-          <option value="all">All sale types</option>
-          <option value="Sale">Sale only</option>
-          <option value="Refill">Refill only</option>
-          <option value="Freebie">Freebies only</option>
-        </select>
-      </div>
-      <div class="field" data-filter="payment_method" style="display:none;">
-        <label for="rb_payment_method">Payment method</label>
-        <select id="rb_payment_method" name="payment_method">
-          <option value="all">Cash &amp; Credit</option>
-          <option value="Cash">Cash only</option>
-          <option value="Credit">Credit only</option>
-        </select>
-      </div>
-      <div class="field" data-filter="variant" style="display:none;">
-        <label for="rb_variant">Variant</label>
-        <select id="rb_variant" name="variant">
-          <option value="all">All variants</option>
-          <option value="Male">Male</option>
-          <option value="Female">Female</option>
-        </select>
-      </div>
-      <div class="field" data-filter="unit" style="display:none;">
-        <label for="rb_unit">Unit</label>
-        <select id="rb_unit" name="unit">
-          <option value="all">All units</option>
-          {% for u in unit_choices %}
-          <option value="{{ u }}">{{ u }}</option>
-          {% endfor %}
-        </select>
-      </div>
-      <div class="field" data-filter="role" style="display:none;">
-        <label for="rb_role">Role</label>
-        <select id="rb_role" name="role">
-          <option value="all">All roles</option>
-          <option value="Admin">Admin</option>
-          <option value="Branch">Branch</option>
-        </select>
-      </div>
-      <div class="field" data-filter="account_status" style="display:none;">
-        <label for="rb_account_status">Account status</label>
-        <select id="rb_account_status" name="account_status">
-          <option value="all">Active &amp; deactivated</option>
-          <option value="active">Active only</option>
-          <option value="inactive">Deactivated only</option>
-        </select>
-      </div>
-      <div class="field" data-filter="low_stock_only" style="display:none;">
-        <label for="rb_low_stock_only">Stock level</label>
-        <select id="rb_low_stock_only" name="low_stock_only">
-          <option value="">All stock levels</option>
-          <option value="1">Low stock only</option>
-        </select>
-      </div>
-      <div class="field" data-filter="partner_type" style="display:none;">
-        <label for="rb_partner_type">Partner type</label>
-        <select id="rb_partner_type" name="partner_type">
-          <option value="all">Distributors &amp; resellers</option>
-          <option value="Distributor">Distributors only</option>
-          <option value="Reseller">Resellers only</option>
-        </select>
-      </div>
-      <div class="field" data-filter="package_scope" style="display:none;">
-        <label for="rb_package_scope">Available to</label>
-        <select id="rb_package_scope" name="package_scope">
-          <option value="all">All scopes</option>
-          <option value="Both">Both distributors &amp; resellers</option>
-          <option value="Distributor">Distributors only</option>
-          <option value="Reseller">Resellers only</option>
-        </select>
-      </div>
-      <div class="field" data-filter="package_status" style="display:none;">
-        <label for="rb_package_status">Package status</label>
-        <select id="rb_package_status" name="package_status">
-          <option value="all">Active &amp; retired</option>
-          <option value="Active">Active only</option>
-          <option value="Retired">Retired only</option>
-        </select>
-      </div>
-      <div class="field" data-filter="inquiry_status" style="display:none;">
-        <label for="rb_inquiry_status">Inquiry status</label>
-        <select id="rb_inquiry_status" name="inquiry_status">
-          <option value="all">All statuses</option>
-          <option value="New">New</option>
-          <option value="Contacted">Contacted</option>
-          <option value="Follow-up">Follow-up</option>
-          <option value="On Hold">On Hold</option>
-          <option value="Closed">Closed</option>
-          <option value="Declined">Declined</option>
-        </select>
-      </div>
-      <div class="field" data-filter="search" style="display:none;">
-        <label for="rb_search" id="rb_search_label">Search item / SKU</label>
-        <input type="text" id="rb_search" name="search" placeholder="e.g. Golden Hour or HAS-001">
-      </div>
-    </div>
-
-    <div class="field" data-filter="window" style="display:none;">
-      <label>Time window</label>
-      <div class="rb-mode" id="rb_mode_switch">
-        <button type="button" class="rb-mode-opt active" data-mode="recent">Recent</button>
-        <button type="button" class="rb-mode-opt" data-mode="range">Date range</button>
-        <button type="button" class="rb-mode-opt" data-mode="month">Month</button>
-        <button type="button" class="rb-mode-opt" data-mode="all">All time</button>
-      </div>
-      <input type="hidden" name="mode" id="rb_mode" value="recent">
-
-      <div class="rb-grid rb-window-grid">
-        <div class="field" data-mode-field="recent">
-          <label for="rb_recent_n">Show last</label>
-          <select id="rb_recent_n" name="recent_n">
-            <option value="20">20 entries</option>
-            <option value="50">50 entries</option>
-            <option value="100">100 entries</option>
-            <option value="200">200 entries</option>
-          </select>
-        </div>
-        <div class="field" data-mode-field="range" style="display:none;">
-          <label for="rb_date_from">From</label>
-          <input type="date" id="rb_date_from" name="date_from">
-        </div>
-        <div class="field" data-mode-field="range" style="display:none;">
-          <label for="rb_date_to">To</label>
-          <input type="date" id="rb_date_to" name="date_to">
-        </div>
-        <div class="field" data-mode-field="month" style="display:none;">
-          <label for="rb_month">Month</label>
-          <input type="month" id="rb_month" name="month" value="{{ current_month }}">
-        </div>
-      </div>
-      <div class="rb-note" data-mode-field="all" style="display:none;">
-        Pulls everything, capped at the most recent 1,000 rows.
-      </div>
-    </div>
-
-    <div class="rb-actions">
-      <button type="submit" name="format" value="pdf" class="btn btn-accent" formtarget="_blank">
-        Download PDF
-      </button>
-      <button type="submit" name="format" value="xlsx" class="btn btn-ghost" formtarget="_blank">
-        Download Excel
-      </button>
-    </div>
-  </form>
-</div>
+{% set rb_admin = true %}{% set rb_generate_url = url_for('admin.generate_report') %}{% set rb_preview_url = url_for('admin.report_preview') %}
+<div class="mt-24">{% include "_report_builder.html" %}</div>
 
 <p class="kpi-period" id="kpiPeriod">&nbsp;</p>
 
@@ -454,9 +246,7 @@
     </table>
   </div>
   {% else %}
-  <div class="empty-state">
-        <p>No sales recorded yet.</p>
-  </div>
+  {{ empty.state('No sales yet', 'Sales appear in this ranking as soon as they are recorded.', icon='chart', compact=True) }}
   {% endif %}
 </div>
 
@@ -498,9 +288,7 @@
     <p class="pg-note">Only inquiries marked Closed count as an order here: a New or
       Contacted lead hasn’t converted yet.</p>
     {% else %}
-    <div class="empty-state">
-            <p>No closed package orders yet.</p>
-    </div>
+    {{ empty.state('No closed package orders yet', 'An order counts here once its inquiry is marked Closed.', icon='box', compact=True) }}
     {% endif %}
   </div>
 
@@ -547,9 +335,7 @@
     <p class="pg-note">Total sales counts Closed package orders only, same rule as Top
       packages.</p>
     {% else %}
-    <div class="empty-state">
-            <p>No closed package orders yet.</p>
-    </div>
+    {{ empty.state('No closed package orders yet', 'A partner appears here once one of their orders is marked Closed.', icon='users', compact=True) }}
     {% endif %}
   </div>
 </div>
@@ -565,6 +351,7 @@
 {% endblock %}
 
 {% block scripts %}
+{% set rb_admin = true %}{% include "_report_builder_script.html" %}
 <script src="{{ url_for('static', filename='js/chart.umd.min.js') }}"></script>
 <script nonce="{{ csp_nonce() }}">
   // Reads a color straight off the theme so every chart repaints
@@ -909,6 +696,7 @@
           options: lineChartOptions(T, (v) => Number(v).toLocaleString())
         });
         renderChartLegend(charts.trend, document.getElementById('trendLegend'));
+        syncChartEmpties(document);
       })
       .catch(err => {
         console.error('Reports data failed to load:', err);
@@ -1009,145 +797,5 @@
     window.__adminReportsCleanup = null;
   };
 </script>
-<script nonce="{{ csp_nonce() }}">
-  // ---- Report builder: shows only the filters that apply to the
-  // selected report type, and only the time-window sub-fields that
-  // apply to the selected mode. Every field always exists in the DOM
-  // (with data-filter="..."); fields that don't apply are hidden AND
-  // disabled, since a disabled field is what the browser's GET
-  // submission actually skips.
-  (function () {
-    const REPORT_FIELDS = {
-      products: ['variant', 'unit', 'search'],
-      production_log: ['unit', 'search', 'window'],
-      materials: ['search', 'window'],
-      suppliers: ['search'],
-      formulas: ['unit'],
-      cogs_logs: ['unit', 'search', 'window'],
-      bulk_batches: ['search', 'window'],
-      branch_stock: ['branch_id', 'variant', 'unit', 'low_stock_only', 'search'],
-      stock_requests: ['branch_id', 'status', 'search', 'window'],
-      inventory_log: ['branch_id', 'movement_type', 'search', 'window'],
-      sales_history: ['branch_id', 'variant', 'unit', 'sale_type', 'payment_method', 'search', 'window'],
-      credit_purchases: ['branch_id', 'sale_type', 'search', 'window'],
-      voided_sales: ['branch_id', 'search', 'window'],
-      customers: ['branch_id', 'search'],
-      discrepancies: ['branch_id', 'movement_type', 'search', 'window'],
-      branch_performance: ['window'],
-      low_stock: ['branch_id', 'search'],
-      financial_summary: ['window'],
-      admin_log: ['search', 'window'],
-      login_activity: ['search', 'window'],
-      accounts: ['role', 'account_status', 'search'],
-      partners: ['partner_type', 'search'],
-      packages: ['package_scope', 'package_status', 'search'],
-      partner_inquiries: ['partner_type', 'inquiry_status', 'search', 'window'],
-    };
 
-    // "search" filters a different column depending on the report — the
-    // field/name stays the same (name="search"), only what it's labeled
-    // and hinted as changes, to match what reports.py actually searches.
-    const SEARCH_LABELS = {
-      materials: { label: 'Search material / receipt / supplier', placeholder: 'e.g. Fixative or OR-00123' },
-      suppliers: { label: 'Search supplier / contact', placeholder: 'e.g. Golden Scent Supply Co.' },
-      cogs_logs: { label: 'Search item / SKU / batch', placeholder: 'e.g. Golden Hour, HAS-001, or a batch code' },
-      bulk_batches: { label: 'Search scent / batch', placeholder: 'e.g. Golden Hour or BB-0012' },
-      sales_history: { label: 'Search item / SKU / customer', placeholder: 'e.g. Golden Hour, HAS-001, or a customer' },
-      customers: { label: 'Search customer', placeholder: 'e.g. Maria Santos' },
-      discrepancies: { label: 'Search item / SKU / delivery', placeholder: 'e.g. Golden Hour or a delivery number' },
-      accounts: { label: 'Search username', placeholder: 'e.g. manila' },
-      inventory_log: { label: 'Search item / SKU / notes', placeholder: 'e.g. Golden Hour, HAS-001, or a note' },
-      credit_purchases: { label: 'Search item / SKU / name', placeholder: 'e.g. Golden Hour, HAS-001, or a name' },
-      partners: { label: 'Search partner / contact', placeholder: 'e.g. Golden Scent Trading' },
-      packages: { label: 'Search package', placeholder: 'e.g. Starter Bundle' },
-      partner_inquiries: { label: 'Search company / contact', placeholder: 'e.g. Golden Scent Trading' },
-      stock_requests: { label: 'Search item / SKU / delivery', placeholder: 'e.g. Golden Hour or DR-000123' },
-      voided_sales: { label: 'Search item / SKU / reason', placeholder: 'e.g. Golden Hour or wrong item' },
-      production_log: { label: 'Search item / SKU / batch', placeholder: 'e.g. Golden Hour or a batch code' },
-      admin_log: { label: 'Search admin / action / target', placeholder: 'e.g. manila or a product name' },
-      login_activity: { label: 'Search username / IP / reason', placeholder: 'e.g. manila or 192.168.1.10' },
-    };
-    // Per report type, only the option values that report can actually
-    // match — a Credit purchase is never a Freebie (Freebies are always
-    // Cash), Discrepancies are only Damage or Adjustment.
-    // Options are removed rather than hidden so the custom select
-    // (main.js) re-renders without them; the full list is cached once.
-    const OPTION_LIMITS = {
-      credit_purchases: { rb_sale_type: (v) => v !== 'Freebie' },
-      discrepancies: { rb_movement_type: (v) => ['all', 'DAMAGE', 'ADJUSTMENT'].includes(v) },
-    };
-    // Summary reports have no "latest N rows" — Recent reads as all time
-    // server-side, so the option isn't offered for them.
-    const NO_RECENT_MODE = ['branch_performance', 'financial_summary'];
-    const optionCache = new Map();
-
-    function limitOptions(select, allow) {
-      if (!select) return;
-      if (!optionCache.has(select)) {
-        optionCache.set(select, Array.from(select.options).map((o) => o.cloneNode(true)));
-      }
-      const all = optionCache.get(select);
-      const keep = allow ? all.filter((o) => allow(o.value)) : all;
-      const current = select.value;
-      select.replaceChildren(...keep.map((o) => o.cloneNode(true)));
-      select.value = keep.some((o) => o.value === current) ? current : keep[0].value;
-    }
-    const DEFAULT_SEARCH_LABEL = { label: 'Search item / SKU', placeholder: 'e.g. Golden Hour or HAS-001' };
-
-    const searchLabelEl = document.getElementById('rb_search_label');
-    const searchInputEl = document.getElementById('rb_search');
-
-    const typeSelect = document.getElementById('rb_type');
-    const modeSwitch = document.getElementById('rb_mode_switch');
-    const modeInput = document.getElementById('rb_mode');
-
-    function applyReportType() {
-      const type = typeSelect.value;
-      const fields = REPORT_FIELDS[type] || [];
-      document.querySelectorAll('#reportForm [data-filter]').forEach((el) => {
-        const on = fields.includes(el.dataset.filter);
-        el.style.display = on ? '' : 'none';
-        // display:none alone still submits the field — disabling it is
-        // what keeps a stale value (e.g. a Branch picked for another
-        // report type) out of this report's filters and subtitle.
-        el.querySelectorAll('input, select, textarea').forEach((c) => { c.disabled = !on; });
-      });
-      const limits = OPTION_LIMITS[type] || {};
-      ['rb_sale_type', 'rb_movement_type', 'rb_unit'].forEach((id) => {
-        limitOptions(document.getElementById(id), limits[id]);
-      });
-      const noRecent = NO_RECENT_MODE.includes(type);
-      const recentBtn = modeSwitch.querySelector('[data-mode="recent"]');
-      if (recentBtn) recentBtn.style.display = noRecent ? 'none' : '';
-      if (noRecent && modeInput.value === 'recent') {
-        modeInput.value = 'all';
-        applyMode();
-      }
-      const searchCopy = SEARCH_LABELS[type] || DEFAULT_SEARCH_LABEL;
-      searchLabelEl.textContent = searchCopy.label;
-      searchInputEl.placeholder = searchCopy.placeholder;
-    }
-
-    function applyMode() {
-      const mode = modeInput.value;
-      document.querySelectorAll('#reportForm [data-mode-field]').forEach((el) => {
-        el.style.display = el.dataset.modeField === mode ? '' : 'none';
-      });
-      modeSwitch.querySelectorAll('.rb-mode-opt').forEach((btn) => {
-        btn.classList.toggle('active', btn.dataset.mode === mode);
-      });
-    }
-
-    typeSelect.addEventListener('change', applyReportType);
-    modeSwitch.addEventListener('click', (e) => {
-      const btn = e.target.closest('.rb-mode-opt');
-      if (!btn) return;
-      modeInput.value = btn.dataset.mode;
-      applyMode();
-    });
-
-    applyReportType();
-    applyMode();
-  })();
-</script>
 {% endblock %}

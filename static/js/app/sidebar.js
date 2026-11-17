@@ -287,7 +287,12 @@ function initSidebarSearch() {
 
         entries.forEach((entry) => {
             // Group parents give way to their individual pages while searching.
-            const match = tokens.every((t) => entry.haystack.includes(t))
+            // Shared smart matcher (any word order, one small typo); the
+            // plain substring test is only the fallback.
+            const textMatch = !tokens.length || (window.SmartMatch
+                ? window.SmartMatch.score(raw, entry.haystack, '') !== -1
+                : tokens.every((t) => entry.haystack.includes(t)));
+            const match = textMatch
                 && !(tokens.length && entry.link.classList.contains('has-subs'));
             entry.link.classList.toggle('is-filtered-out', !match);
             entry.link.classList.remove('is-search-target');
@@ -396,7 +401,10 @@ function initTopbarSearch() {
     function render() {
         const raw = input.value.trim();
         const tokens = raw.toLowerCase().split(/\s+/).filter(Boolean);
-        shown = entries.filter((e) => tokens.every((t) => e.haystack.includes(t)));
+        // Best match first, tolerant of word order and a small typo.
+        shown = window.SmartMatch
+            ? window.SmartMatch.rank(entries, raw, (e) => e.label, (e) => e.group)
+            : entries.filter((e) => tokens.every((t) => e.haystack.includes(t)));
         list.replaceChildren();
         shown.forEach((e, i) => {
             const li = document.createElement('li');

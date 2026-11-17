@@ -1,6 +1,6 @@
 """Adding products to a package (admin.package_detail /
 admin.add_package_item): the page's searchable product field only offers
-bottled products, and Bulk/Refill stock is refused even if posted
+bottled products, and a bulk SKU is refused even if posted
 directly."""
 import json
 import re
@@ -11,19 +11,6 @@ from factories import login, make_package, make_product, make_user, unique_suffi
 def _signed_in_admin(client, sql):
     user = make_user(sql, role="Admin", branch_id=None)
     login(client, user["username"], user["password"], "Admin")
-
-
-def _make_bulk_product(sql):
-    sku = f"BLK-{unique_suffix().upper()}"
-    cur = sql.cursor()
-    cur.execute(
-        """INSERT INTO products (sku, item_name, variant, unit, price, category)
-           VALUES (%s, %s, 'Male', 'BULK', '900.00', 'Bulk/Refill')""",
-        (sku, f"Bulk Product {sku}"),
-    )
-    sql.commit()
-    cur.close()
-    return sku
 
 
 def _offered_skus(html):
@@ -44,13 +31,12 @@ def test_package_page_offers_bottled_products_but_not_bulk(client, sql):
     _signed_in_admin(client, sql)
     package_id = make_package(sql)
     bottled = make_product(sql, unit="85ML")
-    bulk = _make_bulk_product(sql)
 
     html = client.get(f"/admin/packages/{package_id}").get_data(as_text=True)
 
     offered = _offered_skus(html)
     assert bottled in offered
-    assert bulk not in offered
+    assert not any(sku.endswith("-BULK") for sku in offered)  # bulk is not a product
     assert 'id="productSearch"' in html
 
 
@@ -67,10 +53,10 @@ def test_adding_a_bottled_product_by_sku(client, sql):
 def test_a_bulk_product_is_refused_even_when_posted_directly(client, sql):
     _signed_in_admin(client, sql)
     package_id = make_package(sql)
-    bulk = _make_bulk_product(sql)
+    bulk = f"BLK-{unique_suffix().upper()}-BULK"  # bulk is not a product, so there is no such SKU
 
     resp = client.post(f"/admin/packages/{package_id}/items", data={"sku": bulk, "qty": "1"},
                        follow_redirects=True)
 
     assert _package_skus(sql, package_id) == set()
-    assert "Bulk/Refill products can&#39;t go in a package" in resp.get_data(as_text=True)
+    assert "Bulk can&#39;t go in a package" in resp.get_data(as_text=True)

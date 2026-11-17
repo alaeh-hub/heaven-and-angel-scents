@@ -1,0 +1,375 @@
+{% extends "base.html" %}
+{% import "_empty.html" as empty %}
+{% block title %}Tools{% endblock %}
+{% block heading %}Tools{% endblock %}
+
+{% block head %}
+<style>
+  /* Hallmark · checked: 2026-11-13 · shape: app screen · genre: modern-minimal (locked, docs/design.md) · built: the project · redesign: full · v2.0.0 */
+  .tl-lead { max-width: 65ch; margin: 0 0 var(--space-lg); font-size: 0.875rem; color: var(--ink-soft); }
+  .tl-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-md); align-items: start; }
+  .tl-col { display: grid; gap: var(--space-md); min-width: 0; }
+  .tl-card h2 { margin: 0 0 var(--space-3xs); font-size: 1.125rem; font-weight: 600; text-wrap: balance; }
+  .tl-sub { margin: 0 0 var(--space-md); font-size: 0.8125rem; color: var(--ink-faint); }
+  .tl-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr)); gap: var(--space-sm); margin-bottom: var(--space-md); }
+  .tl-fields .field { margin: 0; min-width: 0; }
+  .tl-results { display: grid; }
+  .tl-res { display: flex; justify-content: space-between; gap: var(--space-md); padding: var(--space-xs) 0; border-top: 1px solid var(--border); font-size: 0.875rem; font-variant-numeric: tabular-nums; }
+  .tl-res span:last-child { text-align: right; }
+  .tl-res.strong { font-weight: 600; }
+  .tl-note { margin: var(--space-sm) 0 0; font-size: 0.8125rem; color: var(--ink-faint); }
+  .tl-scroll { overflow-x: auto; }
+  .tl-table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+  .tl-table th, .tl-table td { padding: var(--space-xs) var(--space-sm); border-bottom: 1px solid var(--border); font-size: 0.875rem; text-align: left; vertical-align: middle; }
+  .tl-table th { font-size: 0.8125rem; font-weight: 500; color: var(--ink-faint); }
+  .tl-table th.num, .tl-table td.num { text-align: right; white-space: nowrap; }
+  .tl-table tbody tr:last-child td { border-bottom: none; }
+  .tl-sublabel { display: block; font-size: 0.75rem; color: var(--ink-faint); }
+  .tl-table input.tl-rate { width: 6.5rem; max-width: 100%; text-align: right; }
+  .tl-calc { min-width: 32rem; }
+  .tl-calc th:nth-child(3), .tl-calc td:nth-child(3) { width: 9.5rem; }
+  .tl-formula-head { margin: 0 0 var(--space-sm); font-size: 0.875rem; font-weight: 500; }
+  .tl-formula-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 20rem); gap: var(--space-xl); align-items: start; }
+  .tl-alert { margin: 0 0 var(--space-md); color: var(--red-ink); font-size: 0.875rem; font-weight: 500; }
+  .tl-reset { margin-top: var(--space-md); }
+  @media (max-width: 56rem) { .tl-grid, .tl-formula-grid { grid-template-columns: minmax(0, 1fr); gap: var(--space-md); } }
+</style>
+{% endblock %}
+
+{% block content %}
+<p class="tl-lead">
+  Everyday calculators: convert units, split the alcohol and water mix, work out bottles and prices, and try a formula
+  with different prices. Nothing here changes any data.
+</p>
+
+<div class="tl-grid">
+  <div class="tl-col">
+
+    <section class="card card-pad tl-card" id="tlConvert" aria-labelledby="tlConvertTitle">
+      <h2 id="tlConvertTitle">Unit converter</h2>
+      <p class="tl-sub">Gallon, liter, mL and fl oz for volume; gram, kg, oz and lb for weight.</p>
+      <div class="tl-fields">
+        <div class="field">
+          <label for="ucKind">Type</label>
+          <select id="ucKind"><option value="volume">Volume</option><option value="weight">Weight</option></select>
+        </div>
+        <div class="field">
+          <label for="ucValue">Amount</label>
+          <input type="number" id="ucValue" step="any" value="1" inputmode="decimal">
+        </div>
+        <div class="field">
+          <label for="ucFrom">From</label>
+          <select id="ucFrom"></select>
+        </div>
+      </div>
+      <div class="tl-results" id="ucResults"></div>
+      <p class="tl-note">A gallon here is the US liquid gallon (3.785 L), the same one the batches use.</p>
+    </section>
+
+    <section class="card card-pad tl-card" id="tlPrice" aria-labelledby="tlPriceTitle">
+      <h2 id="tlPriceTitle">Price per unit</h2>
+      <p class="tl-sub">What you paid for an amount, worked out per unit. Useful before you log a material.</p>
+      <div class="tl-fields">
+        <div class="field">
+          <label for="ppQty">Quantity bought</label>
+          <input type="number" id="ppQty" step="any" min="0" value="10" inputmode="decimal">
+        </div>
+        <div class="field">
+          <label for="ppUnit">Unit</label>
+          <select id="ppUnit"></select>
+        </div>
+        <div class="field">
+          <label for="ppTotal">Total price (₱)</label>
+          <input type="number" id="ppTotal" step="any" min="0" value="82" inputmode="decimal">
+        </div>
+      </div>
+      <div class="tl-results" id="ppResults"></div>
+    </section>
+
+  </div>
+  <div class="tl-col">
+
+    <section class="card card-pad tl-card" id="tlMix" aria-labelledby="tlMixTitle">
+      <h2 id="tlMixTitle">Alcohol and water mix</h2>
+      <p class="tl-sub">A formula’s alcohol amount already includes the water. Enter it to split it.</p>
+      <div class="tl-fields">
+        <div class="field">
+          <label for="mxTotal">Mix amount</label>
+          <input type="number" id="mxTotal" step="any" min="0" value="2800" inputmode="decimal">
+        </div>
+        <div class="field">
+          <label for="mxUnit">Unit</label>
+          <select id="mxUnit"><option value="1">mL</option><option value="1000">L</option></select>
+        </div>
+        <div class="field">
+          <label for="mxAlc">Alcohol parts</label>
+          <input type="number" id="mxAlc" step="any" min="0" value="{{ mix.alcohol_parts }}" inputmode="decimal">
+        </div>
+        <div class="field">
+          <label for="mxWat">Water parts</label>
+          <input type="number" id="mxWat" step="any" min="0" value="{{ mix.water_parts }}" inputmode="decimal">
+        </div>
+      </div>
+      <div class="tl-results" id="mxResults"></div>
+      <p class="tl-note">The parts start from the formula settings. Change them to try another ratio.</p>
+    </section>
+
+    <section class="card card-pad tl-card" id="tlYield" aria-labelledby="tlYieldTitle">
+      <h2 id="tlYieldTitle">Bottle yield</h2>
+      <p class="tl-sub">How many bottles an amount of liquid fills, and what each one costs.</p>
+      <div class="tl-fields">
+        <div class="field">
+          <label for="byAmount">Liquid</label>
+          <input type="number" id="byAmount" step="any" min="0" value="3336" inputmode="decimal">
+        </div>
+        <div class="field">
+          <label for="byUnit">Unit</label>
+          <select id="byUnit"><option value="1">mL</option><option value="1000">L</option><option value="{{ unit_factors.volume.gal }}">gal</option></select>
+        </div>
+        <div class="field">
+          <label for="byCost">Cost per mL <span class="text-faint">(optional)</span></label>
+          <input type="number" id="byCost" step="any" min="0" placeholder="₱" inputmode="decimal">
+        </div>
+      </div>
+      <div class="tl-scroll">
+        <table class="tl-table">
+          <thead><tr><th>Bottle</th><th class="num">Bottles</th><th class="num">Left over</th><th class="num">Liquid per bottle</th></tr></thead>
+          <tbody id="byBody"></tbody>
+        </table>
+      </div>
+    </section>
+
+  </div>
+</div>
+
+<section class="card card-pad tl-card mt-24" id="tlFormula" aria-labelledby="tlFormulaTitle">
+  <h2 id="tlFormulaTitle">Formula cost calculator</h2>
+  <p class="tl-sub">Pick a scent and a size to see the costing, then change any price to see what it would do.</p>
+  {% if missing_roles %}
+  <p class="tl-alert" role="alert">Set up the formula materials first on Bulk Batches (missing: {{ missing_roles|join(', ') }}).</p>
+  {% endif %}
+  <div class="tl-fields" style="max-width:40rem;">
+    <div class="field">
+      <label for="fcScent">Scent</label>
+      <select id="fcScent">
+        <option value="">Choose a scent</option>
+        {% for s in scent_choices %}<option value="{{ s.code }}" data-formula="{{ s.formula or '' }}">{{ s.name }} ({{ s.code }})</option>{% endfor %}
+        <option value="__other">Other, choose the formula myself</option>
+      </select>
+    </div>
+    <div class="field" id="fcFormulaWrap" style="display:none;">
+      <label for="fcFormula">Formula</label>
+      <select id="fcFormula">
+        {% for f in formula_names %}<option value="{{ f }}">Formula {{ f }}</option>{% endfor %}
+      </select>
+    </div>
+    <div class="field">
+      <label for="fcSize">Size, mL of oil scent</label>
+      <select id="fcSize"></select>
+    </div>
+  </div>
+  <div id="fcEmpty">{{ empty.state('Pick a scent to see its costing', 'Choose a scent and a size above. Its materials, quantities and cost per bottle show up here, and you can change any price to see what it would do.', icon='flask', compact=True) }}</div>
+  <div id="fcOut" style="display:none;">
+    <p class="tl-formula-head" id="fcHead"></p>
+    <div class="tl-formula-grid">
+      <div class="tl-scroll">
+        <table class="tl-table tl-calc">
+          <thead><tr><th>Material</th><th class="num">Quantity</th><th class="num">Price per unit (₱)</th><th class="num">Cost</th></tr></thead>
+          <tbody id="fcBody"></tbody>
+        </table>
+      </div>
+      <div>
+        <div class="tl-results" id="fcTotals"></div>
+        <button type="button" class="btn btn-ghost btn-sm tl-reset" id="fcReset">Reset to current prices</button>
+      </div>
+    </div>
+  </div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script nonce="{{ csp_nonce() }}">
+  (function () {
+    var FACTORS = {{ unit_factors | tojson }};
+    var BOTTLES = {{ bottle_sizes | tojson }};
+    var CATALOG = {{ formula_catalog_json | tojson }};
+    var UNIT = { Milliliter: 'mL', Gram: 'g', Liter: 'L', Gallon: 'gal', Piece: 'pcs' };
+
+    function $(id) { return document.getElementById(id); }
+    function esc(v) { var d = document.createElement('div'); d.textContent = String(v); return d.innerHTML; }
+    function unitName(u) { return UNIT[u] || String(u).toLowerCase(); }
+    function fmt(n, max) {
+      if (!isFinite(n)) return '';
+      return Number(n).toLocaleString('en-PH', { maximumFractionDigits: max === undefined ? 6 : max });
+    }
+    function peso(n) {
+      if (!isFinite(n)) return '';
+      return '₱' + Number(n).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+    function res(label, value, strong) {
+      return '<div class="tl-res' + (strong ? ' strong' : '') + '"><span>' + esc(label) + '</span><span>' + value + '</span></div>';
+    }
+    function num(el) { var v = parseFloat(el.value); return isFinite(v) ? v : 0; }
+
+    /* ---- unit converter ---- */
+    var ucKind = $('ucKind'), ucValue = $('ucValue'), ucFrom = $('ucFrom'), ucResults = $('ucResults');
+    function ucFill() {
+      ucFrom.innerHTML = Object.keys(FACTORS[ucKind.value]).map(function (u) {
+        return '<option value="' + esc(u) + '">' + esc(u) + '</option>';
+      }).join('');
+      ucRender();
+    }
+    function ucRender() {
+      var factors = FACTORS[ucKind.value], base = num(ucValue) * factors[ucFrom.value];
+      ucResults.innerHTML = Object.keys(factors).map(function (u) {
+        return res(u, fmt(base / factors[u]), u === ucFrom.value);
+      }).join('');
+    }
+    ucKind.addEventListener('change', ucFill);
+    ucValue.addEventListener('input', ucRender);
+    ucFrom.addEventListener('change', ucRender);
+    ucFill();
+
+    /* ---- alcohol and water mix ---- */
+    function mxRender() {
+      var mixMl = num($('mxTotal')) * parseFloat($('mxUnit').value);
+      var a = num($('mxAlc')), w = num($('mxWat'));
+      var out = '';
+      if (a <= 0) {
+        out = res('Alcohol parts must be more than 0', '');
+      } else {
+        var alc = Math.round(mixMl * a / (a + w) * 1000) / 1000, wat = Math.round((mixMl - alc) * 1000) / 1000;
+        var batch = a + w, batches = mixMl > 0 ? Math.ceil(mixMl / batch) : 0;
+        out = res('Alcohol', fmt(alc, 3) + ' mL (' + fmt(alc / 1000, 4) + ' L)', true) +
+          res('Distilled water', fmt(wat, 3) + ' mL (' + fmt(wat / 1000, 4) + ' L)', true) +
+          res('Alcohol share', fmt(alc / (mixMl || 1) * 100, 2) + '%') +
+          res('One mixing batch', fmt(batch) + ' mL') +
+          res('Mixing batches to make', String(batches)) +
+          res('Mix prepared', fmt(batches * batch) + ' mL') +
+          res('Left over to keep', fmt(batches * batch - mixMl) + ' mL');
+      }
+      $('mxResults').innerHTML = out;
+    }
+    ['mxTotal', 'mxUnit', 'mxAlc', 'mxWat'].forEach(function (id) { $(id).addEventListener('input', mxRender); });
+    $('mxUnit').addEventListener('change', mxRender);
+    mxRender();
+
+    /* ---- bottle yield ---- */
+    function byRender() {
+      var ml = num($('byAmount')) * parseFloat($('byUnit').value);
+      var cost = num($('byCost'));
+      $('byBody').innerHTML = Object.keys(BOTTLES).map(function (u) {
+        var size = BOTTLES[u], n = Math.floor(ml / size);
+        return '<tr><td>' + esc(u) + '</td><td class="num">' + fmt(n, 0) + '</td><td class="num">' +
+          fmt(ml - n * size, 3) + ' mL</td><td class="num">' + (cost > 0 ? peso(cost * size) : '') + '</td></tr>';
+      }).join('');
+    }
+    ['byAmount', 'byUnit', 'byCost'].forEach(function (id) { $(id).addEventListener('input', byRender); });
+    $('byUnit').addEventListener('change', byRender);
+    byRender();
+
+    /* ---- price per unit ---- */
+    var ppUnit = $('ppUnit');
+    var ppUnits = [];
+    ['volume', 'weight'].forEach(function (kind) {
+      Object.keys(FACTORS[kind]).forEach(function (u) { ppUnits.push({ kind: kind, unit: u }); });
+    });
+    ppUnits.push({ kind: 'piece', unit: 'pc' });
+    ppUnit.innerHTML = ppUnits.map(function (x, i) {
+      return '<option value="' + i + '">' + esc(x.unit) + '</option>';
+    }).join('');
+    function ppRender() {
+      var x = ppUnits[parseInt(ppUnit.value, 10)], qty = num($('ppQty')), total = num($('ppTotal'));
+      if (qty <= 0) { $('ppResults').innerHTML = res('Enter a quantity', ''); return; }
+      var out;
+      if (x.kind === 'piece') {
+        out = res('Price per piece', peso(total / qty), true);
+      } else {
+        var factors = FACTORS[x.kind], base = qty * factors[x.unit];
+        out = Object.keys(factors).map(function (u) {
+          // price per one `u` = total / (how many `u` were bought)
+          return res('Per ' + u, '₱' + fmt(total / (base / factors[u]), 4), u === x.unit);
+        }).join('');
+      }
+      $('ppResults').innerHTML = out;
+    }
+    ['ppQty', 'ppTotal'].forEach(function (id) { $(id).addEventListener('input', ppRender); });
+    ppUnit.addEventListener('change', ppRender);
+    ppRender();
+
+    /* ---- formula cost calculator ---- */
+    var fcScent = $('fcScent'), fcFormula = $('fcFormula'), fcSize = $('fcSize'), fcOut = $('fcOut');
+    var current = null;
+    function fcFormulaName() {
+      if (fcScent.value === '__other') return fcFormula.value;
+      var opt = fcScent.options[fcScent.selectedIndex];
+      return opt && opt.dataset ? (opt.dataset.formula || '') : '';
+    }
+    function fcSizes() {
+      var f = fcFormulaName(), sizes = f && CATALOG[f] ? Object.keys(CATALOG[f]).sort(function (a, b) { return b - a; }) : [];
+      var keep = fcSize.value;
+      fcSize.innerHTML = sizes.map(function (s) { return '<option value="' + s + '">' + s + ' mL</option>'; }).join('');
+      if (sizes.indexOf(keep) >= 0) fcSize.value = keep;
+    }
+    function fcLoad() {
+      var f = fcFormulaName();
+      current = f && fcSize.value && CATALOG[f] ? CATALOG[f][fcSize.value] : null;
+      var fcEmpty = $('fcEmpty');
+      if (!current) {
+        fcOut.style.display = 'none';
+        fcEmpty.style.display = '';
+        var noFormula = !f;
+        fcEmpty.querySelector('.empty-title').textContent = noFormula ? 'Pick a scent to see its costing' : 'No costing for this size';
+        fcEmpty.querySelector('.empty-body').textContent = noFormula
+          ? 'Choose a scent and a size above. Its materials, quantities and cost per bottle show up here, and you can change any price to see what it would do.'
+          : 'This formula has no costing at that size yet. Check the formula materials on Bulk Batches.';
+        return;
+      }
+      fcEmpty.style.display = 'none';
+      fcOut.style.display = '';
+      $('fcHead').textContent = current.label + ': ' + fmt(current.total_ml, 3) + ' mL of liquid makes ' + current.bottles +
+        ' bottles of ' + fmt(current.bottle_ml) + ' mL. The ' + fmt(current.mix_ml) + ' mL mix is ' +
+        fmt(current.alcohol_ml, 3) + ' mL alcohol and ' + fmt(current.water_ml, 3) + ' mL water.';
+      var rows = current.lines.map(function (ln, i) {
+        var role = ln.label.replace(/\s*\((.*)\)/, ', $1');
+        var sub = role.toLowerCase() === ln.material.toLowerCase() ? '' : '<span class="tl-sublabel">' + esc(role) + '</span>';
+        return '<tr><td>' + esc(ln.material) + sub + '</td>' +
+          '<td class="num">' + fmt(ln.qty, 3) + ' ' + esc(unitName(ln.unit)) + '</td>' +
+          '<td class="num"><input type="number" class="tl-rate" step="any" min="0" aria-label="Price per unit for ' + esc(ln.material) + '" data-kind="line" data-i="' + i + '" value="' + ln.rate + '"></td>' +
+          '<td class="num" id="fcLine' + i + '"></td></tr>';
+      });
+      current.packaging.forEach(function (p, i) {
+        rows.push('<tr><td>' + esc(p.name) + '<span class="tl-sublabel">packaging, ' + fmt(p.per_bottle) + ' per bottle</span></td>' +
+          '<td class="num">' + fmt(p.qty, 3) + ' ' + esc(unitName(p.unit)) + '</td>' +
+          '<td class="num"><input type="number" class="tl-rate" step="any" min="0" aria-label="Price per unit for ' + esc(p.name) + '" data-kind="pack" data-i="' + i + '" value="' + p.rate + '"></td>' +
+          '<td class="num" id="fcPack' + i + '"></td></tr>');
+      });
+      $('fcBody').innerHTML = rows.join('');
+      fcCompute();
+    }
+    function fcCompute() {
+      if (!current) return;
+      var liquid = 0, packaging = 0;
+      Array.prototype.forEach.call($('fcBody').querySelectorAll('input'), function (inp) {
+        var rate = parseFloat(inp.value) || 0, i = parseInt(inp.dataset.i, 10), cost;
+        if (inp.dataset.kind === 'line') { cost = current.lines[i].qty * rate; liquid += cost; $('fcLine' + i).textContent = peso(cost); }
+        else { cost = current.packaging[i].qty * rate; packaging += cost; $('fcPack' + i).textContent = peso(cost); }
+      });
+      var total = liquid + packaging, b = current.bottles;
+      $('fcTotals').innerHTML =
+        res('Liquid ingredients', peso(liquid)) + res('Packaging, ' + b + ' bottles', peso(packaging)) +
+        res('Total cost to produce', peso(total), true) +
+        res('Cost per new bottle', b ? peso(total / b) : '', true) +
+        res('Cost per refill, liquid only', b ? peso(liquid / b) : '');
+    }
+    $('fcBody').addEventListener('input', fcCompute);
+    $('fcReset').addEventListener('click', fcLoad);
+    fcScent.addEventListener('change', function () {
+      $('fcFormulaWrap').style.display = fcScent.value === '__other' ? '' : 'none';
+      fcSizes(); fcLoad();
+    });
+    fcFormula.addEventListener('change', function () { fcSizes(); fcLoad(); });
+    fcSize.addEventListener('change', fcLoad);
+  })();
+</script>
+{% endblock %}

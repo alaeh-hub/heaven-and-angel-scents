@@ -85,21 +85,63 @@ function chartRgb(value) {
         : 'rgba(' + d[0] + ',' + d[1] + ',' + d[2] + ',' + (d[3] / 255).toFixed(3) + ')';
 }
 
+// Chart lines, bars and dots must stand out from the surface they sit on (3:1,
+// the usual minimum for graphics). A theme's data colours are free to be pale:
+// Cyberpunk's neon yellow, or the gold, measured 1.3-2:1 on a light page. This
+// deepens such a colour towards black (light surface) or white (dark surface)
+// just far enough to pass, and leaves colours that already pass untouched.
+function chartRgbParts(s) {
+    var m = /rgba?\(\s*([\d.]+)[,\s]+([\d.]+)[,\s]+([\d.]+)(?:[,\s/]+([\d.]+))?/.exec(String(s));
+    return m ? { c: [+m[1], +m[2], +m[3]], a: m[4] === undefined ? 1 : +m[4] } : null;
+}
+
+function chartLuminance(c) {
+    var f = function (v) { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); };
+    return 0.2126 * f(c[0]) + 0.7152 * f(c[1]) + 0.0722 * f(c[2]);
+}
+
+function chartContrast(a, b) {
+    var la = chartLuminance(a), lb = chartLuminance(b);
+    return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05);
+}
+
+function ensureChartContrast(color, surface, min) {
+    var c = chartRgbParts(color), b = chartRgbParts(surface);
+    if (!c || !b || c.a < 1 || chartContrast(c.c, b.c) >= min) return color;
+    var target = chartLuminance(b.c) > 0.4 ? [0, 0, 0] : [255, 255, 255];
+    for (var t = 0.05; t <= 1.001; t += 0.05) {
+        var mixed = c.c.map(function (v, i) { return Math.round(v + (target[i] - v) * t); });
+        if (chartContrast(mixed, b.c) >= min) return 'rgb(' + mixed.join(',') + ')';
+    }
+    return 'rgb(' + target.join(',') + ')';
+}
+
 function chartTheme() {
     var css = getComputedStyle(document.documentElement);
     var dark = document.documentElement.getAttribute('data-theme') === 'dark';
     var tok = function (name) { return chartRgb(css.getPropertyValue(name).trim()); };
-    var accent = tok('--accent');
-    var sales = tok('--chart-sales');
-    var cream = tok('--chart-cream');
-    var cost = tok('--chart-cost');
+    var surface = tok('--surface');
+    // What a chart is really drawn on: the first opaque background behind a chart
+    // card or KPI tile (some styles paint these a different colour from --surface,
+    // and the glass styles make the surface translucent), else the page background.
+    var under = tok('--bg');
+    var probe = document.querySelector('.kpi-spark, .chart-canvas-wrap, .donut-wrap, .kpi-tile, .chart-card, .card');
+    for (var el = probe; el; el = el.parentElement) {
+        var paint = chartRgbParts(getComputedStyle(el).backgroundColor);
+        if (paint && paint.a >= 1) { under = 'rgb(' + paint.c.join(',') + ')'; break; }
+    }
+    var vis = function (name) { return ensureChartContrast(tok(name), under, 3); };
+    var accent = vis('--accent');
+    var sales = vis('--chart-sales');
+    var cream = vis('--chart-cream');
+    var cost = vis('--chart-cost');
     return {
         dark: dark,
         ink: tok('--ink'),
         soft: tok('--ink-soft'),
         faint: tok('--ink-faint'),
         grid: tok('--border'),
-        surface: tok('--surface'),
+        surface: surface,
         tipEdge: tok('--chart-tip-edge'),
         font: css.getPropertyValue('--font').trim(),
         accent: accent,
@@ -107,7 +149,7 @@ function chartTheme() {
         cost: cost,
         profit: accent,
         cream: cream,
-        series: [accent, sales, cream, cost, tok('--chart-4'), tok('--chart-5'), tok('--chart-6'), tok('--chart-7')]
+        series: [accent, sales, cream, cost, vis('--chart-4'), vis('--chart-5'), vis('--chart-6'), vis('--chart-7')]
     };
 }
 
@@ -284,3 +326,167 @@ function shortDateLabel(iso) {
     return isNaN(d) ? iso : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
+
+// ---- Empty charts ---------------------------------------------------------
+// A chart with nothing to plot (no sales yet, every value zero) draws bare
+// axes, which reads as broken. Call syncChartEmpties() after the charts are
+// built: any canvas whose chart has no positive value gets a message in its
+// place, and gets its chart back the moment data arrives.
+var CHART_EMPTY_COPY = {
+    profitChart: ['No sales in this window', 'Sales, cost and profit are charted once sales are recorded in the selected period.'],
+    salesTrendChart: ['No sales in this window', 'Your sales are charted here once they are recorded in the selected period.'],
+    channelChart: ['No sales yet', 'Sales are split by channel as soon as the first one is recorded.'],
+    saleTypeChart: ['No sales yet', 'Sales are split by type as soon as the first one is recorded.'],
+    variantChart: ['No bottles sold yet', 'Units are split by variant once sales are recorded.'],
+    paymentChart: ['No payments yet', 'Payment methods are compared once sales are recorded.'],
+    branchSalesChart: ['No branch sales yet', 'Units sold per branch are charted once branches record sales.'],
+    capitalChart: ['Nothing to compare yet', 'Capital, materials bought and revenue appear once you log purchases, production or sales.'],
+    topProductsChart: ['No product sales yet', 'Your best sellers are ranked here once sales are recorded.'],
+    stockChart: ['No stock on hand', 'Stock levels are charted once products are received at your branch.'],
+    trendChart: ['No ledger movement in this window', 'Production, sales and refills are charted once they are recorded in the selected period.'],
+    bpRevenueChart: ['No branch revenue yet', 'Each branch’s share of revenue appears once sales are recorded.'],
+    bpUnitsChart: ['No bottles sold yet', 'Branches are ranked here once they record sales.']
+};
+
+function chartHasData(chart) {
+    return chart.data.datasets.some(function (ds) {
+        return (ds.data || []).some(function (v) {
+            var n = (v && typeof v === 'object') ? Number(v.y !== undefined ? v.y : v.x) : Number(v);
+            return n > 0;
+        });
+    });
+}
+
+function syncChartEmpties(root) {
+    if (typeof Chart === 'undefined') return;
+    (root || document).querySelectorAll('canvas').forEach(function (canvas) {
+        var chart = Chart.getChart(canvas);
+        if (!chart) return;
+        var wrap = canvas.parentElement;
+        var note = wrap.querySelector(':scope > .chart-empty');
+        var empty = !chartHasData(chart);
+        if (empty && !note) {
+            var copy = CHART_EMPTY_COPY[canvas.id] || ['No data yet', 'This fills in as activity is recorded.'];
+            note = document.createElement('div');
+            note.className = 'chart-empty';
+            note.setAttribute('role', 'status');
+            var icon = document.createElement('span');
+            icon.className = 'empty-icon';
+            icon.setAttribute('aria-hidden', 'true');
+            icon.innerHTML = '<svg viewBox="0 0 24 24" focusable="false"><path d="M3 3v18h18"/><path d="m7 15 4-4 3 3 5-6"/></svg>';
+            var text = document.createElement('div');
+            text.className = 'empty-text';
+            var title = document.createElement('p');
+            title.className = 'empty-title';
+            title.textContent = copy[0];
+            var body = document.createElement('p');
+            body.className = 'empty-body';
+            body.textContent = copy[1];
+            text.appendChild(title); text.appendChild(body);
+            note.appendChild(icon); note.appendChild(text);
+            wrap.appendChild(note);
+        }
+        if (!empty && note) note.remove();
+        canvas.style.visibility = empty ? 'hidden' : '';
+    });
+}
+
+// ---- Re-theme live ---------------------------------------------------------
+// Charts, sparklines and legend dots are painted with plain colour values read
+// from the theme once, when they are built. Switching light/dark, the interface
+// style or the accent colour afterwards left them in the old palette (pale lines
+// on a light page, dark axis text on a dark one) until the page was reloaded.
+// This watches for those switches and swaps the old palette for the new one in
+// place: no reload, no new request.
+var chartPalette = null;
+
+function chartPaletteOf(t) {
+    var p = { ink: t.ink, soft: t.soft, faint: t.faint, grid: t.grid, surface: t.surface, tipEdge: t.tipEdge,
+        accent: t.accent, sales: t.sales, cost: t.cost, cream: t.cream };
+    t.series.forEach(function (c, i) { p['series' + i] = c; });
+    return p;
+}
+
+function chartColorKey(s) { return String(s).replace(/\s+/g, ''); }
+
+function remapChartColors(value, map, seen) {
+    if (typeof value === 'string') {
+        var hit = map[chartColorKey(value)];
+        return hit === undefined ? value : hit;
+    }
+    if (!value || typeof value !== 'object') return value;
+    seen = seen || [];
+    if (seen.indexOf(value) !== -1) return value;
+    seen.push(value);
+    if (Array.isArray(value)) {
+        for (var i = 0; i < value.length; i++) value[i] = remapChartColors(value[i], map, seen);
+        return value;
+    }
+    // Chart.js builds its option objects without a normal prototype, so test what the
+    // object is rather than what it inherits from.
+    if (typeof Node !== 'undefined' && value instanceof Node) return value;
+    if (value instanceof Date || typeof value.getContext === 'function') return value;
+    Object.keys(value).forEach(function (k) {
+        if (k === 'data' || k === 'labels') return;
+        value[k] = remapChartColors(value[k], map, seen);
+    });
+    return value;
+}
+
+function remapInlineColors(text, map) {
+    return text.replace(/rgba?\([^)]*\)/g, function (m) {
+        var hit = map[chartColorKey(m)];
+        return hit === undefined ? m : hit;
+    });
+}
+
+function rethemeCharts() {
+    if (!chartPalette) return;
+    var next = chartPaletteOf(chartTheme());
+    var map = {};
+    var changed = false;
+    Object.keys(next).forEach(function (k) {
+        if (chartPalette[k] !== next[k]) {
+            changed = true;
+            if (map[chartColorKey(chartPalette[k])] === undefined) map[chartColorKey(chartPalette[k])] = next[k];
+        }
+    });
+    if (!changed) return;
+    chartPalette = next;
+
+    if (typeof Chart !== 'undefined') {
+        applyChartDefaults();
+        var seen = {};
+        document.querySelectorAll('canvas').forEach(function (canvas) {
+            var chart = Chart.getChart(canvas);
+            if (!chart || seen[chart.id]) return;
+            seen[chart.id] = true;
+            remapChartColors(chart.config.data, map);
+            remapChartColors(chart.config.options, map);
+            chart.update('none');
+        });
+    }
+    // Sparklines (stroke / fill attributes) and anything coloured with an inline style
+    // from a theme colour, e.g. the dots beside a doughnut's legend.
+    document.querySelectorAll('.kpi-spark-svg *').forEach(function (el) {
+        ['stroke', 'fill'].forEach(function (attr) {
+            var v = el.getAttribute(attr);
+            if (v) el.setAttribute(attr, remapInlineColors(v, map));
+        });
+    });
+    document.querySelectorAll('.content [style*="rgb"]').forEach(function (el) {
+        el.setAttribute('style', remapInlineColors(el.getAttribute('style'), map));
+    });
+}
+
+function initChartRetheme() {
+    if (initChartRetheme.done || typeof MutationObserver !== 'function') return;
+    initChartRetheme.done = true;
+    try { chartPalette = chartPaletteOf(chartTheme()); } catch (e) { return; }
+    var timer = null;
+    new MutationObserver(function () {
+        clearTimeout(timer);
+        timer = setTimeout(rethemeCharts, 60);
+    }).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme', 'data-style', 'style'] });
+}
+initChartRetheme();

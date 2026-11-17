@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% import "_empty.html" as empty %}
 {% import "_macros.html" as m %}
 {% block title %}{{ pkg.package_name }}{% endblock %}
 {% block heading %}{{ pkg.package_name }}{% endblock %}
@@ -29,7 +30,6 @@
   .pd-total-label { text-align: right; font-weight: 600; background: var(--bg); }
   .pd-total-val { font-weight: 600; background: var(--bg); }
   .pd-check { display: flex; align-items: center; gap: var(--space-xs); font-weight: 500; }
-  .pd-check input { width: auto; }
   .pd-item-unit { margin-inline-start: var(--space-xs); }
   @media (max-width: 64rem) {
     .pg-split { grid-template-columns: minmax(0, 1fr); }
@@ -118,9 +118,7 @@
     </table>
   </div>
   {% else %}
-  <div class="empty-state">
-    <p>No products in this package yet. Add one with the form beside this list.</p>
-  </div>
+  {{ empty.state('No products in this package', 'Add a product with the form beside this list to start building the bundle.', icon='box', compact=True) }}
   {% endif %}
 </div>
 
@@ -144,7 +142,7 @@
           <input type="hidden" id="sku" name="sku">
           <div class="ac-combo-menu" id="packageProductMenu" role="listbox"></div>
         </div>
-        <div class="help">Bottled products only. Bulk/Refill can’t be added to a package.</div>
+        <div class="help">Bottled products only. Bulk is sold by the mL and can’t be added to a package.</div>
       </div>
       <div class="field">
         <label for="qty">Qty per set</label>
@@ -255,6 +253,11 @@
     // query, then one containing it anywhere (the size counts too, so
     // "lacoste 85" narrows to that bottle). -1 = no match.
     function score(p, query) {
+      // Shared smart matcher (any word order, SKUs without dashes, one
+      // small typo); the plain logic below is only a fallback.
+      if (window.SmartMatch) {
+        return window.SmartMatch.score(query, p.item_name, p.sku + ' ' + p.unit + ' ' + p.variant);
+      }
       var name = p.item_name.toLowerCase();
       var sku = p.sku.toLowerCase();
       if (sku === query || label(p).toLowerCase() === query) return 0;

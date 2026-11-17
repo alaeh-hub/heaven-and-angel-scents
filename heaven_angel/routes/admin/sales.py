@@ -35,8 +35,14 @@ def sale_receipt(sale_id):
         abort(404)
     return send_file(
         pdf_buffer, mimetype="application/pdf",
-        as_attachment=True, download_name=f"SR-{sale_id:06d}.pdf",
+        as_attachment=True, download_name=f"SR-{sale.get('order_number', sale_id):06d}.pdf",
     )
+
+
+def _recorded_message(sales):
+    if len(sales) == 1:
+        return f"{sales[0].sale_type} recorded."
+    return f"{sales[0].sale_type} recorded: {len(sales)} products on one receipt."
 
 
 @bp.route("/record-sale", methods=["GET", "POST"])
@@ -60,7 +66,7 @@ def record_sale():
             return redirect(url_for("admin.record_sale"))
 
         try:
-            sale = sale_entry.parse_sale_form(
+            sales = sale_entry.parse_sale_order_form(
                 request.form, qty_label="Quantity",
                 sale_type_prompt="Select whether this is a sale, a refill, or a freebie.",
                 product_prompt="Select a product.")
@@ -69,31 +75,39 @@ def record_sale():
             return redirect(url_for("admin.record_sale"))
 
         try:
-            sale_entry.record_sale(
-                sale, branch_id=HQ_BRANCH_ID, user_id=session.get("user_id"), note_suffix=" (HQ)")
-            notify_admin(["inventory", "sales", "movement_logs"])
-            flash(f"{sale.sale_type} recorded.", "success")
+            sale_entry.record_sale_order(
+                sales, branch_id=HQ_BRANCH_ID, user_id=session.get("user_id"), note_suffix=" (HQ)")
+            notify_admin(["inventory", "sales", "movement_logs", "production"])
+            flash(_recorded_message(sales), "success")
         except TransactionAborted as err:
             flash(str(err), "error")
         except Exception:
             current_app.logger.exception(
-                "admin record_sale failed for sku=%s", sale.sku)
+                "admin record_sale failed for sku=%s", sales[0].sku)
             flash("Couldn't record that — please try again.", "error")
         return redirect(url_for("admin.record_sale"))
 
-    # bulk_ml: HQ's stock of each bottle size's scent bulk (same base
-    # code, unit BULK — see sale_stock.refill_source()). A Refill pours
-    # from that, so a bottle size can be refilled even with no bottles
-    # left, as long as its scent's bulk is there.
+    # Bulk is not a product any more: it is the mL left in a scent's bulk
+    # batches (bulk_batches.base_code = the product code). bulk_ml on a bottle
+    # row is what a Refill of that size can still pour from; the 'Bulk/Refill'
+    # rows (sku '<code>-BULK') are the scents with mL left, for the "sold by
+    # the mL" panel. Both come from the same batch totals.
+    batch_ml = """(SELECT base_code, SUM(remaining_ml) AS ml FROM bulk_batches
+                   WHERE base_code IS NOT NULL AND remaining_ml > 0 GROUP BY base_code)"""
     inventory = query(
-        """SELECT p.sku, p.item_name, p.variant, p.category, p.unit, p.price, bi.stock_qty,
-                  COALESCE(bb.stock_qty, 0) AS bulk_ml
-           FROM branch_inventory bi JOIN products p ON bi.sku = p.sku
-           LEFT JOIN branch_inventory bb
-             ON p.unit <> 'BULK' AND bb.branch_id = bi.branch_id
-            AND bb.sku = CONCAT(LEFT(p.sku, CHAR_LENGTH(p.sku) - CHAR_LENGTH(p.unit) - 1), '-BULK')
-           WHERE bi.branch_id = %s AND (bi.stock_qty > 0 OR bb.stock_qty > 0)
-           ORDER BY p.item_name""",
+        f"""SELECT p.sku, p.item_name, p.variant, p.category, p.unit, p.price, bi.stock_qty,
+                   CAST(FLOOR(COALESCE(bm.ml, 0)) AS SIGNED) AS bulk_ml
+            FROM branch_inventory bi JOIN products p ON bi.sku = p.sku
+            LEFT JOIN {batch_ml} bm
+              ON bm.base_code = LEFT(p.sku, CHAR_LENGTH(p.sku) - CHAR_LENGTH(p.unit) - 1)
+            WHERE bi.branch_id = %s AND (bi.stock_qty > 0 OR bm.ml > 0)
+            UNION ALL
+            SELECT c.sku, c.item_name, c.variant, c.category, c.unit, c.price,
+                   CAST(FLOOR(bm.ml) AS SIGNED), CAST(FLOOR(bm.ml) AS SIGNED)
+            FROM sale_catalog c
+            JOIN {batch_ml} bm ON CONCAT(bm.base_code, '-BULK') = c.sku
+            WHERE c.unit = 'BULK' AND bm.ml >= 1
+            ORDER BY item_name""",
         (HQ_BRANCH_ID,),
     )
     bulk_rate = query(
@@ -104,11 +118,12 @@ def record_sale():
     # SKU + Name display.
     recent_sales = query(
         """SELECT s.*, p.item_name, p.unit, COALESCE(s.buyer_name, bu.username) AS buyer_username
-           FROM sales s JOIN products p ON s.sku = p.sku
+           FROM sales s JOIN sale_catalog p ON s.sku = p.sku
            LEFT JOIN users bu ON s.buyer_user_id = bu.user_id
            WHERE s.branch_id = %s ORDER BY s.sold_at DESC LIMIT 10""",
         (HQ_BRANCH_ID,),
     )
+    sale_entry.annotate_receipts(recent_sales)
     employees = query(
         "SELECT user_id, username, role FROM users WHERE is_active = TRUE ORDER BY username"
     )
@@ -178,11 +193,12 @@ def import_sales():
 
     try:
         raw_rows = parse_sales_import_workbook(upload)
-        inserted = import_sales_rows(
+        inserted, receipts = import_sales_rows(
             HQ_BRANCH_ID, raw_rows, session.get("user_id"))
-        notify_admin(["inventory", "sales", "movement_logs"])
+        notify_admin(["inventory", "sales", "movement_logs", "production"])
         flash(
-            f"Imported {inserted} sale{'s' if inserted != 1 else ''} from the file.", "success")
+            f"Imported {inserted} sale{'s' if inserted != 1 else ''} from the file"
+            + (f", on {receipts} receipt{'s' if receipts != 1 else ''}." if receipts != inserted else "."), "success")
     except (ValidationError, TransactionAborted) as err:
         for line in str(err).split("\n"):
             if line.strip():
@@ -237,7 +253,7 @@ def customers():
                       MAX(sa.sold_at) AS last_purchase_at
                FROM sales sa
                JOIN branches b ON sa.branch_id = b.branch_id
-               JOIN products p ON p.sku = sa.sku
+               JOIN sale_catalog p ON p.sku = sa.sku
                WHERE sa.customer_name IS NOT NULL AND sa.customer_name <> ''
                GROUP BY sa.customer_name
            ) agg
@@ -283,7 +299,7 @@ def credit_purchases():
                     COALESCE(SUM(s.qty_sold * s.unit_price), 0) AS total_amount,
                     MAX(s.sold_at) AS last_taken_at
              FROM sales s
-             JOIN products p ON p.sku = s.sku
+             JOIN sale_catalog p ON p.sku = s.sku
              JOIN branches b ON b.branch_id = s.branch_id
              LEFT JOIN users bu ON s.buyer_user_id = bu.user_id
              WHERE s.payment_method = 'Credit' AND s.credit_settled_at IS NULL"""
@@ -323,14 +339,14 @@ def sales_history():
                     COALESCE(s.buyer_name, bu.username) AS buyer_username
              FROM sales s
              JOIN branches b ON b.branch_id = s.branch_id
-             JOIN products p ON p.sku = s.sku
+             JOIN sale_catalog p ON p.sku = s.sku
              LEFT JOIN users bu ON s.buyer_user_id = bu.user_id"""
     params = ()
     if branch_filter.isdigit():
         sql += " WHERE s.branch_id = %s"
         params = (int(branch_filter),)
     sql += " ORDER BY s.sold_at DESC, s.sale_id DESC LIMIT 300"
-    sales = query(sql, params)
+    sales = sale_entry.annotate_receipts(query(sql, params))
     voids = query(
         """SELECT v.*, b.branch_name FROM sale_voids v JOIN branches b ON b.branch_id = v.branch_id
            ORDER BY v.voided_at DESC LIMIT 50"""

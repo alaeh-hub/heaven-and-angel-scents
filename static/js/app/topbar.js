@@ -66,6 +66,10 @@ function patchSidebarNav(freshDoc) {
         }
 
         link.classList.toggle('active', freshLink.classList.contains('active'));
+        // Same for the screen-reader side: the fresh page says which link is current.
+        const current = freshLink.getAttribute('aria-current');
+        if (current) link.setAttribute('aria-current', current);
+        else link.removeAttribute('aria-current');
     });
     syncSidebarIndicator();
 }

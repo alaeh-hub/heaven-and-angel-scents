@@ -251,18 +251,27 @@
             '<span class="scan-badge-ok">&#10003; Verified, on file</span>' +
             '<span class="mono text-soft" style="margin-left:auto;font-size:12px;">' + esc(sale.receipt_no) + "</span>";
 
-        var rows = [
+        var itemRows = [
             field("Item", esc(sale.item_name) + ' <span class="text-soft mono" style="font-size:11px;">(' + esc(sale.sku) + ")</span>"),
             field("Variant / Unit", esc(sale.variant) + ", " + esc(sale.unit)),
             field("Quantity", esc(sale.qty_sold)),
             field("Unit price", esc(peso(sale.unit_price))),
+        ];
+        if (sale.items && sale.items.length) {
+            // An order of several scents: one line per product instead of a single item.
+            itemRows = [field("Products", sale.items.map(function (it) {
+                return esc(it.item_name) + ' <span class="text-soft mono" style="font-size:11px;">' +
+                    esc(it.qty_sold) + " &times; " + esc(peso(it.unit_price)) + " = " + esc(peso(it.line_total)) + "</span>";
+            }).join("<br>"), true)];
+        }
+        var rows = itemRows.concat([
             field("Total", esc(peso(sale.line_total))),
             field("Sale type", esc(sale.sale_type)),
             field("Payment", esc(sale.payment_method)),
             field("Customer", esc(sale.customer_name)),
             field("Branch", esc(sale.branch_name)),
             field("Date", esc(sale.sold_at)),
-        ];
+        ]);
         if (sale.customer_address) {
             rows.push(field("Address", esc(sale.customer_address), true));
         }
@@ -306,7 +315,7 @@
         var voidBtn = document.createElement("button");
         voidBtn.type = "button";
         voidBtn.className = "btn btn-ghost btn-sm";
-        voidBtn.textContent = "Void sale";
+        voidBtn.textContent = (sale.items && sale.items.length) ? "Void whole order" : "Void sale";
         if (!sale.voidable) {
             voidBtn.disabled = true;
             voidBtn.title = "Branch staff can only void sales recorded today. Ask HQ to void older ones.";

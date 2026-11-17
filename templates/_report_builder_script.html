@@ -1,0 +1,359 @@
+{# Behaviour for the report builder in _report_builder.html. Include it from {% block scripts %} (so soft
+   navigation re-runs it) after setting rb_admin to true or false. #}
+<script nonce="{{ csp_nonce() }}">
+  (function () {
+    const IS_ADMIN = {{ 'true' if rb_admin else 'false' }};
+    const form = document.getElementById('reportForm');
+    if (!form) return;
+
+    // Which options each report understands (the server ignores the rest, so they are hidden and disabled).
+    const REPORT_FIELDS = {
+      products: ['variant', 'unit', 'search'],
+      production_log: ['unit', 'search', 'window'],
+      materials: ['search', 'window'],
+      material_prices: ['search'],
+      suppliers: ['search'],
+      formulas: ['unit'],
+      cogs_logs: ['unit', 'search', 'window'],
+      bulk_batches: ['search', 'window'],
+      branch_stock: ['branch_id', 'variant', 'unit', 'low_stock_only', 'search'],
+      stock_requests: ['branch_id', 'status', 'search', 'window'],
+      shipments: ['branch_id', 'status', 'search', 'window'],
+      inventory_log: ['branch_id', 'movement_type', 'search', 'window'],
+      sales_history: ['branch_id', 'variant', 'unit', 'sale_type', 'payment_method', 'search', 'window'],
+      credit_purchases: ['branch_id', 'sale_type', 'search', 'window'],
+      voided_sales: ['branch_id', 'search', 'window'],
+      customers: ['branch_id', 'search'],
+      discrepancies: ['branch_id', 'movement_type', 'search', 'window'],
+      branch_performance: ['window'],
+      low_stock: ['branch_id', 'search'],
+      financial_summary: ['window'],
+      admin_log: ['search', 'window'],
+      login_activity: ['search', 'window'],
+      accounts: ['role', 'account_status', 'search'],
+      partners: ['partner_type', 'search'],
+      packages: ['package_scope', 'package_status', 'search'],
+      partner_inquiries: ['partner_type', 'inquiry_status', 'search', 'window'],
+    };
+
+    // "search" matches a different column per report: same field, different label.
+    const SEARCH_LABELS = {
+      materials: ['Search material, receipt or supplier', 'e.g. Fixative or OR-00123'],
+      material_prices: ['Search material', 'e.g. Oil Scent'],
+      suppliers: ['Search supplier or contact', 'e.g. Golden Scent Supply Co.'],
+      cogs_logs: ['Search item, SKU or batch', 'e.g. Golden Hour, HAS-001, or a batch code'],
+      bulk_batches: ['Search scent or batch', 'e.g. Golden Hour or BB-0012'],
+      sales_history: ['Search item, SKU or customer', 'e.g. Golden Hour, HAS-001, or a customer'],
+      customers: ['Search customer', 'e.g. Maria Santos'],
+      discrepancies: ['Search item, SKU or delivery', 'e.g. Golden Hour or a delivery number'],
+      accounts: ['Search username', 'e.g. manila'],
+      inventory_log: ['Search item, SKU or notes', 'e.g. Golden Hour, HAS-001, or a note'],
+      credit_purchases: ['Search item, SKU or name', 'e.g. Golden Hour, HAS-001, or a name'],
+      partners: ['Search partner or contact', 'e.g. Golden Scent Trading'],
+      packages: ['Search package', 'e.g. Starter Bundle'],
+      partner_inquiries: ['Search company or contact', 'e.g. Golden Scent Trading'],
+      stock_requests: ['Search item, SKU or delivery', 'e.g. Golden Hour or DR-000123'],
+      shipments: ['Search delivery number or branch', 'e.g. DR-000123'],
+      voided_sales: ['Search item, SKU or reason', 'e.g. Golden Hour or wrong item'],
+      production_log: ['Search item, SKU or batch', 'e.g. Golden Hour or a batch code'],
+      admin_log: ['Search admin, action or target', 'e.g. manila or a product name'],
+      login_activity: ['Search username, IP or reason', 'e.g. manila or 192.168.1.10'],
+    };
+    const DEFAULT_SEARCH = ['Search item or SKU', 'e.g. Golden Hour or HAS-001'];
+
+    // Only the choices a report can actually match: a credit sale is never a freebie, discrepancies are only
+    // damage or adjustment, and a branch's own stock never lists bulk.
+    const OPTION_LIMITS = {
+      credit_purchases: { rb_sale_type: (v) => v !== 'Freebie' },
+      discrepancies: { rb_movement_type: (v) => ['all', 'DAMAGE', 'ADJUSTMENT'].includes(v) },
+    };
+    if (!IS_ADMIN) OPTION_LIMITS.branch_stock = { rb_unit: (v) => v !== 'BULK' };
+    // Summary reports have no "latest N rows".
+    const NO_LATEST = ['branch_performance', 'financial_summary'];
+
+    const $ = (id) => document.getElementById(id);
+    const catalog = Array.from(form.querySelectorAll('.rbx-option'));
+    const radios = Array.from(form.querySelectorAll('input[name="type"]'));
+    const tabs = Array.from(form.querySelectorAll('.rbx-tab'));
+    const panels = Array.from(form.querySelectorAll('.rbx-panel'));
+    const modeIn = $('rb_mode'), recentIn = $('rb_recent_n'), monthIn = $('rb_month');
+    const fromIn = $('rb_date_from'), toIn = $('rb_date_to');
+    const STORE = 'rbxLastReport:' + (IS_ADMIN ? 'admin' : 'branch');
+
+    // ---------------------------------------------------------------- dates
+    const iso = (d) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+    const daysAgo = (n) => { const d = new Date(); d.setDate(d.getDate() - n); return d; };
+    const nice = (s) => new Date(s + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    const PRESETS = [
+      { id: 'latest', label: 'Latest entries', mode: 'recent' },
+      { id: 'today', label: 'Today', mode: 'range', from: () => iso(new Date()), to: () => iso(new Date()) },
+      { id: '7d', label: 'Last 7 days', mode: 'range', from: () => iso(daysAgo(6)), to: () => iso(new Date()) },
+      { id: '30d', label: 'Last 30 days', mode: 'range', from: () => iso(daysAgo(29)), to: () => iso(new Date()) },
+      { id: 'month', label: 'This month', mode: 'month', month: () => iso(new Date()).slice(0, 7) },
+      { id: 'lastmonth', label: 'Last month', mode: 'month', month: () => { const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() - 1); return iso(d).slice(0, 7); } },
+      { id: 'year', label: 'This year', mode: 'range', from: () => new Date().getFullYear() + '-01-01', to: () => iso(new Date()) },
+      { id: 'all', label: 'All time', mode: 'all' },
+      { id: 'custom', label: 'Pick dates', mode: 'range', custom: true },
+    ];
+    let preset = 'latest';
+
+    // ---------------------------------------------------------------- chips instead of dropdowns
+    const CHIP_MAX = 12;
+    const optionCache = new Map();
+    function limitOptions(select, allow) {
+      if (!optionCache.has(select)) optionCache.set(select, Array.from(select.options).map((o) => o.cloneNode(true)));
+      const all = optionCache.get(select);
+      const keep = allow ? all.filter((o) => allow(o.value)) : all;
+      const cur = select.value;
+      select.replaceChildren(...keep.map((o) => o.cloneNode(true)));
+      select.value = keep.some((o) => o.value === cur) ? cur : keep[0].value;
+    }
+    function chipsFor(select) {
+      const field = select.closest('.field');
+      let group = field.querySelector(':scope > .rbx-chips');
+      const opts = Array.from(select.options);
+      if (opts.length > CHIP_MAX) {            // too many to scan as chips: keep the dropdown
+        if (group) group.remove();
+        select.classList.remove('rbx-real');
+        return;
+      }
+      if (!group) {
+        group = document.createElement('div');
+        group.className = 'rbx-chips';
+        group.setAttribute('role', 'radiogroup');
+        group.setAttribute('aria-labelledby', select.getAttribute('aria-labelledby'));
+        (select.closest('.cs-select') || select).after(group);
+        group.addEventListener('click', (e) => {
+          const b = e.target.closest('.rbx-chip');
+          if (!b || select.disabled) return;
+          select.value = b.dataset.value;
+          select.dispatchEvent(new Event('change', { bubbles: true }));
+        });
+      }
+      select.classList.add('rbx-real');
+      group.replaceChildren(...opts.map((o) => {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'rbx-chip';
+        b.dataset.value = o.value;
+        b.setAttribute('role', 'radio');
+        b.setAttribute('aria-checked', String(o.value === select.value));
+        b.textContent = o.textContent.trim();
+        return b;
+      }));
+    }
+    function syncChips(select) {
+      const group = select.closest('.field').querySelector(':scope > .rbx-chips');
+      if (!group) return;
+      group.querySelectorAll('.rbx-chip').forEach((b) => b.setAttribute('aria-checked', String(b.dataset.value === select.value)));
+    }
+    const filterSelects = Array.from(form.querySelectorAll('[data-filter] select'));
+    filterSelects.forEach((s) => s.addEventListener('change', () => syncChips(s)));
+
+    // ---------------------------------------------------------------- the report picker
+    function currentType() { const r = radios.find((x) => x.checked); return r ? r.value : ''; }
+    function showGroup(name) {
+      tabs.forEach((t) => t.setAttribute('aria-pressed', String(t.dataset.group === name)));
+      panels.forEach((p) => { p.hidden = p.dataset.group !== name; });
+    }
+    function runFind() {
+      const q = $('rbxFind').value.trim().toLowerCase();
+      if (!q) {
+        const t = radios.find((x) => x.checked);
+        const g = t ? t.closest('.rbx-panel').dataset.group : (tabs[0] && tabs[0].dataset.group);
+        catalog.forEach((c) => { c.hidden = false; });
+        $('rbxNoFind').hidden = true;
+        form.querySelector('.rbx-tabs').hidden = false;
+        showGroup(g);
+        return;
+      }
+      const words = q.split(/\s+/);
+      let any = false;
+      form.querySelector('.rbx-tabs').hidden = true;
+      catalog.forEach((c) => {
+        const hit = words.every((w) => c.dataset.find.includes(w));
+        c.hidden = !hit;
+        any = any || hit;
+      });
+      panels.forEach((p) => { p.hidden = !p.querySelector('.rbx-option:not([hidden])'); });
+      $('rbxNoFind').hidden = any;
+    }
+    tabs.forEach((t) => t.addEventListener('click', () => { $('rbxFind').value = ''; showGroup(t.dataset.group); }));
+    $('rbxFind').addEventListener('input', runFind);
+
+    // ---------------------------------------------------------------- options for the chosen report
+    function applyType() {
+      const type = currentType();
+      const fields = REPORT_FIELDS[type] || [];
+      form.querySelectorAll('[data-filter]').forEach((el) => {
+        const on = fields.includes(el.dataset.filter);
+        el.hidden = !on;
+        el.querySelectorAll('input, select, textarea').forEach((c) => {
+          if (c.type === 'hidden' || c.closest('.rbx-sub')) return;   // the window controls manage their own
+          c.disabled = !on;
+        });
+      });
+      const limits = OPTION_LIMITS[type] || {};
+      ['rb_sale_type', 'rb_movement_type', 'rb_unit'].forEach((id) => { const s = $(id); if (s) limitOptions(s, limits[id]); });
+      filterSelects.forEach((s) => chipsFor(s));
+      const copy = SEARCH_LABELS[type] || DEFAULT_SEARCH;
+      $('rb_search_label').textContent = copy[0];
+      $('rb_search').placeholder = copy[1];
+      const windowed = fields.includes('window');
+      // Presets that don't make sense for this report.
+      renderPresets(NO_LATEST.includes(type));
+      if (windowed) {
+        if (NO_LATEST.includes(type) && preset === 'latest') setPreset('30d'); else setPreset(preset);
+      } else {
+        [modeIn, recentIn, monthIn, fromIn, toIn].forEach((c) => { c.disabled = true; });
+      }
+      $('rbxNoOptions').hidden = fields.length > 0;
+    }
+
+    function renderPresets(noLatest) {
+      const box = $('rbxPresets');
+      box.replaceChildren(...PRESETS.filter((p) => !(noLatest && p.id === 'latest')).map((p) => {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'rbx-chip';
+        b.dataset.preset = p.id;
+        b.setAttribute('role', 'radio');
+        b.setAttribute('aria-checked', String(p.id === preset));
+        b.textContent = p.label;
+        return b;
+      }));
+      const rc = $('rbxRecentChips');
+      if (!rc.children.length) {
+        rc.replaceChildren(...['20', '50', '100', '200'].map((n) => {
+          const b = document.createElement('button');
+          b.type = 'button'; b.className = 'rbx-chip'; b.dataset.n = n; b.setAttribute('role', 'radio');
+          b.setAttribute('aria-checked', String(n === recentIn.value));
+          b.textContent = 'Latest ' + n;
+          return b;
+        }));
+      }
+    }
+
+    function setPreset(id) {
+      const p = PRESETS.find((x) => x.id === id) || PRESETS[0];
+      preset = p.id;
+      modeIn.disabled = false;
+      modeIn.value = p.mode;
+      recentIn.disabled = p.mode !== 'recent';
+      monthIn.disabled = p.mode !== 'month';
+      monthIn.value = p.month ? p.month() : '';
+      fromIn.disabled = toIn.disabled = p.mode !== 'range';
+      if (p.mode === 'range' && !p.custom) { fromIn.value = p.from(); toIn.value = p.to(); }
+      if (p.custom && !fromIn.value) { fromIn.value = iso(daysAgo(29)); toIn.value = iso(new Date()); }
+      [fromIn, toIn].forEach((c) => c.dispatchEvent(new Event('change', { bubbles: true })));   // keeps the date picker's label in step
+      $('rbxRecent').hidden = p.mode !== 'recent';
+      $('rbxDates').hidden = !p.custom;
+      $('rbxPresets').querySelectorAll('.rbx-chip').forEach((b) => b.setAttribute('aria-checked', String(b.dataset.preset === preset)));
+    }
+    $('rbxPresets').addEventListener('click', (e) => { const b = e.target.closest('.rbx-chip'); if (b) { setPreset(b.dataset.preset); changed(); } });
+    $('rbxRecentChips').addEventListener('click', (e) => {
+      const b = e.target.closest('.rbx-chip');
+      if (!b) return;
+      recentIn.value = b.dataset.n;
+      $('rbxRecentChips').querySelectorAll('.rbx-chip').forEach((x) => x.setAttribute('aria-checked', String(x === b)));
+      changed();
+    });
+
+    // ---------------------------------------------------------------- the plain-words summary and the live row count
+    function chosenText(select) {
+      if (select.disabled || select.closest('[hidden]')) return '';
+      const o = select.options[select.selectedIndex];
+      if (!o || o.value === 'all' || o.value === '') return '';
+      return o.textContent.trim();
+    }
+    function windowText() {
+      if (!(REPORT_FIELDS[currentType()] || []).includes('window')) return '';
+      const p = PRESETS.find((x) => x.id === preset);
+      if (!p) return '';
+      if (p.id === 'latest') return 'the latest ' + recentIn.value;
+      if (p.id === 'all') return 'all time';
+      if (p.id === 'month' || p.id === 'lastmonth') return new Date(monthIn.value + '-01T00:00:00').toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+      if (p.id === 'today') return 'today';
+      if (p.custom || p.id === '7d' || p.id === '30d' || p.id === 'year') {
+        if (fromIn.value && toIn.value) return p.custom || p.id === 'year' ? nice(fromIn.value) + ' to ' + nice(toIn.value) : p.label.toLowerCase();
+        return p.label.toLowerCase();
+      }
+      return p.label.toLowerCase();
+    }
+    function describe() {
+      const r = radios.find((x) => x.checked);
+      if (!r) return 'Choose a report to begin.';
+      const bits = filterSelects.map(chosenText).filter(Boolean);
+      const q = $('rb_search').disabled || $('rb_search').closest('[hidden]') ? '' : $('rb_search').value.trim();
+      if (q) bits.push('matching “' + q + '”');
+      const w = windowText();
+      if (w) bits.push(w);
+      return r.dataset.label + (bits.length ? ': ' + bits.join(', ') : ', everything') + '.';
+    }
+
+    let timer = null, ctl = null, lastRows = null;
+    function setCount(text, tone, rows) {
+      const c = $('rbxCount');
+      c.textContent = text;
+      c.dataset.tone = tone || '';
+      lastRows = rows;
+      const empty = rows === 0;
+      ['rbxPdf', 'rbxXlsx'].forEach((id) => { const b = $(id); b.disabled = empty || !currentType(); });
+      $('rbxBar').classList.toggle('is-empty', empty);
+    }
+    function preview() {
+      const type = currentType();
+      if (!type) { setCount('', '', null); return; }
+      if (ctl) ctl.abort();
+      ctl = new AbortController();
+      const params = new URLSearchParams(new FormData(form));
+      params.delete('format');
+      setCount('Checking…', 'busy', null);
+      fetch(form.dataset.previewUrl + '?' + params.toString(), { signal: ctl.signal, headers: { Accept: 'application/json' } })
+        .then((r) => { if (!r.ok) throw new Error(r.status); return r.json(); })
+        .then((d) => {
+          if (d.rows === 0) setCount('No rows match these choices. Try a wider date range or fewer options.', 'warn', 0);
+          else setCount((d.rows === 1 ? '1 row' : d.rows.toLocaleString() + ' rows') + (d.truncated ? ', capped at 1,000. Narrow it to see the rest.' : ' ready.'), d.truncated ? 'warn' : 'ok', d.rows);
+        })
+        .catch((e) => { if (e.name !== 'AbortError') setCount('', '', null); });   // no count is fine, the download still works
+    }
+    function changed() {
+      $('rbxSummary').textContent = describe();
+      clearTimeout(timer);
+      timer = setTimeout(preview, 350);
+    }
+    form.addEventListener('change', (e) => { if (e.target.name !== 'type') changed(); });
+    $('rb_search').addEventListener('input', changed);
+
+    // ---------------------------------------------------------------- picking, resetting, remembering
+    function pick(key, opts) {
+      const r = radios.find((x) => x.value === key) || radios[0];
+      if (!r) return;
+      r.checked = true;
+      try { localStorage.setItem(STORE, r.value); } catch (e) { /* private mode: nothing to remember */ }
+      if (!(opts && opts.keepFind)) { $('rbxFind').value = ''; runFind(); }
+      applyType();
+      changed();
+    }
+    radios.forEach((r) => r.addEventListener('change', () => pick(r.value, { keepFind: true })));
+
+    $('rbxReset').addEventListener('click', () => {
+      $('rb_search').value = '';
+      filterSelects.forEach((s) => { s.selectedIndex = 0; syncChips(s); });
+      recentIn.value = '50';
+      $('rbxRecentChips').querySelectorAll('.rbx-chip').forEach((x) => x.setAttribute('aria-checked', String(x.dataset.n === '50')));
+      preset = 'latest';
+      fromIn.value = toIn.value = '';
+      applyType();
+      changed();
+    });
+
+    // A report can be linked to: /reports?type=sales_history. Otherwise the one used last time, else Sales.
+    let start = new URLSearchParams(location.search).get('type');
+    if (!radios.some((r) => r.value === start)) { try { start = localStorage.getItem(STORE); } catch (e) { start = null; } }
+    if (!radios.some((r) => r.value === start)) start = radios.some((r) => r.value === 'sales_history') ? 'sales_history' : (radios[0] && radios[0].value);
+    recentIn.value = '50';
+    pick(start);
+    $('reportBuilder').classList.add('rbx-ready');
+  })();
+</script>

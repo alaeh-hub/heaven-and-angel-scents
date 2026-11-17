@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% import "_empty.html" as empty %}
 {% import "_macros.html" as m %}
 {% block title %}Dashboard{% endblock %}
 {% block heading %}Welcome, {{ session.username }}{% endblock %}
@@ -12,9 +13,11 @@
     display: grid;
     grid-template-columns: 1.4fr 1fr 1fr 1fr;
     gap: var(--space-lg);
+    border-top: 1px solid var(--border-strong);
   }
 
   .dash-stats .stat-tile {
+    border-top: 0;
     min-width: 0;
     display: flex;
     flex-direction: column;
@@ -22,10 +25,17 @@
 
   .dash-stats .stat-value {
     font-size: var(--text-2xl);
+    line-height: 2.25rem;
   }
 
   .dash-stats .dash-lead .stat-value {
     font-size: var(--text-3xl);
+  }
+
+  /* Hairline between figures so the row reads as one ledger line. */
+  .dash-stats .stat-tile + .stat-tile {
+    padding-left: var(--space-lg);
+    border-left: 1px solid var(--border);
   }
 
   .dash-stats .kpi-meta {
@@ -35,6 +45,14 @@
   .dash-stats .kpi-spark {
     height: 2.5rem;
     margin: var(--space-sm) 0 0;
+  }
+
+  .dash-stats .stat-foot {
+    display: flex;
+    align-items: center;
+    min-height: 1.5rem;
+    font-size: var(--text-xs);
+    color: var(--ink-soft);
   }
 
   .dash-stats .stat-foot a {
@@ -100,7 +118,7 @@
   </div>
   <div class="stat-tile">
     <div class="stat-label">SKUs carried</div>
-    <div class="kpi-value">{{ sku_count }}</div>
+    <div class="stat-value">{{ sku_count }}</div>
     <div class="stat-foot">in your branch</div>
   </div>
 </div>
@@ -148,9 +166,7 @@
       </table>
     </div>
     {% else %}
-    <div class="empty-state">
-      <p>Everything is above its reorder threshold.</p>
-    </div>
+    {{ empty.state('Nothing running low', 'Everything at your branch is above its reorder threshold.', icon='check', tone='clear', compact=True) }}
     {% endif %}
   </div>
 
@@ -188,10 +204,7 @@
       </table>
     </div>
     {% else %}
-    <div class="empty-state">
-      <p>No open requests right now.</p>
-      <p class="dash-empty-action"><a href="{{ url_for('branch.request_stock') }}" class="btn btn-ghost btn-sm">New request</a></p>
-    </div>
+    {{ empty.state('No open requests', 'Ask HQ for stock when you start running low.', icon='truck', compact=True, action='New request', href=url_for('branch.request_stock')) }}
     {% endif %}
   </div>
 </div>

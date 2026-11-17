@@ -84,8 +84,8 @@ def packages():
     )
 
 
-# Packages hold finished bottles only; Bulk/Refill stock (category, and
-# its BULK packaging size, see utils.PRODUCT_CATEGORIES) is left out.
+# Packages hold finished bottles only (bulk is sold by the mL from the bulk
+# batches and is not a product, so it can never be a package item).
 _BOTTLED_ONLY = "category <> 'Bulk/Refill' AND unit <> 'BULK'"
 
 
@@ -191,7 +191,7 @@ def add_package_item(package_id):
         return redirect(url_for("admin.package_detail", package_id=package_id))
 
     if not product:
-        flash("Select a bottled product from the list. Bulk/Refill products can't go in a package.", "error")
+        flash("Select a bottled product from the list. Bulk can't go in a package.", "error")
         return redirect(url_for("admin.package_detail", package_id=package_id))
 
     try:

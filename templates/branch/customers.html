@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% import "_empty.html" as empty %}
 {% import "_macros.html" as m %}
 {% block title %}Customers{% endblock %}
 {% block heading %}Customers{% endblock %}
@@ -124,9 +125,7 @@
           {% endfor %}
         </tbody>
       </table>
-      <div class="empty-state smart-no-match" style="display:none;">
-        <p>No customers match your search.</p>
-      </div>
+      {{ empty.no_match('customers') }}
     </div>
     <div class="smart-pagination" style="display:none;">
       <button type="button" class="btn btn-ghost btn-sm" data-page-prev><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m15 6-6 6 6 6"/></svg>Previous</button>
@@ -135,10 +134,7 @@
     </div>
   </div>
   {% else %}
-  <div class="empty-state">
-    <p>No named customers recorded yet. Record Sale’s customer name field is optional, so walk-ins won’t show up here.</p>
-    <p><a href="{{ url_for('branch.record_sale') }}" class="btn btn-ghost btn-sm">Record a sale</a></p>
-  </div>
+  {{ empty.state('No named customers yet', 'A customer appears here once a sale is recorded with their name. Walk-in sales without a name are not listed.', icon='users', action='Record a sale', href=url_for('branch.record_sale')) }}
   {% endif %}
 </div>
 {% endblock %}

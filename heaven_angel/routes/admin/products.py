@@ -15,7 +15,7 @@ from heaven_angel.decorators import admin_required
 from heaven_angel.services.audit import log_action
 from heaven_angel.sockets import notify_all
 from heaven_angel.utils import (
-    BOTTLE_UNITS, PRODUCT_CATEGORIES, PRODUCT_UNITS, ValidationError,
+    BOTTLE_UNITS, PRODUCT_UNITS, ValidationError,
     base_code_from_sku, build_sku, business_now, parse_base_code, parse_non_negative_decimal,
 )
 
@@ -131,23 +131,16 @@ def products():
     if request.method == "POST":
         item_name = request.form.get("item_name", "").strip()
         variant = request.form.get("variant")
-        category = request.form.get("category") or "Bottled"
-        # A Bulk/Refill product has no fixed size to pick — its unit is
-        # always BULK, set here rather than trusted from the form, same
-        # reasoning as sale_type == "Freebie" forcing payment_method to
-        # Cash in record_sale() below. A Bottled product must pick one of
-        # the four real bottle sizes; BULK is never a valid choice for it.
-        unit = "BULK" if category == "Bulk/Refill" else request.form.get(
-            "unit")
+        # Every product is a bottle: pick one of the real bottle sizes.
+        # (Bulk is not a product, it is sold by the mL from the bulk batches.)
+        category = "Bottled"
+        unit = request.form.get("unit")
 
         try:
             base_code = parse_base_code(request.form.get("base_code"))
             price = parse_non_negative_decimal(
                 request.form.get("price"), "Price")
-            if category not in PRODUCT_CATEGORIES:
-                raise ValidationError("Select a valid category.")
-            valid_units = PRODUCT_UNITS if category == "Bulk/Refill" else BOTTLE_UNITS
-            if not item_name or variant not in ("Male", "Female") or unit not in valid_units:
+            if not item_name or variant not in ("Male", "Female") or unit not in BOTTLE_UNITS:
                 raise ValidationError(
                     "Please fill in every field with a valid value.")
             # The base code is reusable across sizes (e.g. base 'A1' + unit
@@ -206,12 +199,12 @@ def products():
            LEFT JOIN branch_inventory bi ON p.sku = bi.sku
            GROUP BY p.sku ORDER BY p.item_name"""
     )
-    # SKU counts on this page are by base code (A1-85ML, A1-50ML and
-    # A1-BULK are one product, "A1"), not one per size row.
+    # SKU counts on this page are by base code (A1-85ML and A1-50ML
+    # are one product, "A1"), not one per size row.
     for row in catalog:
         row["base_code"] = base_code_from_sku(row["sku"], row["unit"])
     return render_template(
-        "admin/products.html", catalog=catalog, unit_choices=BOTTLE_UNITS, category_choices=PRODUCT_CATEGORIES,
+        "admin/products.html", catalog=catalog, unit_choices=BOTTLE_UNITS,
     )
 
 
@@ -283,6 +276,10 @@ def edit_product():
 # hand-typed product, rather than a separate, looser path for
 # CSV-sourced rows.
 _PRODUCT_CSV_COLUMNS = ["base_code", "item_name", "variant", "unit", "price"]
+# Short headers used by the styled .xlsx export; import accepts both sets.
+_PRODUCT_XLSX_HEADERS = ["Code*", "Name*", "Variant*", "Unit*", "Price*"]  # all required
+_PRODUCT_HEADER_ALIASES = dict(zip(
+    (h.rstrip("*").lower() for h in _PRODUCT_XLSX_HEADERS), _PRODUCT_CSV_COLUMNS))
 
 
 @bp.route("/products/export")
@@ -310,16 +307,83 @@ def export_products():
         ])
 
     log_action("export_products", details=f"{len(catalog)} SKUs")
+    stamp = business_now().strftime('%Y%m%d_%H%M%S')
+
+    # Default download is a branded .xlsx (a CSV can't carry colours);
+    # ?format=csv keeps the plain file for anything that needs it. Both
+    # have the same columns, and import_products() accepts either.
+    if request.args.get("format") != "csv":
+        return send_file(
+            _build_products_workbook(catalog),
+            mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            as_attachment=True, download_name=f"products_{stamp}.xlsx",
+        )
 
     # utf-8-sig (BOM) so Excel opens ₱/accented text correctly instead
     # of guessing cp1252 on a plain utf-8 file, same reasoning as any
     # other CSV this app hands to a non-technical admin.
     payload = buffer.getvalue().encode("utf-8-sig")
-    filename = f"products_{business_now().strftime('%Y%m%d_%H%M%S')}.csv"
     return send_file(
         io.BytesIO(payload), mimetype="text/csv",
-        as_attachment=True, download_name=filename,
+        as_attachment=True, download_name=f"products_{stamp}.csv",
     )
+
+
+def _build_products_workbook(catalog):
+    """The catalog as a plain workbook: bold heads over one dark rule, hairlines between rows, peso prices.
+
+    Row 1 is the header with the column names import_products() reads, and the products start on row 2,
+    so the file can be edited (a price changed, new rows added underneath) and uploaded again as it is.
+    Nothing may go above the header row, and the import ignores any extra columns."""
+    from openpyxl import Workbook
+    from openpyxl.styles import Alignment, Border, Font, Side
+    from heaven_angel.services.reports.excel import XL_MONEY_FMT
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Products"
+    wb.properties.creator = "Heaven & Angel Scents"
+    wb.properties.title = "Products"
+    ws.sheet_view.showGridLines = False
+
+    ink = "17140D"
+    heading_rule = Border(bottom=Side(style="medium", color=ink))
+    hairline = Border(bottom=Side(style="hair", color="B8AF98"))
+    for c, label in enumerate(_PRODUCT_XLSX_HEADERS, start=1):
+        cell = ws.cell(row=1, column=c, value=label)
+        cell.font = Font(name="Calibri", size=10, bold=True, color=ink)
+        cell.border = heading_rule
+        cell.alignment = Alignment(horizontal="right" if c == 5 else "left", vertical="center")
+    ws.row_dimensions[1].height = 22
+
+    for r, row in enumerate(catalog, start=2):
+        values = [base_code_from_sku(row["sku"], row["unit"]), row["item_name"],
+                  row["variant"], row["unit"], float(row["price"])]
+        for c, value in enumerate(values, start=1):
+            cell = ws.cell(row=r, column=c, value=value)
+            cell.font = Font(name="Calibri", size=10, color=ink)
+            cell.border = hairline
+            cell.alignment = Alignment(horizontal="right" if c == 5 else "left", vertical="center")
+        ws.cell(row=r, column=5).number_format = XL_MONEY_FMT
+
+    for col, width in zip("ABCDE", (14, 36, 12, 12, 14)):
+        ws.column_dimensions[col].width = width
+    ws.freeze_panes = "A2"
+    ws.auto_filter.ref = f"A1:E{max(len(catalog) + 1, 2)}"
+
+    # Printing: portrait, one page wide, heads on every page.
+    ws.page_setup.orientation = "portrait"
+    ws.page_setup.fitToWidth = 1
+    ws.page_setup.fitToHeight = 0
+    ws.sheet_properties.pageSetUpPr.fitToPage = True
+    ws.print_title_rows = "1:1"
+    ws.oddFooter.right.text = "Page &P of &N"
+    ws.oddFooter.right.size = 9
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    return buf
 
 
 @bp.route("/products/import", methods=["POST"])
@@ -353,14 +417,37 @@ def import_products():
         flash("Choose a CSV file to import.", "error")
         return redirect(url_for("admin.products"))
 
-    try:
-        raw = file_storage.read().decode("utf-8-sig")
-    except UnicodeDecodeError:
-        flash(
-            "That file doesn't look like a valid CSV (couldn't read it as UTF-8).", "error")
-        return redirect(url_for("admin.products"))
+    if file_storage.filename.lower().endswith(".xlsx"):
+        # The styled export: read its first sheet back into the same
+        # header-keyed dict rows csv.DictReader would give.
+        from openpyxl import load_workbook
+        try:
+            sheet = load_workbook(file_storage, read_only=True, data_only=True).active
+            sheet_rows = list(sheet.iter_rows(values_only=True))
+        except Exception:
+            flash("That doesn't look like a valid .xlsx file.", "error")
+            return redirect(url_for("admin.products"))
+        fieldnames = [
+            _PRODUCT_HEADER_ALIASES.get(str(h).strip().rstrip("*").strip().lower(), str(h).strip())
+            if h is not None else ""
+            for h in (sheet_rows[0] if sheet_rows else [])
+        ]
+        records = [
+            {name: ("" if v is None else str(v).strip()) for name, v in zip(fieldnames, vals)}
+            for vals in sheet_rows[1:] if any(v not in (None, "") for v in vals)
+        ]
 
-    reader = csv.DictReader(io.StringIO(raw))
+        reader = type("SheetReader", (), {"fieldnames": fieldnames})()
+        row_iter = records
+    else:
+        try:
+            raw = file_storage.read().decode("utf-8-sig")
+        except UnicodeDecodeError:
+            flash(
+                "That file doesn't look like a valid CSV (couldn't read it as UTF-8).", "error")
+            return redirect(url_for("admin.products"))
+        reader = csv.DictReader(io.StringIO(raw))
+        row_iter = reader
     required_columns = {"base_code", "item_name", "variant", "unit", "price"}
     if not required_columns.issubset(set(reader.fieldnames or [])):
         flash(
@@ -373,22 +460,20 @@ def import_products():
     updated = 0
     errors = []
 
-    for row_num, row in enumerate(reader, start=2):  # row 1 is the header
+    for row_num, row in enumerate(row_iter, start=2):  # row 1 is the header
         try:
             base_code = parse_base_code(row.get("base_code"))
             item_name = (row.get("item_name") or "").strip()
             variant = (row.get("variant") or "").strip()
             unit = (row.get("unit") or "").strip()
             price = parse_non_negative_decimal(row.get("price"), "Price")
-            # Any unit export_products() writes is accepted back,
-            # including BULK. Category isn't a CSV column: it follows from
-            # the unit, same pairing the manual Add form enforces (BULK is
-            # always Bulk/Refill, a bottle size is always Bottled).
+            # Any unit export_products() writes is accepted back. Category
+            # isn't a CSV column: every product is Bottled.
             if not item_name or variant not in ("Male", "Female") or unit not in PRODUCT_UNITS:
                 raise ValidationError(
                     f"item_name, variant, and unit must all be valid (unit is one of "
                     f"{', '.join(PRODUCT_UNITS)}).")
-            category = "Bulk/Refill" if unit == "BULK" else "Bottled"
+            category = "Bottled"
             sku = build_sku(base_code, unit)
         except ValidationError as err:
             errors.append(f"Row {row_num}: {err}")

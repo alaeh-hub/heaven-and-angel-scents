@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% import "_empty.html" as empty %}
 {% import "_macros.html" as m %}
 {% block title %}Admin Log{% endblock %}
 {% block heading %}Admin Log{% endblock %}
@@ -75,9 +76,7 @@
           {% endfor %}
         </tbody>
       </table>
-      <div class="empty-state smart-no-match" style="display:none;">
-        <p>No activity matches your search.</p>
-      </div>
+      {{ empty.no_match('log entries') }}
     </div>
     <div class="smart-pagination" style="display:none;">
       <button type="button" class="btn btn-ghost btn-sm" data-page-prev>Previous</button>
@@ -96,7 +95,7 @@
   </div>
   {% endif %}
   {% else %}
-  <div class="empty-state"><p>No admin activity logged yet. Changes to accounts, products and branches appear here as admins make them.</p></div>
+  {{ empty.state('No admin activity yet', 'Changes to accounts, products and branches are recorded here as admins make them.', icon='shield') }}
   {% endif %}
 </div>
 {% endblock %}

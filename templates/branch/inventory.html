@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% import "_empty.html" as empty %}
 {% import "_macros.html" as m %}
 {% block title %}My Inventory{% endblock %}
 {% block heading %}My Inventory{% endblock %}
@@ -92,9 +93,7 @@
           {% endfor %}
         </tbody>
       </table>
-      <div class="empty-state smart-no-match" style="display:none;">
-        <p>No products match your search.</p>
-      </div>
+      {{ empty.no_match('products') }}
     </div>
     <div class="smart-pagination" style="display:none;">
       <button type="button" class="btn btn-ghost btn-sm" data-page-prev><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m15 6-6 6 6 6"/></svg>Previous</button>
@@ -105,9 +104,7 @@
   <p class="page-note">This is the reference price: the amount actually charged is
     recorded per sale on the Record Sale page.</p>
   {% else %}
-  <div class="empty-state">
-    <p>No products assigned to your branch yet.</p>
-  </div>
+  {{ empty.state('No products assigned yet', 'Products show up here, with their stock levels, once they are assigned to your branch.', icon='box') }}
   {% endif %}
 </div>
 {% endblock %}

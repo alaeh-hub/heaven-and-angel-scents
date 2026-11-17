@@ -64,12 +64,12 @@ def get_sales_summary(args, ctx):
 
     totals = query(
         f"SELECT {_UNITS_SQL}, {_BULK_ML_SQL}, COALESCE(SUM(s.qty_sold*s.unit_price),0) AS revenue "
-        "FROM sales s JOIN products p ON s.sku = p.sku WHERE " + " AND ".join(conditions),
+        "FROM sales s JOIN sale_catalog p ON s.sku = p.sku WHERE " + " AND ".join(conditions),
         tuple(params), fetchone=True,
     )
     top_items = query(
         f"SELECT p.item_name, {_UNITS_SQL}, {_BULK_ML_SQL}, SUM(s.qty_sold*s.unit_price) AS revenue "
-        "FROM sales s JOIN products p ON s.sku = p.sku WHERE " + " AND ".join(conditions) +
+        "FROM sales s JOIN sale_catalog p ON s.sku = p.sku WHERE " + " AND ".join(conditions) +
         " GROUP BY p.item_name ORDER BY units DESC, bulk_ml DESC LIMIT 5",
         tuple(params),
     )
@@ -78,7 +78,7 @@ def get_sales_summary(args, ctx):
     by_type = query(
         "SELECT s.sale_type, s.payment_method, COUNT(*) AS transactions, "
         f"{_UNITS_SQL}, {_BULK_ML_SQL}, COALESCE(SUM(s.qty_sold*s.unit_price),0) AS revenue "
-        "FROM sales s JOIN products p ON s.sku = p.sku WHERE " + " AND ".join(conditions) +
+        "FROM sales s JOIN sale_catalog p ON s.sku = p.sku WHERE " + " AND ".join(conditions) +
         " GROUP BY s.sale_type, s.payment_method ORDER BY revenue DESC",
         tuple(params),
     )
@@ -127,7 +127,7 @@ def get_sales_summary(args, ctx):
             f"SELECT b.branch_name, b.is_hq, {_UNITS_SQL}, {_BULK_ML_SQL}, "
             "COALESCE(SUM(s.qty_sold*s.unit_price),0) AS revenue "
             "FROM branches b LEFT JOIN sales s ON s.branch_id = b.branch_id AND " +
-            _PERIOD_SQL[period] + " LEFT JOIN products p ON p.sku = s.sku" +
+            _PERIOD_SQL[period] + " LEFT JOIN sale_catalog p ON p.sku = s.sku" +
             " GROUP BY b.branch_id, b.branch_name ORDER BY revenue DESC"
         )
         result["by_branch"] = [
@@ -150,7 +150,7 @@ def get_credit_purchases(args, ctx):
         f"COUNT(*) AS transactions, {_UNITS_SQL}, {_BULK_ML_SQL}, "
         "COALESCE(SUM(s.qty_sold*s.unit_price),0) AS amount, MAX(s.sold_at) AS last_taken_at "
         "FROM sales s JOIN branches b ON s.branch_id = b.branch_id "
-        "JOIN products p ON s.sku = p.sku "
+        "JOIN sale_catalog p ON s.sku = p.sku "
         "LEFT JOIN users bu ON s.buyer_user_id = bu.user_id "
         "WHERE s.payment_method = 'Credit'" + frag +
         " GROUP BY b.branch_name, COALESCE(s.buyer_name, bu.username) "
@@ -195,7 +195,7 @@ def get_customers(args, ctx):
         "MIN(s.sold_at) AS first_sold_at, MAX(s.sold_at) AS last_visit, "
         "GROUP_CONCAT(DISTINCT b.branch_name ORDER BY b.branch_name SEPARATOR ', ') AS branches "
         "FROM sales s JOIN branches b ON s.branch_id = b.branch_id "
-        "JOIN products p ON s.sku = p.sku "
+        "JOIN sale_catalog p ON s.sku = p.sku "
         "WHERE " + where + " GROUP BY s.customer_name"
     )
     rows = query(
@@ -248,7 +248,7 @@ def get_recent_sales(args, ctx):
         "SELECT s.sold_at, b.branch_name, p.item_name, p.sku, p.unit, s.sale_type, s.payment_method, "
         "s.qty_sold, s.unit_price, COALESCE(s.buyer_name, bu.username) AS buyer, s.customer_name "
         "FROM sales s JOIN branches b ON s.branch_id = b.branch_id "
-        "JOIN products p ON s.sku = p.sku "
+        "JOIN sale_catalog p ON s.sku = p.sku "
         "LEFT JOIN users bu ON s.buyer_user_id = bu.user_id "
         "WHERE 1=1" + frag
     )
@@ -297,7 +297,7 @@ def get_branch_performance(args, ctx):
                       SUM(CASE WHEN p.unit <> 'BULK' THEN s.qty_sold ELSE 0 END) AS units_sold,
                       SUM(CASE WHEN p.unit = 'BULK' THEN s.qty_sold ELSE 0 END) AS bulk_ml_sold,
                       SUM(s.qty_sold * s.unit_price) AS revenue, COUNT(*) AS sales_count
-               FROM sales s JOIN products p ON p.sku = s.sku
+               FROM sales s JOIN sale_catalog p ON p.sku = s.sku
                WHERE {period_sql(period, "s.sold_at")} GROUP BY s.branch_id
            ) sa ON sa.branch_id = b.branch_id
            LEFT JOIN (

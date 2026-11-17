@@ -3,7 +3,7 @@ from flask import abort, flash, jsonify, redirect, render_template, request, sen
 
 from heaven_angel.db import query
 from heaven_angel.decorators import branch_required
-from heaven_angel.services.reports import REPORT_TYPES, get_report, parse_report_filters, render_report_excel, render_report_pdf
+from heaven_angel.services.reports import REPORT_GROUPS, REPORT_TYPES, get_report, report_catalog, parse_report_filters, render_report_excel, render_report_pdf
 from heaven_angel.services.trends import TREND_GRANULARITIES
 from heaven_angel.utils import (
     business_today, PRODUCT_UNITS,
@@ -16,13 +16,9 @@ from heaven_angel.routes.branch._common import _branch_id, bp
 @bp.route("/reports")
 @branch_required
 def reports():
-    report_types = [
-        {"key": key, "label": meta.get(
-            "branch_label", meta["label"]), "windowed": meta["windowed"]}
-        for key, meta in REPORT_TYPES.items() if meta["branch"]
-    ]
     return render_template(
-        "branch/reports.html", report_types=report_types, unit_choices=PRODUCT_UNITS,
+        "branch/reports.html", report_catalog=report_catalog("Branch"), report_groups=REPORT_GROUPS,
+        unit_choices=PRODUCT_UNITS,
         current_month=business_today().strftime("%Y-%m"),
     )
 
@@ -46,7 +42,7 @@ def generate_report():
     filters = parse_report_filters(request.args)
     report = get_report(
         report_type, filters, branch_scope=bid,
-        actor_label=f"{session.get('branch_name')} — {session.get('username')}",
+        actor_label=f"{session.get('branch_name')}, {session.get('username')}",
     )
 
     if report["row_count"] == 0:
@@ -65,6 +61,23 @@ def generate_report():
         buf, mimetype=mimetype, as_attachment=True,
         download_name=f"{report_type}-{stamp}.{fmt}",
     )
+
+
+@bp.route("/api/report-preview")
+@branch_required
+def report_preview():
+    """How many rows the builder's current choices would produce, scoped to this
+    branch, so the page can say "no rows match" before anyone downloads."""
+    report_type = request.args.get("type", "")
+    meta = REPORT_TYPES.get(report_type)
+    if meta is None or not meta["branch"]:
+        abort(404)
+    report = get_report(
+        report_type, parse_report_filters(request.args), branch_scope=_branch_id(),
+        actor_label=f"{session.get('branch_name')}, {session.get('username')}",
+    )
+    return jsonify({"rows": report["row_count"], "truncated": report["truncated"],
+                    "title": report["title"], "subtitle": report["subtitle"]})
 
 
 @bp.route("/api/reports-data")
@@ -94,7 +107,7 @@ def reports_data():
     sales_trend = query(
         """SELECT DATE(s.sold_at) AS day, COALESCE(SUM(CASE WHEN p.unit <> 'BULK' THEN s.qty_sold ELSE 0 END), 0) AS units_sold,
                   COALESCE(SUM(s.qty_sold * s.unit_price), 0) AS revenue
-           FROM sales s JOIN products p ON p.sku = s.sku
+           FROM sales s JOIN sale_catalog p ON p.sku = s.sku
            WHERE s.branch_id = %s AND s.sold_at >= NOW() - INTERVAL 14 DAY
            GROUP BY DATE(s.sold_at) ORDER BY day""",
         (bid,),
@@ -102,7 +115,7 @@ def reports_data():
 
     top_products = query(
         """SELECT p.item_name, COALESCE(SUM(s.qty_sold), 0) AS units_sold
-           FROM sales s JOIN products p ON s.sku = p.sku
+           FROM sales s JOIN sale_catalog p ON s.sku = p.sku
            WHERE s.branch_id = %s AND p.unit <> 'BULK'
            GROUP BY p.sku, p.item_name
            ORDER BY units_sold DESC LIMIT 8""",
@@ -139,14 +152,14 @@ def reports_data():
     payment_breakdown = query(
         """SELECT s.payment_method, COALESCE(SUM(CASE WHEN p.unit <> 'BULK' THEN s.qty_sold ELSE 0 END), 0) AS units_sold, COALESCE(SUM(CASE WHEN p.unit = 'BULK' THEN s.qty_sold ELSE 0 END), 0) AS bulk_ml,
                   COALESCE(SUM(s.qty_sold * s.unit_price), 0) AS revenue
-           FROM sales s JOIN products p ON p.sku = s.sku
+           FROM sales s JOIN sale_catalog p ON p.sku = s.sku
            WHERE s.branch_id = %s GROUP BY s.payment_method""",
         (bid,),
     )
     sale_type_breakdown = query(
         """SELECT s.sale_type, COALESCE(SUM(CASE WHEN p.unit <> 'BULK' THEN s.qty_sold ELSE 0 END), 0) AS units_sold, COALESCE(SUM(CASE WHEN p.unit = 'BULK' THEN s.qty_sold ELSE 0 END), 0) AS bulk_ml,
                   COALESCE(SUM(s.qty_sold * s.unit_price), 0) AS revenue
-           FROM sales s JOIN products p ON p.sku = s.sku
+           FROM sales s JOIN sale_catalog p ON p.sku = s.sku
            WHERE s.branch_id = %s GROUP BY s.sale_type""",
         (bid,),
     )
@@ -154,7 +167,7 @@ def reports_data():
     totals = query(
         """SELECT COALESCE(SUM(CASE WHEN p.unit <> 'BULK' THEN s.qty_sold ELSE 0 END), 0) AS units, COALESCE(SUM(CASE WHEN p.unit = 'BULK' THEN s.qty_sold ELSE 0 END), 0) AS bulk_ml,
                   COALESCE(SUM(s.qty_sold * s.unit_price), 0) AS revenue
-           FROM sales s JOIN products p ON p.sku = s.sku WHERE s.branch_id = %s""",
+           FROM sales s JOIN sale_catalog p ON p.sku = s.sku WHERE s.branch_id = %s""",
         (bid,), fetchone=True,
     )
 

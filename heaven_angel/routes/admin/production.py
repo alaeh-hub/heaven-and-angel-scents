@@ -18,7 +18,9 @@ from heaven_angel.utils import (
     parse_optional_text, parse_positive_decimal, parse_positive_int,
 )
 
-from heaven_angel.routes.admin.formulas import load_formula_items_by_unit
+from heaven_angel.routes.admin.batch_formulas import (
+    ROLES, calc_to_json, formula_for_scent, load_catalog, load_formula_config, load_scent_choices,
+)
 from heaven_angel.routes.admin._common import HQ_BRANCH_ID, bp
 
 
@@ -27,9 +29,8 @@ class _ProductionRun:
     sku: str
     batch_code: str | None
     qty: int
-    is_bulk: bool
-    bulk_batch_id: int | None   # Bottled runs only
-    bottle_ml: object           # Bottled runs only: mL of bulk one bottle takes
+    bulk_batch_id: int
+    bottle_ml: object           # mL of bulk one bottle takes
     cogs_per_unit: decimal.Decimal
     total_cogs: decimal.Decimal
 
@@ -38,50 +39,39 @@ def _plan_production_run(form):
     """Validate the Log Production form and work out the run's cost.
 
     Raises ValidationError with a message to flash as-is. Checks run in a
-    fixed order: units, product, then the bulk rate / bulk batch.
+    fixed order: units, product, then the bulk batch.
     """
     sku = form.get("sku")
     batch_code = form.get("batch_code", "").strip() or None
     qty = parse_positive_int(form.get("qty_produced"), "Units produced")
 
     product = query(
-        "SELECT sku, item_name, unit, category FROM products WHERE sku = %s",
+        "SELECT sku, item_name, unit FROM products WHERE sku = %s",
         (sku,), fetchone=True,
     )
     if not product:
         raise ValidationError("Select a valid product.")
 
-    is_bulk = product["category"] == "Bulk/Refill"
-    bulk_batch_id = None
-    bottle_ml = None
-    if is_bulk:
-        # Bulk/Refill has no formula/batch link at all — qty_produced here
-        # is a custom mL amount, and cost is that mL amount x a rate typed in
-        # for THIS batch (material costs fluctuate, so it's not pulled
-        # read-only from bulk_rate_settings the way Record Sale's price is —
-        # see that table's own comment in schema.sql).
-        cogs_per_unit = parse_non_negative_decimal(
-            form.get("rate_per_ml"), "Rate per mL").quantize(decimal.Decimal("0.0001"))
-    else:
-        # A Bottled run still requires picking a bulk batch — that's what
-        # enforces "materials go into a batch before they're bottled" and is
-        # what gets deducted when the run is recorded. But the cost logged is
-        # a flat, hand-set base price per packaging size (see
-        # unit_cogs_settings in schema.sql and save_unit_cogs()), not derived
-        # from the batch's own cost/ml — the batch already recorded its real
-        # materials cost when it was made, so re-deriving a per-bottle cost
-        # here would just be double bookkeeping.
-        bulk_batch_id = parse_positive_int(form.get("bulk_batch_id"), "Bulk batch")
-        bottle_ml = bottle_size_ml(product["unit"])
-        cogs_setting = query(
-            "SELECT base_cost_per_unit FROM unit_cogs_settings WHERE unit = %s",
-            (product["unit"],), fetchone=True,
-        )
-        cogs_per_unit = (
-            cogs_setting["base_cost_per_unit"] if cogs_setting else decimal.Decimal("0")
-        ).quantize(decimal.Decimal("0.0001"))
+    # A run still requires picking a bulk batch — that's what enforces
+    # "materials go into a batch before they're bottled" and is what gets
+    # deducted when the run is recorded. But the cost logged is a flat,
+    # hand-set base price per packaging size (see unit_cogs_settings in
+    # schema.sql and save_unit_cogs()), not derived from the batch's own
+    # cost/ml — the batch already recorded its real materials cost when it
+    # was made, so re-deriving a per-bottle cost here would just be double
+    # bookkeeping. (Bulk is not produced here: it is made as a bulk batch
+    # and sold by the mL straight from it.)
+    bulk_batch_id = parse_positive_int(form.get("bulk_batch_id"), "Bulk batch")
+    bottle_ml = bottle_size_ml(product["unit"])
+    cogs_setting = query(
+        "SELECT base_cost_per_unit FROM unit_cogs_settings WHERE unit = %s",
+        (product["unit"],), fetchone=True,
+    )
+    cogs_per_unit = (
+        cogs_setting["base_cost_per_unit"] if cogs_setting else decimal.Decimal("0")
+    ).quantize(decimal.Decimal("0.0001"))
     total_cogs = (cogs_per_unit * qty).quantize(decimal.Decimal("0.01"))
-    return _ProductionRun(sku, batch_code, qty, is_bulk, bulk_batch_id, bottle_ml, cogs_per_unit, total_cogs)
+    return _ProductionRun(sku, batch_code, qty, bulk_batch_id, bottle_ml, cogs_per_unit, total_cogs)
 
 
 def _record_production_run(run, user_id):
@@ -91,27 +81,26 @@ def _record_production_run(run, user_id):
     with transaction() as conn:
         cur = conn.cursor(dictionary=True)
 
-        if not run.is_bulk:
-            # Locked and checked/deducted inside the transaction, not before
-            # it, so two concurrent runs against the same batch can't both
-            # pass a stale remaining_ml check.
-            cur.execute(
-                "SELECT batch_id, remaining_ml FROM bulk_batches WHERE batch_id = %s FOR UPDATE",
-                (run.bulk_batch_id,),
+        # Locked and checked/deducted inside the transaction, not before
+        # it, so two concurrent runs against the same batch can't both
+        # pass a stale remaining_ml check.
+        cur.execute(
+            "SELECT batch_id, remaining_ml FROM bulk_batches WHERE batch_id = %s FOR UPDATE",
+            (run.bulk_batch_id,),
+        )
+        batch = cur.fetchone()
+        if not batch:
+            raise TransactionAborted("Select a valid bulk batch.")
+        needed_ml = run.bottle_ml * run.qty
+        if batch["remaining_ml"] < needed_ml:
+            raise TransactionAborted(
+                f"That batch only has {batch['remaining_ml']:.3f} mL left — "
+                f"this run needs {needed_ml:.3f} mL."
             )
-            batch = cur.fetchone()
-            if not batch:
-                raise TransactionAborted("Select a valid bulk batch.")
-            needed_ml = run.bottle_ml * run.qty
-            if batch["remaining_ml"] < needed_ml:
-                raise TransactionAborted(
-                    f"That batch only has {batch['remaining_ml']:.3f} mL left — "
-                    f"this run needs {needed_ml:.3f} mL."
-                )
-            cur.execute(
-                "UPDATE bulk_batches SET remaining_ml = remaining_ml - %s WHERE batch_id = %s",
-                (needed_ml, run.bulk_batch_id),
-            )
+        cur.execute(
+            "UPDATE bulk_batches SET remaining_ml = remaining_ml - %s WHERE batch_id = %s",
+            (needed_ml, run.bulk_batch_id),
+        )
 
         cur.execute(
             "INSERT INTO production_logs (sku, batch_code, qty_produced) VALUES (%s, %s, %s)",
@@ -241,7 +230,7 @@ def production():
             _record_production_run(run, session.get("user_id"))
             notify_admin(["production", "inventory", "movement_logs"])
             notify_all(["materials"])
-            unit_label = "mL" if run.is_bulk else "units"
+            unit_label = "units"
             flash(
                 f"Logged {run.qty} {unit_label} produced — ₱{run.total_cogs:,.2f} in cost of goods — and added to HQ warehouse stock.",
                 "success",
@@ -286,7 +275,7 @@ def bulk_batches():
     batch_rows = query(
         """SELECT batch_id, batch_code, scent_name, input_qty, input_unit,
                   total_volume_ml, total_cost, cost_per_ml, remaining_ml,
-                  notes, target_unit, target_bottle_qty, created_at
+                  notes, target_unit, target_bottle_qty, formula_label, created_at
            FROM bulk_batches ORDER BY created_at DESC"""
     )
     ingredient_rows = query(
@@ -300,20 +289,6 @@ def bulk_batches():
     ingredients_by_batch = {}
     for row in ingredient_rows:
         ingredients_by_batch.setdefault(row["batch_id"], []).append(row)
-
-    # Packaging total per size (see formula_items_by_unit()) — folded
-    # into each batch's own liquid cost/mL below into one reference
-    # "all-in cost per bottle" figure. Still purely informational: what a
-    # production run actually gets charged is the flat base price on
-    # unit_cogs_settings, not either of these (see production()'s own
-    # comment for why). Also embedded below (formula_items_by_unit) for
-    # the create-batch form's own live "this will also add ..." preview
-    # when a target bottle size is picked.
-    formula_items_by_unit = load_formula_items_by_unit()
-    formula_totals = {
-        unit: sum((i["line_cost"] for i in items), decimal.Decimal("0"))
-        for unit, items in formula_items_by_unit.items()
-    }
 
     batches = []
     for b in batch_rows:
@@ -344,7 +319,7 @@ def bulk_batches():
                 size_ml = bottle_size_ml(unit)
                 liquid_cost = (b["cost_per_ml"] * size_ml).quantize(
                     decimal.Decimal("0.0001"))
-                packaging_cost = formula_totals.get(unit, decimal.Decimal("0"))
+                packaging_cost = decimal.Decimal("0")
                 yields.append({
                     "unit": unit,
                     "bottle_count": int(b["remaining_ml"] // size_ml),
@@ -395,9 +370,27 @@ def bulk_batches():
                 liquid_subtotal / b["target_bottle_qty"]).quantize(decimal.Decimal("0.01"))
         batches.append(b)
 
+    config = load_formula_config()
+    resolved, catalog, missing_roles = load_catalog(materials_list, config)
     return render_template(
         "admin/bulk_batches.html",
         materials=materials_list,
+        # Built-in formulas (formula.txt) x sizes, costed live — see
+        # batch_formulas.py. The page renders the chosen one's summary
+        # from this; produce_batch_formula() recomputes it server-side.
+        formula_specs={f: {"scents": spec["scents"], "sizes": list(spec["sizes"])}
+                       for f, spec in config["formulas"].items()},
+        formula_catalog_json={
+            f: {str(size): calc_to_json(calc) for size, calc in sizes.items()}
+            for f, sizes in catalog.items()
+        },
+        scent_choices=load_scent_choices(config),
+        formula_roles=[
+            {"role": role, "label": label,
+             "material_id": resolved[role]["material_id"] if role in resolved else None}
+            for role, (label, _u, _k) in ROLES.items()
+        ],
+        missing_roles=missing_roles,
         batches=batches,
         batch_units=BATCH_VOLUME_UNITS,
         # Embedded as JSON for the create-batch form's live yield preview
@@ -406,24 +399,6 @@ def bulk_batches():
         # against whatever's being typed in before it's ever submitted.
         bottle_ml_map={u: float(bottle_size_ml(u)) for u in BOTTLE_UNITS},
         ml_per_batch_unit={u: float(v) for u, v in ML_PER_BATCH_UNIT.items()},
-        # Which packaging materials (and how much of each per bottle) a
-        # target size would fold into this batch — drives the create-batch
-        # form's own live preview of what picking that size adds (see
-        # bulk_batches.html's own script). Same live-computed source as
-        # the Formulas page itself (formula_items_by_unit()).
-        formula_items_by_unit={
-            unit: [
-                {
-                    "material_id": i["material_id"],
-                    "material_name": i["material_name"],
-                    "qty_per_unit": float(i["qty_per_unit"]),
-                    "material_unit": i["material_unit"],
-                    "cost_per_unit": float(i["cost_per_unit"]),
-                }
-                for i in items
-            ]
-            for unit, items in formula_items_by_unit.items()
-        },
         # Which units the "Qty used" field can be logged in per material
         # unit (e.g. a Gallon-stocked material can be used in mL/L/Gallon)
         # — drives the per-line unit <select> in the add-material row (see
@@ -431,6 +406,7 @@ def bulk_batches():
         material_unit_options={
             u: compatible_material_units(u) for u in MATERIAL_UNITS},
         form_token=issue_form_token("create_bulk_batch"),
+        write_off_reasons=WRITE_OFF_REASONS,
     )
 
 
@@ -445,12 +421,29 @@ class _BatchPlan:
     target_bottle_qty: int | None
     total_volume_ml: decimal.Decimal
     items: list                     # (material_id, qty_used, qty_unit) per liquid ingredient
+    formula_label: str | None = None   # set when produced from a built-in formula
+    packaging_items: list | None = None  # (material_id, qty per bottle); None = the target size's unit_formula_items
+    base_code: str | None = None        # the product code (A1) the batch is of; a batch without one can be bottled but not sold by the mL
+
+
+def _valid_base_code(raw):
+    """The product code (A1) a batch is of, or None. A code that isn't a real
+    product's is refused, so a typo can't make a batch nobody can sell from."""
+    code = (raw or "").strip()
+    if not code:
+        return None
+    known = query("SELECT 1 AS ok FROM sale_catalog WHERE sku = %s",
+                  (f"{code}-BULK",), fetchone=True)
+    if not known:
+        raise ValidationError(f"'{code}' isn't a product code in the catalog.")
+    return code
 
 
 def _plan_bulk_batch(form):
     """Validate the Create Batch form. Raises ValidationError with a message to flash as-is."""
     scent_name = form.get("scent_name", "").strip()
     batch_code = form.get("batch_code", "").strip() or None
+    base_code = _valid_base_code(form.get("base_code"))
     input_unit = form.get("input_unit")
     target_unit = form.get("target_unit") or None
 
@@ -495,7 +488,7 @@ def _plan_bulk_batch(form):
                 f"This batch isn't big enough to fill even one {target_unit} bottle — "
                 "leave the target size blank, or enter a bigger batch.")
     return _BatchPlan(scent_name, batch_code, input_qty, input_unit, notes, target_unit,
-                      target_bottle_qty, total_volume_ml, items)
+                      target_bottle_qty, total_volume_ml, items, base_code=base_code)
 
 
 def _price_liquid_lines(cur, items):
@@ -551,15 +544,27 @@ def _price_packaging_lines(cur, plan, materials_by_id):
     line_rows = []
     if not (plan.target_unit and plan.target_bottle_qty):
         return line_rows, packaging_subtotal
-    cur.execute(
-        """SELECT rm.material_id, rm.material_name, rm.unit, rm.cost_per_unit, rm.stock_qty,
-                  ufi.qty_per_unit
-           FROM unit_formula_items ufi
-           JOIN raw_materials rm ON rm.material_id = ufi.material_id
-           WHERE ufi.unit = %s FOR UPDATE""",
-        (plan.target_unit,),
-    )
-    packaging_materials = cur.fetchall()
+    if plan.packaging_items is not None:
+        # A built-in formula brings its own packaging (bottle, sticker, seal).
+        per_bottle = dict(plan.packaging_items)
+        cur.execute(
+            f"""SELECT material_id, material_name, unit, cost_per_unit, stock_qty
+                FROM raw_materials WHERE material_id IN ({','.join(['%s'] * len(per_bottle))}) FOR UPDATE""",
+            tuple(per_bottle),
+        )
+        packaging_materials = cur.fetchall()
+        for material in packaging_materials:
+            material["qty_per_unit"] = per_bottle[material["material_id"]]
+    else:
+        cur.execute(
+            """SELECT rm.material_id, rm.material_name, rm.unit, rm.cost_per_unit, rm.stock_qty,
+                      ufi.qty_per_unit
+               FROM unit_formula_items ufi
+               JOIN raw_materials rm ON rm.material_id = ufi.material_id
+               WHERE ufi.unit = %s FOR UPDATE""",
+            (plan.target_unit,),
+        )
+        packaging_materials = cur.fetchall()
     overlap_ids = {
         material["material_id"] for material in packaging_materials
         if material["material_id"] in materials_by_id
@@ -609,13 +614,13 @@ def _create_bulk_batch_records(plan, user_id):
 
         cur.execute(
             """INSERT INTO bulk_batches
-               (batch_code, scent_name, input_qty, input_unit, total_volume_ml,
+               (batch_code, base_code, scent_name, input_qty, input_unit, total_volume_ml,
                 total_cost, cost_per_ml, remaining_ml, notes, target_unit,
-                target_bottle_qty, created_by_user_id)
-               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
-            (plan.batch_code, plan.scent_name, plan.input_qty, plan.input_unit, plan.total_volume_ml,
-             total_cost, cost_per_ml, plan.total_volume_ml, plan.notes, plan.target_unit,
-             plan.target_bottle_qty, user_id),
+                target_bottle_qty, created_by_user_id, formula_label)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+            (plan.batch_code, plan.base_code, plan.scent_name, plan.input_qty, plan.input_unit,
+             plan.total_volume_ml, total_cost, cost_per_ml, plan.total_volume_ml, plan.notes,
+             plan.target_unit, plan.target_bottle_qty, user_id, plan.formula_label),
         )
         batch_id = cur.lastrowid
 
@@ -635,6 +640,137 @@ def _create_bulk_batch_records(plan, user_id):
             )
         cur.close()
     return total_cost, cost_per_ml
+
+
+WRITE_OFF_REASONS = (
+    "Too little to use", "Spoiled / expired", "Spilled / lost", "Used as tester", "Other",
+)
+
+
+@bp.route("/bulk-batches/<int:batch_id>/write-off", methods=["POST"])
+@admin_required
+def write_off_bulk_batch(batch_id):
+    """Close out a batch's leftover mL (too little to bottle, spoiled, ...).
+
+    Sets remaining_ml to 0 so the batch shows as Depleted and leaves the
+    active lists. total_cost / cost_per_ml are left untouched on purpose,
+    and no cost-of-goods or profit row is written — the only record of the
+    write-off is the audit log (who, when, how many mL, why).
+    """
+    reason = request.form.get("reason", "")
+    if reason not in WRITE_OFF_REASONS:
+        flash("Pick a reason for the write-off.", "error")
+        return redirect(url_for("admin.bulk_batches"))
+    try:
+        note = parse_optional_text(request.form.get("note"), "Note", max_length=150)
+    except ValidationError as err:
+        flash(str(err), "error")
+        return redirect(url_for("admin.bulk_batches"))
+
+    try:
+        with transaction() as conn:
+            cur = conn.cursor(dictionary=True)
+            # Locked so a production run can't draw from the batch between
+            # reading the amount and zeroing it.
+            cur.execute(
+                """SELECT scent_name, batch_code, remaining_ml
+                   FROM bulk_batches WHERE batch_id = %s FOR UPDATE""",
+                (batch_id,),
+            )
+            batch = cur.fetchone()
+            if not batch:
+                raise TransactionAborted("That batch no longer exists.")
+            written_off_ml = batch["remaining_ml"]
+            if written_off_ml <= 0:
+                raise TransactionAborted("This batch has no mL left to write off.")
+            cur.execute(
+                "UPDATE bulk_batches SET remaining_ml = 0 WHERE batch_id = %s", (batch_id,))
+            cur.close()
+    except TransactionAborted as err:
+        flash(str(err), "error")
+        return redirect(url_for("admin.bulk_batches"))
+    except Exception:
+        current_app.logger.exception("write off bulk batch failed for batch_id=%s", batch_id)
+        flash("Couldn't write off this batch — please try again.", "error")
+        return redirect(url_for("admin.bulk_batches"))
+
+    notify_admin(["production"])
+    log_action(
+        "write_off_bulk_batch", target=batch["scent_name"],
+        details=f"{written_off_ml:g} mL — {reason}"
+        + (f" ({note})" if note else "")
+        + (f" — batch {batch['batch_code']}" if batch["batch_code"] else ""))
+    flash(f"Wrote off {written_off_ml:g} mL from {batch['scent_name']}.", "success")
+    return redirect(url_for("admin.bulk_batches"))
+
+
+@bp.route("/bulk-batches/produce", methods=["POST"])
+@admin_required
+def produce_batch_formula():
+    """Produce one batch from a built-in formula (15% / 14% / 13%) at one
+    timpla size — see batch_formulas.py. The formula supplies every
+    material and amount, including the alcohol and water its mix splits
+    into, so the only inputs are which formula and size, plus a scent name /
+    code / notes. It then goes through the same transaction as any batch
+    (_create_bulk_batch_records): stock checked and deducted, cost
+    snapshotted, the 85ML packaging folded in. Cost per bottle is total
+    cost / bottles the formula yields.
+    """
+    if not consume_form_token("create_bulk_batch"):
+        flash("This batch was already logged, or the form expired — check the list below before resending.", "error")
+        return redirect(url_for("admin.bulk_batches"))
+
+    config = load_formula_config()
+    formula = request.form.get("formula", "")
+    try:
+        size = int(request.form.get("size", ""))
+    except ValueError:
+        size = None
+    if formula not in config["formulas"] or size not in config["formulas"][formula]["sizes"]:
+        flash("Choose a scent and a size.", "error")
+        return redirect(url_for("admin.bulk_batches"))
+    # A catalog scent has exactly one formula (see bulk_formula_scents), so a
+    # mismatch means the form was tampered with or is out of date.
+    scent_code = request.form.get("scent_code", "").strip()
+    if scent_code and formula_for_scent(config, scent_code) != formula:
+        flash(f"{scent_code} uses Formula {formula_for_scent(config, scent_code)}, not Formula {formula}.", "error")
+        return redirect(url_for("admin.bulk_batches"))
+    try:
+        scent_name = request.form.get("scent_name", "").strip()
+        if not scent_name:
+            raise ValidationError("Scent / batch name is required.")
+        # A catalog scent's code is what lets this batch be sold by the mL
+        # (and refilled from); "other" scents have none and can only be bottled.
+        base_code = _valid_base_code(scent_code)
+        batch_code = request.form.get("batch_code", "").strip() or None
+        notes = parse_optional_text(request.form.get("notes"), "Notes", max_length=255)
+    except ValidationError as err:
+        flash(str(err), "error")
+        return redirect(url_for("admin.bulk_batches"))
+
+    materials_list = query(
+        "SELECT material_id, material_name, unit, stock_qty, cost_per_unit FROM raw_materials")
+    _resolved, catalog, missing_roles = load_catalog(materials_list, config)
+    calc = catalog[formula][size]
+    if calc is None:
+        flash("Set up the formula materials first (still missing: " + ", ".join(missing_roles) + ").", "error")
+        return redirect(url_for("admin.bulk_batches"))
+
+    if not calc["enough_stock"]:
+        flash("Not enough materials to produce " + calc["label"] + ". Short: "
+              + ", ".join(f"{x['name']} ({x['short_by']:g} {x['unit'].lower()})"
+                          for x in calc["shortages"]) + ".", "error")
+        return redirect(url_for("admin.bulk_batches"))
+
+    total_ml = calc["total_ml"].quantize(decimal.Decimal("0.001"))
+    plan = _BatchPlan(
+        scent_name, batch_code, total_ml, "Milliliter", notes, config["bottle_unit"],
+        calc["bottles"], total_ml,
+        [(ln["material_id"], ln["qty"], ln["qty_unit"]) for ln in calc["lines"]],
+        calc["label"],
+        [(p["material_id"], p["per_bottle"]) for p in calc["packaging"]],
+        base_code)
+    return _save_batch(plan)
 
 
 @bp.route("/bulk-batches/create", methods=["POST"])
@@ -669,6 +805,11 @@ def create_bulk_batch():
         flash(str(err), "error")
         return redirect(url_for("admin.bulk_batches"))
 
+    return _save_batch(plan)
+
+
+def _save_batch(plan):
+    """Write a validated plan, then notify/log/flash. Always redirects to the list."""
     try:
         total_cost, cost_per_ml = _create_bulk_batch_records(plan, session.get("user_id"))
         notify_admin(["production", "materials"])
@@ -676,6 +817,7 @@ def create_bulk_batch():
         log_action("create_bulk_batch", target=plan.scent_name,
                    details=f"{plan.input_qty:g} {plan.input_unit} — ₱{total_cost:,.2f} total (₱{cost_per_ml:,.6f}/mL liquid)"
                    + (f", {plan.target_bottle_qty} x {plan.target_unit} packaged" if plan.target_unit else "")
+                   + (f" — {plan.formula_label}" if plan.formula_label else "")
                    + (f" — batch {plan.batch_code}" if plan.batch_code else ""))
         flash(
             f"Batch logged — {plan.total_volume_ml:g} mL at ₱{total_cost:,.2f} total.", "success")

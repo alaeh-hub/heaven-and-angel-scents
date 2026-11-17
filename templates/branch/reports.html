@@ -81,14 +81,32 @@
 
   /* Report figures: label over a tabular figure on a top rule. */
   #kpiGrid {
-    grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
-    gap: var(--space-lg);
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+    border-top: 1px solid var(--border-strong);
   }
 
   #kpiGrid .kpi-tile {
     padding: var(--space-md) 0 0;
-    border-top: 1px solid var(--border-strong);
     overflow: visible;
+  }
+
+  #kpiGrid .kpi-tile + .kpi-tile {
+    border-top: 1px solid var(--border);
+    margin-top: var(--space-md);
+  }
+
+  @media (min-width: 48rem) {
+    #kpiGrid {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    #kpiGrid .kpi-tile + .kpi-tile {
+      border-top: 0;
+      margin-top: 0;
+      padding-left: var(--space-lg);
+      border-left: 1px solid var(--border);
+    }
   }
 
   #kpiGrid .kpi-tile:not(:has(.kpi-spark)) {
@@ -139,142 +157,8 @@
 {% endblock %}
 
 {% block content %}
-<div class="card card-pad stack" id="reportBuilder">
-  <div class="rb-head"><h2>Generate a report</h2></div>
-  <p class="rb-lede">
-    Pick what to report on, narrow it down, then download as PDF or Excel, scoped to {{ session.branch_name }}.
-    Reports are capped at 1,000 rows.
-  </p>
-
-  <form method="GET" action="{{ url_for('branch.generate_report') }}" id="reportForm" data-generate-file>
-    <div class="field">
-      <label for="rb_type">Report</label>
-      <select id="rb_type" name="type">
-        {% for rt in report_types %}
-        <option value="{{ rt.key }}" data-windowed="{{ 'true' if rt.windowed else 'false' }}">{{ rt.label }}</option>
-        {% endfor %}
-      </select>
-    </div>
-
-    <div class="rb-grid">
-      <div class="field" data-filter="status" style="display:none;">
-        <label for="rb_status">Status</label>
-        <select id="rb_status" name="status">
-          <option value="all">All statuses</option>
-          <option value="Pending">Pending</option>
-          <option value="In Transit">In Transit</option>
-          <option value="Fulfilled">Fulfilled</option>
-          <option value="Rejected">Rejected</option>
-        </select>
-      </div>
-      <div class="field" data-filter="movement_type" style="display:none;">
-        <label for="rb_movement_type">Movement type</label>
-        <select id="rb_movement_type" name="movement_type">
-          <option value="all">All types</option>
-          <option value="RECEIPT">Receipt</option>
-          <option value="SALE">Sale</option>
-          <option value="REFILL">Refill</option>
-          <option value="FREEBIE">Freebie</option>
-          <option value="ADJUSTMENT">Adjustment</option>
-          <option value="DAMAGE">Damage</option>
-          <option value="SALE_VOID">Sale void</option>
-        </select>
-      </div>
-      <div class="field" data-filter="sale_type" style="display:none;">
-        <label for="rb_sale_type">Sale type</label>
-        <select id="rb_sale_type" name="sale_type">
-          <option value="all">All sale types</option>
-          <option value="Sale">Sale only</option>
-          <option value="Refill">Refill only</option>
-          <option value="Freebie">Freebies only</option>
-        </select>
-      </div>
-      <div class="field" data-filter="payment_method" style="display:none;">
-        <label for="rb_payment_method">Payment method</label>
-        <select id="rb_payment_method" name="payment_method">
-          <option value="all">Cash &amp; Credit</option>
-          <option value="Cash">Cash only</option>
-          <option value="Credit">Credit only</option>
-        </select>
-      </div>
-      <div class="field" data-filter="variant" style="display:none;">
-        <label for="rb_variant">Variant</label>
-        <select id="rb_variant" name="variant">
-          <option value="all">All variants</option>
-          <option value="Male">Male</option>
-          <option value="Female">Female</option>
-        </select>
-      </div>
-      <div class="field" data-filter="unit" style="display:none;">
-        <label for="rb_unit">Unit</label>
-        <select id="rb_unit" name="unit">
-          <option value="all">All units</option>
-          {% for u in unit_choices %}
-          <option value="{{ u }}">{{ u }}</option>
-          {% endfor %}
-        </select>
-      </div>
-      <div class="field" data-filter="low_stock_only" style="display:none;">
-        <label for="rb_low_stock_only">Stock level</label>
-        <select id="rb_low_stock_only" name="low_stock_only">
-          <option value="">All stock levels</option>
-          <option value="1">Low stock only</option>
-        </select>
-      </div>
-      <div class="field" data-filter="search" style="display:none;">
-        <label for="rb_search" id="rb_search_label">Search item / SKU</label>
-        <input type="text" id="rb_search" name="search" placeholder="e.g. Golden Hour or HAS-001">
-      </div>
-    </div>
-
-    <div class="field" data-filter="window" style="display:none;">
-      <label>Time window</label>
-      <div class="rb-mode" id="rb_mode_switch">
-        <button type="button" class="rb-mode-opt active" data-mode="recent">Recent</button>
-        <button type="button" class="rb-mode-opt" data-mode="range">Date range</button>
-        <button type="button" class="rb-mode-opt" data-mode="month">Month</button>
-        <button type="button" class="rb-mode-opt" data-mode="all">All time</button>
-      </div>
-      <input type="hidden" name="mode" id="rb_mode" value="recent">
-
-      <div class="rb-grid rb-window-grid">
-        <div class="field" data-mode-field="recent">
-          <label for="rb_recent_n">Show last</label>
-          <select id="rb_recent_n" name="recent_n">
-            <option value="20">20 entries</option>
-            <option value="50">50 entries</option>
-            <option value="100">100 entries</option>
-            <option value="200">200 entries</option>
-          </select>
-        </div>
-        <div class="field" data-mode-field="range" style="display:none;">
-          <label for="rb_date_from">From</label>
-          <input type="date" id="rb_date_from" name="date_from">
-        </div>
-        <div class="field" data-mode-field="range" style="display:none;">
-          <label for="rb_date_to">To</label>
-          <input type="date" id="rb_date_to" name="date_to">
-        </div>
-        <div class="field" data-mode-field="month" style="display:none;">
-          <label for="rb_month">Month</label>
-          <input type="month" id="rb_month" name="month" value="{{ current_month }}">
-        </div>
-      </div>
-      <div class="rb-note" data-mode-field="all" style="display:none;">
-        Pulls everything, capped at the most recent 1,000 rows.
-      </div>
-    </div>
-
-    <div class="rb-actions">
-      <button type="submit" name="format" value="pdf" class="btn btn-accent" formtarget="_blank">
-        Download PDF
-      </button>
-      <button type="submit" name="format" value="xlsx" class="btn btn-ghost" formtarget="_blank">
-        Download Excel
-      </button>
-    </div>
-  </form>
-</div>
+{% set rb_admin = false %}{% set rb_generate_url = url_for('branch.generate_report') %}{% set rb_preview_url = url_for('branch.report_preview') %}
+<div class="stack">{% include "_report_builder.html" %}</div>
 
 <div class="kpi-grid stack" id="kpiGrid">
   <div class="kpi-tile" id="kpiRevenue">
@@ -362,6 +246,7 @@
 {% endblock %}
 
 {% block scripts %}
+{% set rb_admin = false %}{% include "_report_builder_script.html" %}
 <script src="{{ url_for('static', filename='js/chart.umd.min.js') }}"></script>
 <script nonce="{{ csp_nonce() }}">
   // Reads a color straight off the theme so every chart repaints
@@ -649,6 +534,7 @@
           options: lineChartOptions(T, (v) => Number(v).toLocaleString())
         });
         renderChartLegend(charts.trend, document.getElementById('trendLegend'));
+        syncChartEmpties(document);
       })
       .catch(err => {
         console.error('Reports data failed to load:', err);
@@ -736,114 +622,5 @@
     window.__branchReportsCleanup = null;
   };
 </script>
-<script nonce="{{ csp_nonce() }}">
-  (function () {
-    const REPORT_FIELDS = {
-      branch_stock: ['variant', 'unit', 'low_stock_only', 'search'],
-      stock_requests: ['status', 'search', 'window'],
-      inventory_log: ['movement_type', 'search', 'window'],
-      sales_history: ['variant', 'unit', 'sale_type', 'payment_method', 'search', 'window'],
-      credit_purchases: ['sale_type', 'search', 'window'],
-      voided_sales: ['search', 'window'],
-      customers: ['search'],
-      discrepancies: ['movement_type', 'search', 'window'],
-      low_stock: ['search'],
-    };
 
-    // "search" filters a different column depending on the report — the
-    // field/name stays the same (name="search"), only the label/hint
-    // changes to match what reports.py actually searches.
-    const SEARCH_LABELS = {
-      inventory_log: { label: 'Search item / SKU / notes', placeholder: 'e.g. Golden Hour, HAS-001, or a note' },
-      credit_purchases: { label: 'Search item / SKU / name', placeholder: 'e.g. Golden Hour, HAS-001, or a name' },
-      sales_history: { label: 'Search item / SKU / customer', placeholder: 'e.g. Golden Hour, HAS-001, or a customer' },
-      customers: { label: 'Search customer', placeholder: 'e.g. Maria Santos' },
-      discrepancies: { label: 'Search item / SKU / delivery', placeholder: 'e.g. Golden Hour or a delivery number' },
-      stock_requests: { label: 'Search item / SKU / delivery', placeholder: 'e.g. Golden Hour or DR-000123' },
-      voided_sales: { label: 'Search item / SKU / reason', placeholder: 'e.g. Golden Hour or wrong item' },
-    };
-    // Per report type, only the option values that report can actually
-    // match — a Credit purchase is never a Freebie (Freebies are always
-    // Cash), Discrepancies are only Damage or Adjustment, and My Inventory never lists Bulk/Refill.
-    // Options are removed rather than hidden so the custom select
-    // (main.js) re-renders without them; the full list is cached once.
-    const OPTION_LIMITS = {
-      credit_purchases: { rb_sale_type: (v) => v !== 'Freebie' },
-      discrepancies: { rb_movement_type: (v) => ['all', 'DAMAGE', 'ADJUSTMENT'].includes(v) },
-      branch_stock: { rb_unit: (v) => v !== 'BULK' },
-    };
-    // Summary reports have no "latest N rows" — Recent reads as all time
-    // server-side, so the option isn't offered for them.
-    const NO_RECENT_MODE = [];
-    const optionCache = new Map();
-
-    function limitOptions(select, allow) {
-      if (!select) return;
-      if (!optionCache.has(select)) {
-        optionCache.set(select, Array.from(select.options).map((o) => o.cloneNode(true)));
-      }
-      const all = optionCache.get(select);
-      const keep = allow ? all.filter((o) => allow(o.value)) : all;
-      const current = select.value;
-      select.replaceChildren(...keep.map((o) => o.cloneNode(true)));
-      select.value = keep.some((o) => o.value === current) ? current : keep[0].value;
-    }
-    const DEFAULT_SEARCH_LABEL = { label: 'Search item / SKU', placeholder: 'e.g. Golden Hour or HAS-001' };
-
-    const searchLabelEl = document.getElementById('rb_search_label');
-    const searchInputEl = document.getElementById('rb_search');
-
-    const typeSelect = document.getElementById('rb_type');
-    const modeSwitch = document.getElementById('rb_mode_switch');
-    const modeInput = document.getElementById('rb_mode');
-
-    function applyReportType() {
-      const type = typeSelect.value;
-      const fields = REPORT_FIELDS[type] || [];
-      document.querySelectorAll('#reportForm [data-filter]').forEach((el) => {
-        const on = fields.includes(el.dataset.filter);
-        el.style.display = on ? '' : 'none';
-        // display:none alone still submits the field — disabling it is
-        // what keeps a stale value (e.g. a Branch picked for another
-        // report type) out of this report's filters and subtitle.
-        el.querySelectorAll('input, select, textarea').forEach((c) => { c.disabled = !on; });
-      });
-      const limits = OPTION_LIMITS[type] || {};
-      ['rb_sale_type', 'rb_movement_type', 'rb_unit'].forEach((id) => {
-        limitOptions(document.getElementById(id), limits[id]);
-      });
-      const noRecent = NO_RECENT_MODE.includes(type);
-      const recentBtn = modeSwitch.querySelector('[data-mode="recent"]');
-      if (recentBtn) recentBtn.style.display = noRecent ? 'none' : '';
-      if (noRecent && modeInput.value === 'recent') {
-        modeInput.value = 'all';
-        applyMode();
-      }
-      const searchCopy = SEARCH_LABELS[type] || DEFAULT_SEARCH_LABEL;
-      searchLabelEl.textContent = searchCopy.label;
-      searchInputEl.placeholder = searchCopy.placeholder;
-    }
-
-    function applyMode() {
-      const mode = modeInput.value;
-      document.querySelectorAll('#reportForm [data-mode-field]').forEach((el) => {
-        el.style.display = el.dataset.modeField === mode ? '' : 'none';
-      });
-      modeSwitch.querySelectorAll('.rb-mode-opt').forEach((btn) => {
-        btn.classList.toggle('active', btn.dataset.mode === mode);
-      });
-    }
-
-    typeSelect.addEventListener('change', applyReportType);
-    modeSwitch.addEventListener('click', (e) => {
-      const btn = e.target.closest('.rb-mode-opt');
-      if (!btn) return;
-      modeInput.value = btn.dataset.mode;
-      applyMode();
-    });
-
-    applyReportType();
-    applyMode();
-  })();
-</script>
 {% endblock %}

@@ -43,9 +43,9 @@ Today's date: {current_date} (Philippine time, UTC+8). "Today" means exactly thi
 You have tools to look up live data — use them instead of guessing or relying on anything from \
 earlier in the conversation, since stock levels and requests change constantly. Call a tool \
 whenever a question depends on current numbers (stock, prices, pending deliveries, sales, \
-recent sales, refills and freebies, credit purchases, customers, delivery discrepancies). Don't \
-call a tool for something you were just told in this same conversation's tool results. Only use \
-the tools you've actually been given: HQ admins also get tools for raw materials, suppliers, \
+recent sales, refills and freebies, credit purchases, customers, voided sales, the inventory log of \
+stock movements, delivery discrepancies). Don't call a tool for something you were just told in this same conversation's tool results. Only use \
+the tools you've actually been given: HQ admins also get tools for raw materials, material price history, suppliers, \
 cost-of-goods settings (the Formulas page: base cost per bottle size and the bulk rate per mL), \
 bulk batches, production cost (COGS), partner packages, partner inquiries, branch performance and \
 financials (revenue, cost of goods, gross profit); branch staff don't, so tell them to ask HQ for those.
@@ -60,6 +60,15 @@ sales figure. HQ voids from Sales History; branch staff can void their own sales
 - Register sales revenue excludes partner package orders. The Dashboard's Total revenue adds Closed \
 package orders on top (package_revenue / total_revenue). A package inquiry only counts as a sale once Closed.
 - Low stock never includes Bulk/Refill, and branches can only request bottled sizes from HQ.
+- A raw material's cost per unit is a blended average: every restock adds its quantity and cost to the running \
+totals. What one purchase cost per unit is cost divided by quantity. For questions about prices going up or down, \
+use the price history tool and read a positive change as the material getting more expensive. Stock on hand is \
+separate from those totals: restocking adds to it and bulk batches use it up.
+- A stock request can ship in several partial shipments. It stays Partially Fulfilled until every quantity has \
+gone out, and each shipment is received separately by the branch.
+- The Reports page builds PDF and Excel reports (sales, stock, deliveries, materials and more). When someone asks \
+for a report, an export or something to download, call find_report, name the report to pick and give its link. \
+You can't generate the file yourself.
 - Package orders are made to order: Closed = confirmed, then HQ produces any shortfall, then Fulfill (Partner Inquiries page) takes the package's items out of HQ stock (PACKAGE_ORDER in the Inventory Log).
 
 Rules, always:

@@ -1,0 +1,121 @@
+{# The scents already added to this receipt: list, total and the hidden fields that are submitted.
+   Sits in the New sale dialog's right-hand column; the "+ Add to receipt" button and its script live in
+   _order_basket.html. The script that drives both is here, because it must come after this list in the page. Hidden until the first scent is added. #}
+<div class="ob-list-wrap">
+  <div class="ob-head" id="basketHead" hidden>On this receipt</div>
+  <ul class="ob-list" id="basketList" hidden></ul>
+  <div class="ob-total" id="basketTotal" hidden><span>Receipt total</span><span class="ob-sum" id="basketTotalValue"></span></div>
+  <div id="basketFields"></div>
+</div>
+<script nonce="{{ csp_nonce() }}">
+  (function () {
+    var form = document.getElementById('saleForm');
+    var addBtn = document.getElementById('addToOrderBtn');
+    if (!form || !addBtn) return;
+    var listEl = document.getElementById('basketList');
+    var totalEl = document.getElementById('basketTotal');
+    var totalValue = document.getElementById('basketTotalValue');
+    var noteEl = document.getElementById('basketNote');
+    var fieldsEl = document.getElementById('basketFields');
+    var headEl = document.getElementById('basketHead');
+    var productSelect = document.getElementById('productName');
+    // The option descriptions are hidden in this dialog to save height; keep them as tooltips.
+    document.querySelectorAll('#newSaleOverlay .choice-opt').forEach(function (b) {
+      var d = b.querySelector('.choice-opt-desc');
+      if (d && !b.title) b.title = d.textContent.trim();
+    });
+    var MAX_LINES = 60, PER_SLIP = 10;
+    var defaultNote = noteEl.textContent;
+    var basket = [];
+
+    function peso(n) {
+      return '₱' + Number(n).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+    function active(name) {
+      var els = form.querySelectorAll('[name="' + name + '"]');
+      for (var i = 0; i < els.length; i++) if (!els[i].disabled) return els[i];
+      return null;
+    }
+    function say(text, isError) {
+      noteEl.textContent = text;
+      noteEl.classList.toggle('is-error', !!isError);
+    }
+    // The main fields are only "required" while the list is empty: with scents already
+    // added, submitting with the fields blank is fine.
+    function syncRequired() {
+      var need = basket.length === 0;
+      ['productName', 'sku', 'qty_sold', 'unit_price', 'sku_loose', 'qty_sold_loose', 'unit_price_loose'].forEach(function (id) {
+        var el = document.getElementById(id);
+        if (el) el.required = need;
+      });
+    }
+    function render() {
+      listEl.innerHTML = '';
+      fieldsEl.innerHTML = '';
+      var total = 0;
+      basket.forEach(function (line, i) {
+        total += line.qty * line.price;
+        var li = document.createElement('li');
+        li.className = 'ob-item';
+        var name = document.createElement('span');
+        name.className = 'ob-name';
+        name.textContent = line.label;
+        var sub = document.createElement('span');
+        sub.className = 'ob-sub';
+        sub.textContent = line.qty + ' × ' + peso(line.price);
+        name.appendChild(sub);
+        name.title = line.label + ': ' + line.qty + ' × ' + peso(line.price);
+        var sum = document.createElement('span');
+        sum.className = 'ob-sum';
+        sum.textContent = peso(line.qty * line.price);
+        var rm = document.createElement('button');
+        rm.type = 'button';
+        rm.className = 'btn btn-ghost btn-sm ob-x';
+        rm.setAttribute('aria-label', 'Remove ' + line.label);
+        rm.textContent = '×';
+        rm.addEventListener('click', function () { basket.splice(i, 1); render(); });
+        li.appendChild(name); li.appendChild(sum); li.appendChild(rm);
+        listEl.appendChild(li);
+        [['cart_sku', line.sku], ['cart_qty', line.qty], ['cart_price', line.price]].forEach(function (pair) {
+          var input = document.createElement('input');
+          input.type = 'hidden'; input.name = pair[0]; input.value = pair[1];
+          fieldsEl.appendChild(input);
+        });
+      });
+      listEl.hidden = totalEl.hidden = headEl.hidden = basket.length === 0;
+      totalValue.textContent = peso(total);
+      var slips = Math.ceil(basket.length / PER_SLIP);
+      say(basket.length > PER_SLIP
+        ? basket.length + ' products: this prints on ' + slips + ' slips of up to ' + PER_SLIP + '.'
+        : defaultNote);
+      syncRequired();
+    }
+
+    addBtn.addEventListener('click', function () {
+      var skuEl = active('sku'), qtyEl = active('qty_sold'), priceEl = active('unit_price');
+      var qty = qtyEl ? parseInt(qtyEl.value, 10) : NaN;
+      var price = priceEl ? parseFloat(priceEl.value) : NaN;
+      if (!skuEl || !skuEl.value) return say('Pick a product first.', true);
+      if (isNaN(qty) || qty < 1) return say('Enter a quantity of at least 1.', true);
+      if (isNaN(price) || price < 0) return say('Enter the price charged.', true);
+      if (basket.length >= MAX_LINES) return say('A receipt can hold at most ' + MAX_LINES + ' products.', true);
+      var opt = skuEl.options[skuEl.selectedIndex];
+      var label = skuEl.id === 'sku_loose'
+        ? opt.textContent.split(',')[0] + ' (mL)'
+        : (productSelect && productSelect.value ? productSelect.value : skuEl.value) + ' ' + opt.textContent.split(',')[0];
+      basket.push({ sku: skuEl.value, qty: qty, price: price, label: label });
+      qtyEl.value = '';
+      if (priceEl && !priceEl.readOnly) priceEl.value = '';
+      // back to a blank product so the next scent starts clean
+      if (productSelect && !productSelect.disabled) {
+        productSelect.selectedIndex = 0;
+        productSelect.dispatchEvent(new Event('change', { bubbles: true }));
+      } else {
+        skuEl.selectedIndex = 0;
+        skuEl.dispatchEvent(new Event('change', { bubbles: true }));
+      }
+      qtyEl.dispatchEvent(new Event('input', { bubbles: true }));
+      render();
+    });
+  })();
+</script>

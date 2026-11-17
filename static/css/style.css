@@ -676,6 +676,14 @@ html.sidebar-booting .sidebar * {
   transition: opacity 0.2s ease 0.1s;
 }
 
+/* The wordmark is metallic gold artwork made for dark surfaces. On a light
+   sidebar it measured about 1.3:1 against the background, so it all but
+   disappeared in every interface style. In light mode it is deepened to a
+   bronze (same artwork, same shape) that reads on any light surface. */
+html[data-theme="light"] .sidebar .brand-wordmark {
+  filter: brightness(0.44) saturate(1.8) contrast(1.3) drop-shadow(0 0 0.6px rgba(60, 35, 0, 0.55));
+}
+
 /* Login hero panel's larger rendering — same reasoning as the old
    .brand-logo-lg had for the icon: scaled up to match the bigger hero
    panel instead of looking undersized next to its larger tagline
@@ -847,10 +855,11 @@ html.sidebar-booting .sidebar * {
   content: attr(data-count);
   order: 1;
   margin-left: auto;
-  font-size: 0.625rem;
+  font-size: 0.75rem;
   font-weight: 600;
+  font-variant-numeric: tabular-nums;
   letter-spacing: 0;
-  opacity: 0.7;
+  opacity: 0.85;
 }
 
 .nav-group.is-collapsed>.nav-label:not([data-badge])[data-count]::after {
@@ -1305,10 +1314,11 @@ html.sidebar-booting .sidebar * {
   /* 0.75rem left puts the icon's centre on the rail's icon column:
      0.875rem footer padding - 2px margin + 0.75rem + half its 1.5rem
      box = 2.25rem. */
+  min-height: 2.5rem;
   padding: var(--space-xs) var(--space-xs) var(--space-xs) var(--space-sm);
   margin: 0 calc(var(--space-3xs) * -1);
   border-radius: 0.625rem;
-  font-size: 0.7813rem;
+  font-size: 0.8125rem;
   font-weight: 500;
   color: var(--ink-soft);
   /* Reveal direction for the collapsed-rail padding override further
@@ -2624,7 +2634,10 @@ html.js[data-theme="dark"] .theme-toggle .icon-moon {
   }
 }
 
-@media (max-width: 340px) {
+/* On a phone the full amount plus "48 sales" is wider than the top bar leaves the chip, and the
+   count was cut to "48 sal". The compact amount (₱4.03K) frees the room; the full figure stays in
+   the chip's tooltip and screen-reader label. */
+@media (max-width: 440px) {
   .today-chip-full {
     display: none;
   }
@@ -3535,14 +3548,16 @@ th.num {
   max-width: 8.125rem;
 }
 
-/* Product variants use distinct gold and ink chips rather than status colors. */
+/* Product variants are a category, not a state, so neither takes gold:
+   Male is a filled neutral chip, Female the same chip as an outline. */
 .badge-male {
-  background: var(--accent-soft);
-  color: var(--accent-ink);
+  background: var(--surface-2);
+  color: var(--ink);
+  border: var(--border-width-strong) solid transparent;
 }
 
 .badge-female {
-  background: var(--surface-2);
+  background: transparent;
   color: var(--ink);
   border: var(--border-width-strong) solid var(--border-strong);
 }
@@ -3723,6 +3738,17 @@ th.num {
 .btn[aria-disabled="true"] {
   opacity: 0.55;
   cursor: not-allowed;
+}
+
+/* A plain button has no fill of its own, so dimming the whole thing to 55% left
+   its label at about 1.4:1 against the page: effectively invisible in every theme
+   and interface style. It keeps full opacity and uses the muted text colour
+   instead, which still reads as "off" next to normal ink but can be read. The
+   filled variants (accent, danger, ...) keep the dimmed look; they stay readable. */
+.btn:not(.btn-ghost, .btn-accent, .btn-primary, .btn-cta, .btn-danger)[disabled],
+.btn:not(.btn-ghost, .btn-accent, .btn-primary, .btn-cta, .btn-danger)[aria-disabled="true"] {
+  opacity: 1;
+  color: var(--ink-faint);
 }
 
 /* Shown the instant a form is actually submitted (see main.js's
@@ -4024,6 +4050,71 @@ textarea:disabled {
   cursor: not-allowed;
 }
 
+/* Checkboxes: themed to match the custom selects and date pickers instead of
+   the browser's own box. Still the real <input>, so name, value, label clicks,
+   keyboard and form posts work exactly as before. */
+input[type="checkbox"] {
+  -webkit-appearance: none;
+  appearance: none;
+  display: inline-grid;
+  place-content: center;
+  flex: none;
+  width: 1.125rem;
+  height: 1.125rem;
+  /* The minimums stop a page rule like "width: auto" from shrinking the box to the
+     size of the tick drawn inside it (a thin sliver). */
+  min-width: 1.125rem;
+  min-height: 1.125rem;
+  margin: 0;
+  border: 1px solid var(--field-edge);
+  border-radius: var(--radius-sm);
+  background: var(--field);
+  vertical-align: middle;
+  cursor: pointer;
+  transition: background-color var(--dur-micro) var(--ease-out), border-color var(--dur-micro) var(--ease-out);
+}
+
+input[type="checkbox"]::after {
+  content: "";
+  width: 0.3125rem;
+  height: 0.5625rem;
+  margin-top: -0.0625rem;
+  border: solid var(--gold-contrast);
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg) scale(0);
+  transition: transform var(--dur-micro) var(--ease-out);
+}
+
+input[type="checkbox"]:hover:not(:disabled) {
+  border-color: var(--border-strong);
+}
+
+input[type="checkbox"]:checked {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+input[type="checkbox"]:checked::after {
+  transform: rotate(45deg) scale(1);
+}
+
+input[type="checkbox"]:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
+input[type="checkbox"]:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  input[type="checkbox"],
+  input[type="checkbox"]::after {
+    transition: none;
+  }
+}
+
 input[aria-invalid="true"],
 select[aria-invalid="true"],
 textarea[aria-invalid="true"] {
@@ -4059,7 +4150,11 @@ textarea[aria-invalid="true"] {
   margin: 0;
   padding: 0;
   border: 0;
-  opacity: 0;
+  /* !important on purpose: themes.css dims every disabled select to .55 with a
+     far more specific selector, which showed this real (hidden) select's own
+     text through the trigger, so a disabled dropdown read its label twice,
+     slightly offset. The trigger dims itself via .cs-disabled instead. */
+  opacity: 0 !important;
   /* Clicks land on .cs-trigger underneath instead of popping the
      native OS picker — the whole point of this component. The
      select still receives focus (Tab) and keyboard input; it's
@@ -4350,6 +4445,47 @@ textarea[aria-invalid="true"] {
   transition: transform 0.2s var(--ease-out);
 }
 
+/* Type-to-search row pinned to the top of a long dropdown (see
+   enhanceSelect's "Type-to-search" comment in form-controls.js). */
+.cs-option[hidden] {
+  display: none;
+}
+
+.cs-search {
+  position: sticky;
+  top: calc(var(--space-2xs) * -1);
+  z-index: 1;
+  margin: calc(var(--space-2xs) * -1) calc(var(--space-2xs) * -1) var(--space-2xs);
+  padding: var(--space-xs);
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+
+.cs-select .cs-search-input {
+  display: block;
+  width: 100%;
+  min-height: 0;
+  height: auto;
+  padding: 0.4375rem 0.625rem;
+  font: inherit;
+  font-size: 0.8125rem;
+  color: var(--ink);
+  background: color-mix(in srgb, var(--ink) 4%, var(--surface));
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  box-shadow: none;
+  outline: none;
+}
+
+.cs-select .cs-search-input:focus {
+  border-color: var(--accent);
+}
+
+.cs-match {
+  font-weight: 700;
+  color: var(--accent-ink);
+}
+
 .cs-option-empty {
   padding: var(--space-sm);
   font-size: 0.7813rem;
@@ -4418,7 +4554,10 @@ textarea[aria-invalid="true"] {
   margin: 0;
   padding: 0;
   border: 0;
-  opacity: 0;
+  /* !important: themes.css dims disabled inputs to .55, which would show
+     this hidden real input's text through the date trigger (same fix as
+     .cs-select select). */
+  opacity: 0 !important;
   pointer-events: none;
 }
 
@@ -4798,6 +4937,115 @@ div[id$="Overlay"]:not(.rs-dialog)>.card {
   margin: var(--space-2xs) auto 0;
 }
 
+/* Structured empty states (templates/_empty.html): one row, icon on the left,
+   what is empty and why beside it, the one action on the right. In a card
+   taller than its content (a list stretched to match the form beside it) the
+   row fills the space under the header and sits in the middle of it. The plain
+   `.empty-state p` form above stays for the few one-line spots not moved over. */
+.card:has(> .empty-state) {
+  display: flex;
+  flex-direction: column;
+}
+
+.card > .empty-state {
+  flex: 1 1 auto;
+}
+
+.empty-state:has(.empty-icon) {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-sm) var(--space-md);
+  padding: var(--space-xl) var(--space-lg);
+  text-align: left;
+}
+
+.empty-icon {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 2.75rem;
+  height: 2.75rem;
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  color: var(--ink-soft);
+}
+
+.empty-icon svg {
+  width: 1.375rem;
+  height: 1.375rem;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* Good news (nothing needs attention) reads as success, not as missing data. */
+.empty-clear .empty-icon {
+  background: var(--success-soft);
+  color: var(--success);
+}
+
+.empty-text {
+  flex: 1 1 0;
+  min-width: 12rem;
+  max-width: 28rem;
+}
+
+.empty-text .empty-actions {
+  margin-top: var(--space-sm);
+}
+
+.empty-title {
+  margin: 0;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--ink);
+  text-wrap: balance;
+}
+
+.empty-state .empty-body {
+  max-width: none;
+  margin: var(--space-3xs) 0 0;
+  color: var(--ink-soft);
+  text-wrap: pretty;
+}
+
+.empty-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+  flex: none;
+}
+
+.empty-compact:has(.empty-icon) {
+  padding: var(--space-lg) var(--space-md);
+}
+
+.empty-compact .empty-icon {
+  width: 2.25rem;
+  height: 2.25rem;
+}
+
+.empty-compact .empty-icon svg {
+  width: 1.125rem;
+  height: 1.125rem;
+}
+
+.empty-state .smart-clear {
+  flex: none;
+}
+
+@media (max-width: 520px) {
+  .empty-state:has(.empty-icon) {
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: center;
+  }
+}
+
 .text-soft {
   color: var(--ink-soft);
 }
@@ -4918,14 +5166,14 @@ div[id$="Overlay"]:not(.rs-dialog)>.card {
 }
 
 .table-compact .table-toolbar {
-  padding: var(--space-sm) var(--space-md);
+  padding: var(--space-sm) var(--space-lg);
   gap: var(--space-sm);
 }
 
 .table-compact .table-search input,
 .table-compact .table-filter select {
   padding: var(--space-xs) var(--space-sm) var(--space-xs) var(--space-xl);
-  font-size: 0.7813rem;
+  font-size: var(--text-xs);
 }
 
 .table-compact .table-filter select {
@@ -4939,24 +5187,24 @@ div[id$="Overlay"]:not(.rs-dialog)>.card {
 }
 
 .table-compact table.smart-table {
-  font-size: 0.7813rem;
+  font-size: var(--text-xs);
 }
 
 .table-compact table.smart-table th {
-  padding: var(--space-xs) var(--space-md);
-  font-size: 0.625rem;
+  padding: var(--space-xs) var(--space-lg);
+  font-size: var(--text-xs);
 }
 
 .table-compact table.smart-table td {
-  padding: var(--space-xs) var(--space-md);
+  padding: var(--space-xs) var(--space-lg);
 }
 
 .table-compact .item-name {
-  font-size: 0.8rem;
+  font-size: var(--text-sm);
 }
 
 .table-compact .item-sub {
-  font-size: 0.6875rem;
+  font-size: var(--text-xs);
 }
 
 .table-compact .fill-track {
@@ -4965,21 +5213,21 @@ div[id$="Overlay"]:not(.rs-dialog)>.card {
 }
 
 .table-compact .fill-row .fill-qty {
-  font-size: 0.7188rem;
+  font-size: var(--text-xs);
   min-width: 2.875rem;
 }
 
 .table-compact .badge {
   padding: var(--space-3xs) var(--space-xs);
-  font-size: 0.6563rem;
+  font-size: var(--text-xs);
 }
 
 .table-compact .smart-pagination {
-  padding: var(--space-sm) var(--space-md);
+  padding: var(--space-sm) var(--space-lg);
 }
 
 .table-compact .smart-page-info {
-  font-size: 0.7188rem;
+  font-size: var(--text-xs);
 }
 
 /* .mobile-toggle-row (the "Details" expand/collapse bar — see the
@@ -6252,7 +6500,9 @@ div[id$="Overlay"]:not(.rs-dialog)>.card {
 }
 
 .kpi-chip-flat {
-  background: var(--field);
+  /* Flat means nothing to flag: plain text on the tile's left edge, no fill. */
+  background: none;
+  padding-left: 0;
   color: var(--ink-soft);
 }
 
@@ -6794,6 +7044,706 @@ th,
 
 @media (max-width: 760px) {
   .topbar-search {
+    display: none;
+  }
+}
+
+/* ----------------------------------------------------------------------------
+   Tables: sortable column heads, the pagination bar, row focus.
+   Behaviour lives in static/js/app/tables.js (makeSortable, initSmartTables).
+   Colour only through tokens; transitions are opacity/transform/background.
+   ---------------------------------------------------------------------------- */
+
+/* The column head stays put while a long table scrolls inside its card.
+   (Layouts that let the table grow to the page, e.g. Products and
+   Production's list card, set the heads back to static themselves.) */
+/* --table-head-top is where the head sticks inside its own scrolling card:
+   0 unless a page puts something fixed above the table. */
+.table-wrap {
+  --table-head-top: 0px;
+}
+
+.table-wrap thead th {
+  position: sticky;
+  top: var(--table-head-top);
+  z-index: 2;
+}
+
+.th-sort {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2xs);
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  font: inherit;
+  color: inherit;
+  letter-spacing: inherit;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.th-sort:hover,
+th[aria-sort] .th-sort {
+  color: var(--ink);
+}
+
+/* Two small triangles stacked: both faint when the column is unsorted, the
+   active direction solid in the accent once it is. */
+.th-caret {
+  position: relative;
+  flex: none;
+  width: 0.5rem;
+  height: 0.75rem;
+}
+
+.th-caret::before,
+.th-caret::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  border-left: 0.25rem solid transparent;
+  border-right: 0.25rem solid transparent;
+  opacity: 0.28;
+  transition: opacity 0.15s ease;
+}
+
+.th-caret::before {
+  top: 0;
+  border-bottom: 0.3rem solid currentColor;
+}
+
+.th-caret::after {
+  bottom: 0;
+  border-top: 0.3rem solid currentColor;
+}
+
+.th-sort:hover .th-caret::before,
+.th-sort:hover .th-caret::after {
+  opacity: 0.55;
+}
+
+th[aria-sort="ascending"] .th-caret::before,
+th[aria-sort="descending"] .th-caret::after {
+  opacity: 1;
+  color: var(--accent);
+}
+
+th[aria-sort="ascending"] .th-caret::after,
+th[aria-sort="descending"] .th-caret::before {
+  opacity: 0;
+}
+
+/* Keyboard users get the same row highlight a mouse gets. */
+tbody tr:focus-within {
+  background: var(--surface-2);
+}
+
+/* Pagination bar: "Showing 1 to 8 of 31" on the left, the pager on the right.
+   The page count is a figure, so it uses the body face with tabular numerals. */
+.smart-pagination {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.smart-range {
+  margin-right: auto;
+  font-size: 0.75rem;
+  color: var(--ink-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.smart-page-info {
+  font-family: var(--font);
+  font-variant-numeric: tabular-nums;
+}
+
+.smart-clear {
+  margin-top: var(--space-xs);
+}
+
+.smart-clear[hidden] {
+  display: none;
+}
+
+@media (max-width: 40rem) {
+  .smart-pagination {
+    justify-content: center;
+  }
+
+  .smart-range {
+    flex-basis: 100%;
+    margin-right: 0;
+    text-align: center;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .th-caret::before,
+  .th-caret::after {
+    transition: none;
+  }
+}
+
+/* A chart with nothing to plot: the message takes the canvas's place (see
+   syncChartEmpties() in charts.js), laid out like the other empty states. */
+.chart-empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-md);
+  padding: var(--space-md);
+  text-align: left;
+}
+
+.chart-empty .empty-text {
+  flex: 0 1 22rem;
+  min-width: 0;
+}
+
+.chart-empty .empty-title {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.chart-empty .empty-body {
+  margin: var(--space-3xs) 0 0;
+  font-size: 0.8438rem;
+  color: var(--ink-soft);
+  text-wrap: pretty;
+}
+
+
+/* ============================================================
+   Report builder (templates/_report_builder.html): choose a report
+   from grouped cards, narrow it with chips and date presets, see
+   what you will get, download. Shared by admin and branch Reports.
+   ============================================================ */
+.rbx [hidden] {
+  display: none !important;
+}
+
+/* Until the script has built the report picker, the unprepared form (every filter at once) stays invisible. It
+   keeps its space so the page doesn't jump when it appears. */
+.rbx:not(.rbx-ready) .rbx-step,
+.rbx:not(.rbx-ready) .rbx-bar,
+.rbx:not(.rbx-ready) .rbx-foot {
+  visibility: hidden;
+}
+
+.rbx-title {
+  margin: 0 0 var(--space-2xs);
+  font-size: var(--text-lg);
+  font-weight: 600;
+}
+
+.rbx-lede {
+  margin: 0;
+  font-size: 0.8125rem;
+  color: var(--ink-faint);
+}
+
+.rbx-step {
+  margin-top: var(--space-lg);
+  padding-top: var(--space-md);
+  border-top: 1px solid var(--border);
+}
+
+.rbx-head + form > .rbx-step:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.rbx-step-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-sm);
+}
+
+.rbx-step-title {
+  margin: 0;
+  font-size: 0.9375rem;
+  font-weight: 600;
+}
+
+.rbx-search {
+  position: relative;
+  width: min(20rem, 100%);
+}
+
+.rbx-search svg {
+  position: absolute;
+  left: var(--space-sm);
+  top: 50%;
+  width: 1rem;
+  height: 1rem;
+  transform: translateY(-50%);
+  color: var(--ink-faint);
+  pointer-events: none;
+}
+
+.rbx-search input {
+  width: 100%;
+  padding-left: 2.25rem;
+}
+
+/* Report groups: the same sunken track and raised active pill as the other segmented controls. */
+.rbx-tabs {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: var(--space-3xs);
+  max-width: 100%;
+  margin-bottom: var(--space-sm);
+  padding: var(--space-2xs);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+}
+
+.rbx-tab {
+  min-height: 2rem;
+  padding: var(--space-2xs) var(--space-sm);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--ink-soft);
+  font: inherit;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color var(--dur-micro) var(--ease-out), color var(--dur-micro) var(--ease-out);
+}
+
+.rbx-tab:hover {
+  color: var(--ink);
+}
+
+.rbx-tab[aria-pressed="true"] {
+  background: var(--accent);
+  color: var(--gold-contrast);
+}
+
+.rbx-tab:focus-visible,
+.rbx-chip:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
+.rbx-panel-title {
+  margin: var(--space-sm) 0 var(--space-xs);
+  font-size: 0.8125rem;
+  color: var(--ink-faint);
+}
+
+.rbx-panel:not([hidden]) .rbx-panel-title {
+  margin-top: 0;
+}
+
+.rbx-options {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 15rem), 1fr));
+  gap: var(--space-sm);
+}
+
+.rbx-option {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2xs);
+  min-width: 0;
+  padding: var(--space-sm) calc(var(--space-md) + 1.25rem) var(--space-sm) var(--space-md);
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  cursor: pointer;
+  transition: border-color var(--dur-micro) var(--ease-out), background-color var(--dur-micro) var(--ease-out);
+}
+
+.rbx-option:hover {
+  border-color: var(--border-strong);
+}
+
+.rbx-option input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* The radio's own mark, drawn as a ring that fills when chosen. */
+.rbx-option::after {
+  content: "";
+  position: absolute;
+  top: var(--space-sm);
+  right: var(--space-sm);
+  width: 1rem;
+  height: 1rem;
+  border: 1.5px solid var(--border-strong);
+  border-radius: 50%;
+}
+
+.rbx-option:has(input:checked) {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.rbx-option:has(input:checked)::after {
+  border-color: var(--accent);
+  background: var(--accent);
+  box-shadow: inset 0 0 0 3px var(--accent-soft);
+}
+
+.rbx-option:has(input:focus-visible) {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
+.rbx-option-title {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.rbx-option-desc {
+  font-size: 0.8125rem;
+  line-height: 1.4;
+  color: var(--ink-soft);
+  text-wrap: pretty;
+}
+
+.rbx-nofind,
+.rbx-none {
+  margin: var(--space-sm) 0 0;
+  font-size: 0.875rem;
+  color: var(--ink-soft);
+}
+
+.rbx-filters {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 17rem), 1fr));
+  gap: var(--space-md) var(--space-lg);
+}
+
+.rbx-filters .field,
+.rbx-window {
+  margin: 0;
+}
+
+.rbx-wide {
+  grid-column: 1 / -1;
+}
+
+.rbx-filters:not(:has(.field:not([hidden]))) {
+  display: none;
+}
+
+.rbx-window {
+  margin-top: var(--space-md);
+}
+
+.rbx-label {
+  display: block;
+  margin-bottom: var(--space-xs);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--ink-soft);
+}
+
+.rbx-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+}
+
+.rbx-chip {
+  min-height: 2rem;
+  padding: 0 var(--space-sm);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--ink-soft);
+  font: inherit;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color var(--dur-micro) var(--ease-out), border-color var(--dur-micro) var(--ease-out),
+    color var(--dur-micro) var(--ease-out);
+}
+
+.rbx-chip:hover {
+  border-color: var(--ink-faint);
+  background: var(--surface-2);
+  color: var(--ink);
+}
+
+.rbx-chip[aria-checked="true"] {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--gold-contrast);
+}
+
+/* The real select stays in the form (it is what gets submitted) but the chips are what you use. */
+.rbx select.rbx-real,
+.rbx .cs-select:has(> select.rbx-real) {
+  display: none;
+}
+
+.rbx-sub {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-sm);
+  margin-top: var(--space-sm);
+}
+
+.rbx-sub-label {
+  font-size: 0.8125rem;
+  color: var(--ink-faint);
+}
+
+.rbx-dates {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 14rem));
+  align-items: end;
+}
+
+.rbx-dates .field {
+  margin: 0;
+}
+
+/* The summary and the download buttons: what you will get, how many rows, then go. */
+.rbx-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+  margin-top: var(--space-lg);
+  padding: var(--space-md);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+}
+
+.rbx-summary {
+  flex: 1 1 18rem;
+  min-width: 0;
+}
+
+.rbx-summary-text {
+  margin: 0;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+.rbx-count {
+  min-height: 1.25rem;
+  margin: var(--space-3xs) 0 0;
+  font-size: 0.8125rem;
+  color: var(--ink-soft);
+  font-variant-numeric: tabular-nums;
+}
+
+.rbx-count[data-tone="ok"] {
+  color: var(--success);
+}
+
+.rbx-count[data-tone="warn"] {
+  color: var(--warning);
+}
+
+.rbx-count[data-tone="busy"] {
+  color: var(--ink-faint);
+}
+
+.rbx-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+}
+
+.rbx-foot {
+  margin: var(--space-sm) 0 0;
+  font-size: 0.75rem;
+  color: var(--ink-faint);
+}
+
+@media (max-width: 680px) {
+  .rbx-bar {
+    position: sticky;
+    bottom: var(--space-xs);
+    z-index: 5;
+    border: 1px solid var(--border-strong);
+    background: var(--surface);
+  }
+
+  .rbx-actions .btn {
+    flex: 1 1 100%;
+    min-height: 2.75rem;
+  }
+
+  .rbx-tabs {
+    display: flex;
+    width: 100%;
+  }
+
+  .rbx-tab {
+    flex: 1 1 auto;
+  }
+
+  .rbx-dates {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.rbx-tab:active,
+.rbx-chip:active,
+.rbx-option:active {
+  transform: translateY(1px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rbx-tab,
+  .rbx-option,
+  .rbx-chip {
+    transition: none;
+  }
+
+  .rbx-tab:active,
+  .rbx-chip:active,
+  .rbx-option:active {
+    transform: none;
+  }
+}
+
+
+/* A note that fills in as you type (a total, a stock count, a price per unit). Its space is reserved whether or not
+   it has text, so the form never jumps when the note appears, changes length or clears, and nothing sized to the
+   form (the Main Stock list beside Production, All Products beside Add a product) grows with it. */
+.live-slot {
+  min-height: 1.5em;
+}
+
+.live-slot-2 {
+  min-height: 3em;
+}
+
+.help-warn {
+  color: var(--danger);
+}
+
+/* Placeholder text had no colour of its own, so every field showed the browser's
+   default grey: about 3.3:1 on the page background in every theme and interface
+   style, under the 4.5:1 needed to read it comfortably. It now uses the theme's
+   own "faint text" colour (which clears 4.5:1 in all of them), still clearly
+   lighter than what a person types. */
+::placeholder {
+  color: var(--ink-faint);
+  opacity: 1;
+}
+
+/* A receipt of several products is several rows in a sales list; only the first row has the
+   Receipt button, and the others show which receipt they are on. */
+.receipt-same {
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--ink-faint);
+  white-space: nowrap;
+}
+
+.receipt-count {
+  font-weight: 500;
+  opacity: 0.8;
+}
+
+
+/* Tablets, small laptops and narrow windows (761px and up).
+   The top bar was sized for a wide screen and never shed anything, so with less room than that
+   (the sidebar pinned open takes 256px, which is the default on touch devices) the clock, bell,
+   sound and theme buttons ran off the right edge of the screen: the theme toggle could not be
+   reached. Thresholds are on the room the bar actually has (screen width minus the sidebar), and
+   it now sheds in order: clock, shortcut hint, trend, "Today", full amount, sale count.
+   The search field flexes in the space that is left. */
+@media (min-width: 761px) {
+  .topbar { gap: var(--space-sm); }
+  .topbar-left { flex: 1 1 auto; min-width: 0; }
+  .topbar-right { flex-shrink: 0; }
+  .topbar-search { flex: 1 1 auto; width: auto; max-width: 18rem; min-width: 2.75rem; }
+  .today-chip { flex-shrink: 0; }
+}
+
+@media (min-width: 761px) and (max-width: 1246px) {
+  html.sidebar-pinned .clock-chip,
+  html.sidebar-pinned .topbar-divider {
+    display: none;
+  }
+}
+
+@media (min-width: 761px) and (max-width: 1156px) {
+  html.sidebar-pinned .topbar-search-field kbd {
+    display: none;
+  }
+}
+
+@media (min-width: 761px) and (max-width: 1056px) {
+  html.sidebar-pinned .today-chip-trend {
+    display: none;
+  }
+}
+
+@media (min-width: 761px) and (max-width: 956px) {
+  html.sidebar-pinned .today-chip-label {
+    display: none;
+  }
+}
+
+@media (min-width: 761px) and (max-width: 896px) {
+  html.sidebar-pinned .today-chip-full {
+    display: none;
+  }
+}
+
+@media (min-width: 761px) and (max-width: 896px) {
+  html.sidebar-pinned .today-chip-compact {
+    display: inline;
+  }
+}
+
+@media (min-width: 761px) and (max-width: 836px) {
+  html.sidebar-pinned .today-chip-meta {
+    display: none;
+  }
+}
+
+@media (min-width: 761px) and (max-width: 1062px) {
+  html:not(.sidebar-pinned) .clock-chip,
+  html:not(.sidebar-pinned) .topbar-divider {
+    display: none;
+  }
+}
+
+@media (min-width: 761px) and (max-width: 972px) {
+  html:not(.sidebar-pinned) .topbar-search-field kbd {
+    display: none;
+  }
+}
+
+@media (min-width: 761px) and (max-width: 872px) {
+  html:not(.sidebar-pinned) .today-chip-trend {
+    display: none;
+  }
+}
+
+@media (min-width: 761px) and (max-width: 772px) {
+  html:not(.sidebar-pinned) .today-chip-label {
     display: none;
   }
 }

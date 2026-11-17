@@ -32,6 +32,7 @@
           <option value="{{ b.branch_id }}">{{ b.branch_name }}</option>
           {% endfor %}
         </select>
+        {% if not branch_list %}<div class="help">No branches yet, so there is no one to send to. <a href="{{ url_for('admin.branches') }}">Add a branch</a> first.</div>{% endif %}
       </div>
       <div class="field">
         <label for="level">Type</label>

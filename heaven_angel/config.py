@@ -179,6 +179,11 @@ class Config:
     # regardless of the environment variable.
     ALLOW_DATA_RESET = os.environ.get("ALLOW_DATA_RESET", "0") == "1"
 
+    # Development only: run ONE automatic backup at this business-time moment
+    # ("YYYY-MM-DD HH:MM"), ignoring the days/hour schedule and the auto
+    # toggle. Forced empty in ProductionConfig.
+    BACKUP_TEST_RUN_AT = os.environ.get("BACKUP_TEST_RUN_AT", "").strip()
+
 
 class ProductionConfig(Config):
     """Settings for deployment behind
@@ -190,6 +195,7 @@ class ProductionConfig(Config):
     # Off by default. Only a deliberate, separately named opt-in turns it on,
     # for wiping a deployment that holds test data. Set it back to 0 afterwards.
     ALLOW_DATA_RESET = os.environ.get("ALLOW_DATA_RESET_IN_PRODUCTION", "0") == "1"
+    BACKUP_TEST_RUN_AT = ""
     SECRET_KEY = os.environ.get("SECRET_KEY")
     SESSION_COOKIE_SECURE = True
     PREFERRED_URL_SCHEME = "https"

@@ -11,34 +11,10 @@ from heaven_angel.services.audit import log_action
 from heaven_angel.sockets import notify_all
 from heaven_angel.utils import (
     FORMULA_UNITS, ValidationError,
-    parse_non_negative_decimal, parse_positive_decimal, parse_positive_int,
+    parse_non_negative_decimal,
 )
 
 from heaven_angel.routes.admin._common import bp
-
-
-def load_formula_items_by_unit():
-    """Every packaging size's reference packaging-materials list (see
-    unit_formula_items in schema.sql), keyed by unit, with each line's
-    cost computed LIVE from the material's current cost_per_unit — never
-    trusted from unit_formula_items.line_cost itself, so editing a
-    material's cost is reflected immediately. Shared by formulas() (to
-    edit/display the recipe) and bulk_batches() (to fold a size's
-    packaging total into a batch's own reference cost-per-bottle).
-    """
-    rows = query(
-        """SELECT ufi.formula_item_id, ufi.unit, ufi.material_id, ufi.qty_per_unit,
-                  rm.material_name, rm.unit AS material_unit, rm.cost_per_unit
-           FROM unit_formula_items ufi
-           JOIN raw_materials rm ON rm.material_id = ufi.material_id
-           ORDER BY ufi.unit, rm.material_name"""
-    )
-    items_by_unit = {u: [] for u in FORMULA_UNITS}
-    for row in rows:
-        row["line_cost"] = (row["qty_per_unit"] * row["cost_per_unit"]).quantize(
-            decimal.Decimal("0.0001"))
-        items_by_unit.setdefault(row["unit"], []).append(row)
-    return items_by_unit
 
 
 # ---------------------------------------------------------------- unit formulas (COGS)
@@ -88,7 +64,6 @@ def formulas():
     cogs_rows = query(
         "SELECT unit, base_cost_per_unit FROM unit_cogs_settings")
     cogs_by_unit = {r["unit"]: r["base_cost_per_unit"] for r in cogs_rows}
-    formula_items_by_unit = load_formula_items_by_unit()
     # Reference numbers now come from actual batches that picked THIS
     # size as their target (see create_bulk_batch()'s target_unit/
     # target_bottle_qty) — same real cost_per_new_bottle/
@@ -132,10 +107,6 @@ def formulas():
     # the full picture.
     units = []
     for u in FORMULA_UNITS:
-        formula_total = sum(
-            (i["line_cost"] for i in formula_items_by_unit.get(u, [])),
-            decimal.Decimal("0"),
-        )
         refs = refs_by_unit.get(u)
         reference_cost_per_new = None
         reference_cost_per_refill = None
@@ -150,91 +121,17 @@ def formulas():
         units.append({
             "unit": u,
             "base_cost_per_unit": cogs_by_unit.get(u, decimal.Decimal("0")),
-            "formula_items": formula_items_by_unit.get(u, []),
-            "formula_total": formula_total,
             "reference_cost_per_new": reference_cost_per_new,
             "reference_cost_per_refill": reference_cost_per_refill,
             "reference_batch_count": reference_batch_count,
         })
-    materials_list = query(
-        """SELECT material_id, material_name, unit, cost_per_unit
-           FROM raw_materials ORDER BY material_name"""
-    )
-
     return render_template(
         "admin/formulas.html",
         units=units,
         bulk_rate=bulk_rate,
         reference_rate_per_ml=reference_rate_per_ml,
         reference_rate_batch_count=reference_rate_batch_count,
-        materials=materials_list,
     )
-
-
-@bp.route("/formulas/add-item", methods=["POST"])
-@admin_required
-def add_formula_item():
-    """Add (or update) one material's line in a packaging size's
-    reference packaging-materials formula (see unit_formula_items in
-    schema.sql and this route's own comment on formula_items_by_unit()).
-    Purely a reference breakdown — production() keeps charging whatever
-    flat base cost is set on unit_cogs_settings, unaffected by this.
-    """
-    unit = request.form.get("unit")
-    if unit not in FORMULA_UNITS:
-        flash("Select a valid packaging size.", "error")
-        return redirect(url_for("admin.formulas"))
-
-    try:
-        material_id = parse_positive_int(
-            request.form.get("material_id"), "Material")
-        qty_per_unit = parse_positive_decimal(
-            request.form.get("qty_per_unit"), "Quantity per unit")
-    except ValidationError as err:
-        flash(str(err), "error")
-        return redirect(url_for("admin.formulas"))
-
-    material = query(
-        "SELECT material_name, cost_per_unit FROM raw_materials WHERE material_id = %s",
-        (material_id,), fetchone=True,
-    )
-    if not material:
-        flash("That material no longer exists.", "error")
-        return redirect(url_for("admin.formulas"))
-
-    line_cost = (qty_per_unit * material["cost_per_unit"]).quantize(
-        decimal.Decimal("0.0001"))
-    execute(
-        """INSERT INTO unit_formula_items (unit, material_id, qty_per_unit, line_cost)
-           VALUES (%s, %s, %s, %s)
-           ON DUPLICATE KEY UPDATE qty_per_unit = VALUES(qty_per_unit), line_cost = VALUES(line_cost)""",
-        (unit, material_id, qty_per_unit, line_cost),
-    )
-    notify_all(["materials"])
-    log_action("add_formula_item", target=unit,
-               details=f"{material['material_name']} x {qty_per_unit:g}/unit -> ₱{line_cost:,.4f}")
-    flash(f"{unit} packaging formula updated.", "success")
-    return redirect(url_for("admin.formulas"))
-
-
-@bp.route("/formulas/delete-item", methods=["POST"])
-@admin_required
-def delete_formula_item():
-    """Remove one material line from a packaging size's reference
-    packaging-materials formula (see unit_formula_items in schema.sql)."""
-    try:
-        formula_item_id = parse_positive_int(
-            request.form.get("formula_item_id"), "Formula item")
-    except ValidationError as err:
-        flash(str(err), "error")
-        return redirect(url_for("admin.formulas"))
-
-    execute("DELETE FROM unit_formula_items WHERE formula_item_id = %s",
-            (formula_item_id,))
-    notify_all(["materials"])
-    log_action("delete_formula_item", target=str(formula_item_id))
-    flash("Removed from the packaging formula.", "success")
-    return redirect(url_for("admin.formulas"))
 
 
 @bp.route("/formulas/save-bulk-rate", methods=["POST"])

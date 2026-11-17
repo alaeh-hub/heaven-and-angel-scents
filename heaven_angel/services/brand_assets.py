@@ -15,13 +15,27 @@ from reportlab.lib.units import mm
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.pdfgen import canvas as pdfcanvas
-from reportlab.platypus import Image
+from reportlab.platypus import BaseDocTemplate, Frame, Image, PageTemplate
 
 FOOTER_INK = colors.HexColor("#5B5445")
 
 _ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 _ICON_PATH = os.path.join(_ROOT, "static", "img", "apple-touch-icon.png")
 _FONTS_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "fonts")
+
+
+def plain_document(buf, **kwargs):
+    """A document whose text frame has no inner padding.
+
+    SimpleDocTemplate pads its frame by 6pt, so paragraphs start 6pt in from the margin while a table (like
+    the header or the data table) runs flush to it, and the two never line up. Here every flowable shares
+    the margin as its left edge. Takes the same keyword arguments as SimpleDocTemplate (pagesize, margins,
+    title) and is used with doc.build(story, canvasmaker=NumberedCanvas) the same way."""
+    doc = BaseDocTemplate(buf, **kwargs)
+    frame = Frame(doc.leftMargin, doc.bottomMargin, doc.width, doc.height, id="body",
+                  leftPadding=0, rightPadding=0, topPadding=0, bottomPadding=0)
+    doc.addPageTemplates([PageTemplate(id="main", frames=[frame], pagesize=doc.pagesize)])
+    return doc
 
 
 def register_fonts():

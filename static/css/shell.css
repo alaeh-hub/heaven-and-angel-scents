@@ -148,10 +148,19 @@
     }
 
     .notif-empty {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-3xs);
         padding: var(--space-lg) var(--space-sm);
         text-align: center;
         font-size: 12.5px;
         color: var(--ink-faint);
+    }
+
+    .notif-empty strong {
+        font-size: 13.5px;
+        font-weight: 600;
+        color: var(--ink);
     }
 
     .notif-item {
@@ -596,6 +605,26 @@
         .halo-widget {
             right: 14px;
             bottom: 14px;
+            transition: transform 0.25s ease, opacity 0.2s ease;
+        }
+
+        /* A floating button always sits on top of something on a phone (it covered a Receipt
+           button in the sales list). It tucks off the right edge while you scroll down and comes
+           back when you scroll up (see initHaloTuck in page-init.js); never while its panel is open. */
+        .halo-widget.is-tucked:not(.open) {
+            transform: translateX(calc(100% + 24px));
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .halo-fab {
+            width: 48px;
+            height: 48px;
+        }
+
+        /* Room under the last row so it can be scrolled clear of the button. */
+        .content {
+            padding-bottom: calc(var(--space-2xl) + 3.5rem);
         }
 
         .halo-panel {

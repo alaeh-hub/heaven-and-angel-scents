@@ -23,7 +23,7 @@ per report) -> registry.get_report(); pdf.py and excel.py render the result.
 from heaven_angel.services.reports.constants import (  # noqa: F401
     DISCREPANCY_ITEM_JOIN, DISCREPANCY_UNITS_SQL, LOW_STOCK_WHERE,
 )
-from heaven_angel.services.reports.definitions import REPORT_TYPES  # noqa: F401
+from heaven_angel.services.reports.definitions import REPORT_GROUPS, REPORT_TYPES, report_catalog  # noqa: F401
 from heaven_angel.services.reports.excel import (  # noqa: F401
     XL_BORDER, XL_HEADER_FILL, XL_MONEY_FMT, render_report_excel,
 )

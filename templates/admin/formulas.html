@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% import "_empty.html" as empty %}
 {% import "_macros.html" as m %}
 {% block title %}Formulas{% endblock %}
 {% block heading %}Formulas{% endblock %}
@@ -36,7 +37,7 @@
 
   .cogs-inline-form {
     display: flex;
-    gap: var(--space-xs);
+    gap: var(--space-sm);
     align-items: center;
     justify-content: flex-end;
   }
@@ -101,9 +102,7 @@
      a card: size badge + remove on top, material name, then qty / rate /
      line cost; each size's total closes its group as a bar. */
   @media (max-width: 680px) {
-    .fm-rate-form .form-row { flex-direction: column; align-items: stretch !important; gap: var(--space-sm); }
-    .fm-rate-form .field { flex: 1 1 auto !important; }
-    .fm-rate-form .btn { width: 100%; }
+    .fm-rate-row .btn { width: 100%; }
 
     .cogs-inline-form { width: 100%; justify-content: stretch; }
     .cogs-inline-form input[type="number"] { flex: 1 1 auto; width: auto; min-width: 0; text-align: left; }
@@ -259,9 +258,12 @@
   }
   .pg-lead { font-size: 0.875rem; color: var(--ink-faint); padding: var(--space-2xs) var(--space-lg) var(--space-md); margin: 0; }
   .fm-rate-form { padding: 0 var(--space-lg) var(--space-lg); }
-  .fm-rate-form .form-row { align-items: flex-end; }
-  .fm-rate-form .field { margin-bottom: 0; }
-  .fm-rate-form .help { margin-top: var(--space-sm); }
+  /* Input and button share a row with a real gap; on a narrow card the button wraps under the input. */
+  .fm-rate-row { display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--space-sm); }
+  .fm-rate-row .field { flex: 1 1 9rem; min-width: 0; margin: 0; }
+  .fm-rate-row .btn { flex: 0 0 auto; }
+  .fm-rate-form .help { margin-top: var(--space-md); }
+  .stat-value-text { font-size: 1rem; font-weight: 500; line-height: 1.4; }
   .cogs-ref { white-space: normal; overflow: visible; text-overflow: clip; }
   .fm-title-note { font-weight: 400; }
 </style>
@@ -276,7 +278,7 @@
   </div>
   <div class="card stat-tile">
     <div class="stat-label">Cost of goods</div>
-    <div class="stat-value accent"><a href="{{ url_for('admin.production') }}" class="text-soft">logged automatically on Production</a></div>
+    <div class="stat-value stat-value-text"><a href="{{ url_for('admin.production') }}">Logged automatically on Production</a></div>
     <div class="stat-foot">every run's packaging size decides the base cost used, with no separate step</div>
   </div>
 </div>
@@ -333,6 +335,8 @@
             </form>
           </td>
         </tr>
+        {% else %}
+        <tr><td colspan="3">{{ empty.state('No packaging sizes yet', 'Packaging sizes and their base cost appear here once they are set up.', icon='box', compact=True) }}</td></tr>
         {% endfor %}
       </tbody>
     </table>
@@ -346,20 +350,18 @@
     <span class="hint">current: ₱{{ '%.4f'|format(bulk_rate) }}/mL</span>
   </div>
   <p class="pg-lead">
-    The one shared rate every Bulk/Refill-category product is sold at (Record Sale multiplies this by the mL amount
-    typed in). Production starts from this rate too, but lets it be retyped per batch since material costs
-    fluctuate. This figure is only ever a starting point there, not read live.
+    The one shared rate bulk is sold at by the mL (Record Sale multiplies this by the mL amount
+    typed in). Bulk comes straight out of the bulk batches, oldest first, and each sale is costed at
+    the batch it came from, so this rate is only the selling price.
   </p>
   <form method="POST" action="{{ url_for('admin.save_bulk_rate') }}" class="fm-rate-form">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-    <div class="form-row">
+    <div class="fm-rate-row">
       <div class="field">
         <label for="rate_per_ml">Rate per mL (₱)</label>
         <input type="number" id="rate_per_ml" name="rate_per_ml" step="0.0001" min="0" value="{{ bulk_rate }}" required>
       </div>
-      <div class="field">
-        <button type="submit" class="btn btn-accent">Update rate</button>
-      </div>
+      <button type="submit" class="btn btn-accent">Update rate</button>
     </div>
     {% if reference_rate_per_ml is not none %}
     <div class="help">
@@ -373,99 +375,5 @@
   </form>
 </div>
 </div>
-</div>
-
-<div class="card mt-24">
-  <div class="card-header">
-    <h2>Packaging materials per bottle (reference)</h2>
-    <span class="hint">computed, not hand-typed</span>
-  </div>
-  <p class="pg-lead">
-    What it actually costs, materials-wise, to package one bottle of each size, e.g. the bottle itself, cap,
-    sprayer, label, box. Each line's cost is computed live from the material's current price (qty per unit ×
-    cost per unit), so it always stays up to date. This is a reference only. It does not feed the base cost of
-    goods above; update that by hand once you've checked it against this breakdown, plus (for the liquid itself)
-    a batch's own cost per mL on the <a href="{{ url_for('admin.bulk_batches') }}">Bulk Batches</a> page.
-  </p>
-
-  <form method="POST" action="{{ url_for('admin.add_formula_item') }}" class="fm-add-row" data-preserve-scroll>
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-    <div class="field field-unit">
-      <label for="fmUnit">Size</label>
-      <select id="fmUnit" name="unit" required>
-        {% for u in units %}
-        <option value="{{ u.unit }}">{{ u.unit }}</option>
-        {% endfor %}
-      </select>
-    </div>
-    <div class="field field-material">
-      <label for="fmMaterial">Material</label>
-      <select id="fmMaterial" name="material_id" required>
-        <option value="">Select…</option>
-        {% for mat in materials %}
-        <option value="{{ mat.material_id }}">{{ mat.material_name }} (₱{{ '%.4f'|format(mat.cost_per_unit) }}/{{ mat.unit.lower() }})</option>
-        {% endfor %}
-      </select>
-    </div>
-    <div class="field field-qty">
-      <label for="fmQty">Qty per unit</label>
-      <input type="number" id="fmQty" name="qty_per_unit" step="0.0001" min="0.0001" required>
-    </div>
-    <button type="submit" class="btn btn-ghost btn-center-sm">Add to formula</button>
-  </form>
-
-  {% set any_items = units|selectattr('formula_items')|list %}
-  <div class="fm-table-wrap">
-    <table class="fm-table table-fixed">
-      <colgroup>
-        <col style="width:14%"><col style="width:30%"><col style="width:16%"><col style="width:16%"><col style="width:16%"><col style="width:40px">
-      </colgroup>
-      <thead>
-        <tr>
-          <th>Size</th>
-          <th>Material</th>
-          <th class="num">Qty / unit</th>
-          <th class="num">Cost / unit</th>
-          <th class="num">Line cost</th>
-          <th></th>
-        </tr>
-      </thead>
-      <tbody>
-        {% if any_items %}
-          {% for u in units %}
-            {% for item in u.formula_items %}
-            <tr>
-              <td class="mono text-soft" data-label="Size">{{ u.unit }}</td>
-              <td data-label="Material">{{ item.material_name }}</td>
-              <td class="num mono" data-label="Qty / unit">{{ item.qty_per_unit|round(4)|string|replace('.0000','') }} {{ item.material_unit.lower() }}</td>
-              <td class="num mono" data-label="Cost / unit">₱{{ '%.4f'|format(item.cost_per_unit) }}</td>
-              <td class="num mono" data-label="Line cost">₱{{ '%.4f'|format(item.line_cost) }}</td>
-              <td>
-                <form method="POST" action="{{ url_for('admin.delete_formula_item') }}" data-preserve-scroll
-                  data-confirm="Remove this material from the {{ u.unit }} formula?">
-                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                  <input type="hidden" name="formula_item_id" value="{{ item.formula_item_id }}">
-                  <button type="submit" class="fm-remove" title="Remove"
-                    aria-label="Remove {{ item.material_name }} from {{ u.unit }}">&times;</button>
-                </form>
-              </td>
-            </tr>
-            {% endfor %}
-            {% if u.formula_items %}
-            <tr class="fm-total-row">
-              <td colspan="4" class="fm-total-label">{{ u.unit }} packaging total</td>
-              <td class="num mono">₱{{ '%.4f'|format(u.formula_total) }}</td>
-              <td></td>
-            </tr>
-            {% endif %}
-          {% endfor %}
-        {% else %}
-        <tr class="fm-empty-row">
-          <td colspan="6">No packaging materials added yet. Pick a size and material above.</td>
-        </tr>
-        {% endif %}
-      </tbody>
-    </table>
-  </div>
 </div>
 {% endblock %}

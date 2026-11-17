@@ -63,45 +63,38 @@ def _product(sql, sku):
     return row
 
 
-def test_import_accepts_a_bulk_row_as_bulk_refill(client, sql):
+def test_import_refuses_a_bulk_row_because_bulk_is_not_a_product(client, sql):
     import uuid
     user = make_user(sql, role="Admin", branch_id=None)
     login(client, user["username"], user["password"], "Admin")
     code = "T" + uuid.uuid4().hex[:6].upper()
 
     _import_csv(client, "base_code,item_name,variant,unit,price\n"
-                        f"{code},Seraph,Male,50ML,350.00\n"
                         f"{code},Seraph,Male,BULK,12.50\n")
 
-    bottle = _product(sql, f"{code}-50ML")
-    bulk = _product(sql, f"{code}-BULK")
-    assert bottle["category"] == "Bottled"
-    assert bulk["category"] == "Bulk/Refill"
-    assert bulk["unit"] == "BULK"
-    assert str(bulk["price"]) == "12.50"
+    assert _product(sql, f"{code}-BULK") is None
 
 
-def test_exported_bulk_rows_import_back_as_updates(client, sql):
+def test_export_never_lists_a_bulk_row(client, sql):
     import uuid
     user = make_user(sql, role="Admin", branch_id=None)
     login(client, user["username"], user["password"], "Admin")
     code = "T" + uuid.uuid4().hex[:6].upper()
     _import_csv(client, "base_code,item_name,variant,unit,price\n"
-                        f"{code},Seraph,Male,BULK,12.50\n")
+                        f"{code},Seraph,Male,50ML,350.00\n")
 
-    exported = client.get("/admin/products/export").get_data().decode("utf-8-sig")
-    assert f"{code},Seraph,Male,BULK,12.50" in exported
+    # The export is an Excel file: read every cell back out of it.
+    from io import BytesIO
+    import openpyxl
+    workbook = openpyxl.load_workbook(BytesIO(client.get("/admin/products/export").get_data()))
+    cells = {str(c.value) for sheet in workbook for row in sheet.iter_rows() for c in row if c.value is not None}
 
-    # Re-import the exported file with the BULK price changed.
-    edited = exported.replace(f"{code},Seraph,Male,BULK,12.50", f"{code},Seraph,Male,BULK,15.00")
-    resp = _import_csv(client, edited)
-
-    assert resp.status_code == 302
-    assert str(_product(sql, f"{code}-BULK")["price"]) == "15.00"
+    assert code in cells and "50ML" in cells
+    assert "BULK" not in cells
 
 
 def test_products_page_counts_skus_by_base_code(client, sql):
-    """A1-85ML / A1-50ML / A1-BULK are one SKU ("A1") in the count."""
+    """A1-85ML / A1-50ML are one SKU ("A1") in the count."""
     import re
     import uuid
     user = make_user(sql, role="Admin", branch_id=None)
@@ -115,7 +108,6 @@ def test_products_page_counts_skus_by_base_code(client, sql):
     code = "T" + uuid.uuid4().hex[:6].upper()
     _import_csv(client, "base_code,item_name,variant,unit,price\n"
                         f"{code},Seraph,Male,85ML,500.00\n"
-                        f"{code},Seraph,Male,50ML,350.00\n"
-                        f"{code},Seraph,Male,BULK,12.50\n")
+                        f"{code},Seraph,Male,50ML,350.00\n")
 
     assert catalog_count() == before + 1

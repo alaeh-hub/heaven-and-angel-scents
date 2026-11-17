@@ -62,6 +62,66 @@ def make_product(sql, price="100.00", unit="50ML", variant="Male"):
     return sku
 
 
+def make_scent(sql, unit="50ML", variant="Male", price="50.00", name=None):
+    """A bottled product with a proper '<code>-<unit>' SKU (make_product's TST-
+    SKUs have no base code), so its scent can have bulk batches and bulk sales.
+    Returns (sku, base_code)."""
+    base = f"SC{unique_suffix().upper()}"
+    sku = f"{base}-{unit}"
+    cur = sql.cursor()
+    cur.execute(
+        """INSERT INTO products (sku, item_name, variant, category, unit, price)
+           VALUES (%s, %s, %s, 'Bottled', %s, %s)""",
+        (sku, name or f"Scent {base}", variant, unit, price),
+    )
+    sql.commit()
+    cur.close()
+    return sku, base
+
+
+def make_scent_batch(sql, base_code, remaining_ml, cost_per_ml="2.000000", created_at=None):
+    """A bulk batch of a scent (bulk_batches.base_code) with remaining_ml left,
+    inserted directly. created_at decides which batch is the OLDEST."""
+    cur = sql.cursor()
+    cur.execute(
+        """INSERT INTO bulk_batches
+               (scent_name, base_code, input_qty, input_unit, total_volume_ml,
+                total_cost, cost_per_ml, remaining_ml)
+           VALUES (%s, %s, %s, 'Milliliter', %s, %s, %s, %s)""",
+        (f"Batch {base_code} {unique_suffix()}", base_code, remaining_ml, remaining_ml,
+         float(remaining_ml) * float(cost_per_ml), cost_per_ml, remaining_ml),
+    )
+    batch_id = cur.lastrowid
+    if created_at:
+        cur.execute("UPDATE bulk_batches SET created_at = %s WHERE batch_id = %s", (created_at, batch_id))
+    sql.commit()
+    cur.close()
+    return batch_id
+
+
+def get_batch_remaining(sql, batch_id):
+    cur = sql.cursor()
+    cur.execute("SELECT remaining_ml FROM bulk_batches WHERE batch_id = %s", (batch_id,))
+    row = cur.fetchone()
+    cur.close()
+    return float(row[0])
+
+
+def make_bulk_sale(sql, branch_id, base_code, qty_ml, unit_price="1.00", customer_name=None):
+    """A bulk sale row as record_sale() writes it: sold by the mL under the key
+    '<code>-BULK' (not a product). Inserted directly, so no batch is touched."""
+    cur = sql.cursor()
+    cur.execute(
+        """INSERT INTO sales (branch_id, sku, qty_sold, unit_price, customer_name)
+           VALUES (%s, %s, %s, %s, %s)""",
+        (branch_id, f"{base_code}-BULK", qty_ml, unit_price, customer_name),
+    )
+    sql.commit()
+    sale_id = cur.lastrowid
+    cur.close()
+    return sale_id
+
+
 def make_partner(sql, partner_type="Distributor", name=None):
     name = name or f"Test Partner {unique_suffix()}"
     cur = sql.cursor()

@@ -6,7 +6,9 @@ granularity comes from the fixed allow-list in services/trends.py — never from
 user text — so interpolating it stays injection-safe.
 """
 from heaven_angel.db import query
-from heaven_angel.services.finance import PACKAGE_DATE_SQL, UNIT_COST_SQL, cogs_sold
+from heaven_angel.services.finance import (
+    PACKAGE_DATE_SQL, SALE_COST_EXPR, SALES_WITH_COST_SQL, UNIT_COST_SQL, cogs_sold,
+)
 from heaven_angel.services.trends import trend_bucket_dates
 from heaven_angel.utils import business_today
 
@@ -33,7 +35,7 @@ def sales_breakdowns():
                   COALESCE(SUM(CASE WHEN p.unit = 'BULK' THEN s.qty_sold ELSE 0 END), 0) AS bulk_ml,
                   COALESCE(SUM(s.qty_sold * s.unit_price), 0) AS revenue
            FROM branches b LEFT JOIN sales s ON b.branch_id = s.branch_id
-           LEFT JOIN products p ON p.sku = s.sku
+           LEFT JOIN sale_catalog p ON p.sku = s.sku
            WHERE b.is_hq = FALSE GROUP BY b.branch_id, b.branch_name ORDER BY b.branch_name"""
     )
     stock_by_branch = query(
@@ -87,7 +89,7 @@ def all_time_totals():
         """SELECT COALESCE(SUM(CASE WHEN p.unit <> 'BULK' THEN s.qty_sold ELSE 0 END), 0) AS units,
                   COALESCE(SUM(CASE WHEN p.unit = 'BULK' THEN s.qty_sold ELSE 0 END), 0) AS bulk_ml,
                   COALESCE(SUM(s.qty_sold * s.unit_price), 0) AS revenue
-           FROM sales s JOIN products p ON p.sku = s.sku""",
+           FROM sales s JOIN sale_catalog p ON p.sku = s.sku""",
         fetchone=True,
     )
     package_totals = query(
@@ -188,7 +190,7 @@ def kpi_tiles(granularity, trend_bucket, windowed_revenue, windowed_materials_co
         f"""SELECT {_bucket('s.sold_at')} AS day,
                    COALESCE(SUM(s.qty_sold * s.unit_price), 0) AS revenue,
                    COALESCE(SUM(CASE WHEN p.unit <> 'BULK' THEN s.qty_sold ELSE 0 END), 0) AS units
-            FROM sales s JOIN products p ON p.sku = s.sku
+            FROM sales s JOIN sale_catalog p ON p.sku = s.sku
             WHERE s.sold_at >= NOW() - {window_sql}
             GROUP BY {_bucket('s.sold_at')}"""))
     package_series = _series(query(
@@ -199,8 +201,8 @@ def kpi_tiles(granularity, trend_bucket, windowed_revenue, windowed_materials_co
     # Cost of goods sold per bucket: register sales + closed package orders.
     cost_series = _series(query(
         f"""SELECT {_bucket('s.sold_at')} AS day,
-                   COALESCE(SUM(s.qty_sold * COALESCE(uc.unit_cost, 0)), 0) AS cost
-            FROM sales s LEFT JOIN {UNIT_COST_SQL} uc ON uc.sku = s.sku
+                   COALESCE(SUM({SALE_COST_EXPR}), 0) AS cost
+            FROM {SALES_WITH_COST_SQL}
             WHERE s.sold_at >= NOW() - {window_sql}
             GROUP BY {_bucket('s.sold_at')}"""))
     package_cost_series = _series(query(
@@ -253,11 +255,11 @@ def kpi_tiles(granularity, trend_bucket, windowed_revenue, windowed_materials_co
         f"s.sold_at >= NOW() - {window2_sql} AND s.sold_at < NOW() - {window_sql}",
         f"{PACKAGE_DATE_SQL} >= NOW() - {window2_sql} AND {PACKAGE_DATE_SQL} < NOW() - {window_sql}")
     prev_units = query(
-        f"""SELECT COALESCE(SUM(s.qty_sold), 0) AS v FROM sales s JOIN products p ON p.sku = s.sku
+        f"""SELECT COALESCE(SUM(s.qty_sold), 0) AS v FROM sales s JOIN sale_catalog p ON p.sku = s.sku
             WHERE p.unit <> 'BULK' AND s.sold_at >= NOW() - {window2_sql} AND s.sold_at < NOW() - {window_sql}""",
         fetchone=True)["v"]
     windowed_units = query(
-        f"""SELECT COALESCE(SUM(s.qty_sold), 0) AS v FROM sales s JOIN products p ON p.sku = s.sku
+        f"""SELECT COALESCE(SUM(s.qty_sold), 0) AS v FROM sales s JOIN sale_catalog p ON p.sku = s.sku
             WHERE p.unit <> 'BULK' AND s.sold_at >= NOW() - {window_sql}""",
         fetchone=True)["v"]
     kpi = {

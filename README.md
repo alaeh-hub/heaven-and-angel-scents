@@ -14,8 +14,14 @@ This repository is an active operational application. The system currently inclu
 - Installable back-office app (PWA) with static-asset caching and an offline notice; operational pages and records are never cached
 - AI-powered internal assistant for scoped business questions over live data
 - Audit trail and movement logging for operational accountability
-- Receipt generation and QR-code scan verification for branch sales
-- Bulk sales import/export via Excel, with the same stock and validation rules as manual entry
+- Receipt generation and QR-code scan verification for branch sales, plus a plain printed goods-received receipt for deliveries
+- Several scents on one receipt: Record Sale and the Excel import can put up to 60 products on one order, printed 10 to a slip (a bigger order continues on the next slip)
+- Raw-material price tracking with a price-trend chart, and built-in bulk batch formulas (15%, 14%, 13%) with a cost calculator under Tools
+- A report builder with 26 report types (PDF and Excel), a live row count before you download, and plain printed-document styling
+- Products catalogue export (Excel or CSV) that can be edited and imported again
+- Helpful empty states on every table, chart and list, and forms whose live notes never make the layout jump
+- Bulk sales import/export via Excel, with the same stock and validation rules as manual entry, and an optional Receipt column to group rows into one receipt
+- Light and dark mode in 15 interface styles, checked for readability at desktop, tablet and phone widths
 - In-app database backup, restore, reminders, and optional scheduled email
   delivery, with an optional scheduled off-host copy
 
@@ -66,17 +72,21 @@ The app is a single Flask application with several route blueprints, a shared da
 | `heaven_angel/decorators.py` | Shared route decorators for login/role/branch access control |
 | `heaven_angel/utils.py` | Form-parsing helpers, constants (payment methods, sale types), validation, receipt-code signing |
 | `heaven_angel/services/sale_stock.py` | Shared stock logic for recording and voiding a sale — used by both manual entry and Excel import, so every path moves stock identically |
-| `heaven_angel/services/sales_import.py` | Builds/parses the Excel bulk sales import template and inserts an entire file as one atomic transaction |
+| `heaven_angel/services/sales_import.py` | Builds/parses the Excel bulk sales import template and inserts an entire file as one atomic transaction; rows sharing a `Receipt` label become one order |
 | `heaven_angel/services/audit.py` | Admin action audit log (`admin_actions` table) |
 | `heaven_angel/services/login_activity.py` | Login/logout activity tracking (`login_activity` table) |
 | `heaven_angel/services/mailer.py` | Outbound SMTP notifications (currently: new partner-inquiry alerts to HQ) |
 | `heaven_angel/services/appsettings.py` | Small database-backed store for admin-managed settings such as the backup schedule |
 | `heaven_angel/services/backup.py` | Consistent database snapshots, backup archives, and validated in-app restore |
 | `heaven_angel/services/backup_jobs.py` | Backup reminders, schedule tracking, and optional automatic email backups |
-| `heaven_angel/services/receipts.py` | PDF sale receipt generation, including the signed QR verification code |
+| `heaven_angel/services/receipts.py` | PDF sale receipt generation, including the signed QR verification code. An order of several scents is printed as one page per slip, 10 products to a slip, each page as tall as its content |
 | `heaven_angel/services/brand_assets.py` | Shared reportlab-drawn brand mark used in generated PDFs (reports, receipts) |
-| `heaven_angel/services/reports/` | On-demand reports: `definitions` (catalog) → `filters`/`totals` → `builders_*` (one query per report) → `registry.get_report()`; `pdf.py` / `excel.py` render |
-| `heaven_angel/services/sale_entry.py` | Record Sale form validation and the insert-plus-stock step, shared by HQ and branches |
+| `heaven_angel/services/reports/` | On-demand reports: `definitions` (groups, descriptions, `report_catalog(role)`) → `filters`/`totals` → `builders_*` (one query per report) → `registry.get_report()`; `pdf.py` / `excel.py` render them as plain printed documents |
+| `heaven_angel/services/material_prices.py` | Raw-material price history and the trend figures behind the Materials chart |
+| `heaven_angel/routes/admin/batch_formulas.py` | The built-in bulk batch formulas, sizes, settings and packaging, and their costing from live material prices |
+| `heaven_angel/routes/admin/tools.py` | Tools page: unit converter, alcohol and water mix, bottle yield, price per unit, formula cost calculator (calculated in the browser, writes nothing) |
+| `heaven_angel/services/sale_entry.py` | Record Sale form validation and the insert-plus-stock step, shared by HQ and branches. An order of several scents is recorded in one transaction (`record_sale_order`), and `annotate_receipts` tells a list which row carries the order's Receipt button |
+| `templates/_order_basket.html`, `templates/_order_basket_list.html` | The "Add to receipt" button and the list of scents on the New sale dialog (shared by HQ and branch) |
 | `heaven_angel/services/admin_report_data.py` | The queries behind the admin Reports charts |
 | `heaven_angel/services/trends.py` | Time-bucket options shared by the admin and branch trend charts |
 | `heaven_angel/app.py` | App factory: config, security headers, blueprints, background workers (small steps, one function each) |
@@ -85,14 +95,14 @@ The app is a single Flask application with several route blueprints, a shared da
 | `heaven_angel/logging_setup.py` | Colour/JSON log formatting and request-ID stamping |
 | `heaven_angel/sockets.py` | Socket.IO room membership and role/branch-scoped realtime event broadcasting |
 | `scripts/create_admin.py` | Create or reset an Admin/Branch login (dev and server) |
-| `scripts/demo_data.py` | 18 months of demo data for a local dev database: `--reset` rebuilds it, `--clear` removes it, `--dry-run` tests without saving |
+| `scripts/demo_data.py` | Fills a freshly seeded local database with about 80 days of demo data for every part of the system (logins, branches, material purchases, bulk batches, production, deliveries, sales, voids, partners, packages, inquiries, logs). It refuses to run when records already exist; `--sales N` sets how many sales to make |
 | `schema.sql` | Full operational database schema, including guarded migrations for existing installs |
 | `heaven_angel/routes/auth.py` | Login, logout, and forced password-change flows |
 | `heaven_angel/routes/admin/` | HQ screens, one module per feature (`products`, `production`, `formulas`, `materials`, `sales`, `stock_requests`, `partners`, `packages`, `inquiries`, `reports`, `backup`, `users`, `logs`, …), all registering on one shared blueprint in `_common.py` |
 | `heaven_angel/routes/branch/` | Branch-side screens, one module per feature (`dashboard`, `inventory`, `stock_requests`, `sales`, `reports`) on one shared blueprint |
 | `heaven_angel/routes/portal/` | Public partner portal, slug-gated: `pages` (serves the built `public-site/`), `catalog` (JSON API), `inquiries` (partner inquiry intake), `email_retry` (resends unsent notifications) |
 | `heaven_angel/routes/ai.py` | Chat endpoint and session handling for the read-only AI assistant |
-| `heaven_angel/routes/ai_tools/` | The data-fetching "tools" the AI assistant may call, scoped by role/branch: `stock`, `sales`, `catalog`, `declarations` (what the model is told), `registry` (dispatch) |
+| `heaven_angel/routes/ai_tools/` | The data-fetching "tools" the AI assistant may call, scoped by role/branch (22 for Admin, 12 for Branch): `stock`, `sales`, `catalog`, `insights` (material price history, voided sales, inventory log, find-a-report), `declarations` (what the model is told), `registry` (dispatch) |
 | `heaven_angel/routes/scan.py` | QR receipt verification — decodes and checks a signed receipt code against the database |
 
 The platform uses:
@@ -142,6 +152,16 @@ This process is transactional end-to-end, so stock counts and movement history n
 
 HQ logs production batches that convert raw materials into finished (bottled) and bulk stock. Each batch is costed against unit formulas and bulk rate settings, updating warehouse inventory and recording the production event in movement history — tying production directly into COGS and profit reporting.
 
+Bulk batches are made from the built-in formulas (15%, 14%, 13%, each in 500, 250 and 125 mL timpla sizes), so nobody picks materials one by one. Each ingredient role is tied once to a raw material, and the batch cost comes from that material's current price. When logging a production run, a short one-line note shows the cost per unit and the mL drawn from the chosen batch.
+
+### 3a. Materials and price trends
+
+The Materials page tracks raw materials, suppliers and restocks. Every restock that changes a price is kept as history, and the page charts it on a real time axis with a summary of the biggest movers. Admins can also ask the AI assistant about price history. Branch accounts cannot see material prices.
+
+### 3b. Tools
+
+The Tools page gives HQ calculators for everyday numbers: unit converter, alcohol and water mix, bottle yield, price per unit, and a formula cost calculator with editable prices. Nothing there writes to the database.
+
 ### 4. Sales, refills, and voids
 
 Branches (and HQ) record sales through `heaven_angel/services/sale_stock.py`'s shared logic, so manual entry and Excel bulk import both move stock identically:
@@ -150,11 +170,22 @@ Branches (and HQ) record sales through `heaven_angel/services/sale_stock.py`'s s
 - **Refill** — the customer brings their own bottle; no bottled unit leaves stock, but the scent's *bulk* product is drawn down instead (HQ-only, since branches don't stock bulk).
 - Payment methods include cash and credit entries.
 - Every sale produces a PDF receipt with a signed, scannable QR code (see `heaven_angel/services/receipts.py` / `heaven_angel/routes/scan.py`).
+- **Several scents on one receipt.** On the New sale dialog, "Add to receipt" builds a list of scents with one customer, payment method, type and date. The scents are recorded together, all or none, as separate sales rows tied by `sales.order_id` (the first row's id), so stock, voids and reports still work per product. A sale of one scent has no `order_id` and behaves as before.
+- **Slips.** A receipt prints 10 products to a slip. A bigger order continues on a second and third slip (one PDF page each, headed "Slip 2 of 3", with a subtotal per slip and the order total on the last). Long names and addresses wrap and the slip grows to fit.
+- A sales list shows one **Receipt** button per order (with its product count) on the order's first row; the other rows say which receipt they are on. Voiding from Sales History is still per row; voiding or settling credit from Scan Receipt applies to the whole order.
 - A sale can be **voided**: stock is restored, a permanent snapshot is kept in `sale_voids` (who voided it and why), and the sale row is removed so revenue/units/customer/credit totals self-correct without every query having to filter voids out.
+
+### 4a. Reports and documents
+
+Admin and Branch each get a report builder: report cards in group tabs with search, choice chips for options, date presets, a plain-words summary of what will be produced, and a live row count before you download. There are 26 report types (including material prices and shipments), each as PDF or Excel.
+
+All printed documents follow one plain style: sentence-case headings, hairline rules, no outer boxes and a restrained accent. This covers the report PDFs, the Excel reports, the sale receipt and the goods-received (delivery) receipt. The Products export keeps its header in row 1 and data from row 2 so a downloaded file can be edited and imported again.
 
 ### 5. Bulk sales import
 
 HQ or a branch can download an Excel template, fill in a batch of sales offline, and re-upload it. The whole file is validated and inserted as **one atomic transaction** — either every row is applied, or none are — with every problem reported at once rather than failing row-by-row partway through an import.
+
+The last column, **Receipt**, is optional. Rows with the same text there (A, B, 1, 2…) go on one receipt, like several scents on one New sale: they must share the same customer, payment, type and date, and a receipt holds at most 60 products. A blank cell is a receipt of its own.
 
 ### 6. Partner portal
 
@@ -172,7 +203,7 @@ The flow includes:
 
 ### 7. Receipt verification (QR scan)
 
-Every sale receipt PDF carries a short, HMAC-signed code (not the sale's actual data) rendered as a QR code. `/scan/*` lets anyone with the receipt — staff or customer — scan that QR (webcam) or upload a photo of it, decode it client-side, and verify server-side that the sale it points to genuinely exists, pulling the real details from the database rather than trusting anything printed on the receipt itself. Manual code entry is available as a fallback. Branch staff can only verify sales recorded at their own branch; Admin can verify any sale.
+Every sale receipt PDF carries a short, HMAC-signed code (not the sale's actual data) rendered as a QR code. For an order of several scents the code points at the order's first row, and the scan page lists every product with the order total. `/scan/*` lets anyone with the receipt — staff or customer — scan that QR (webcam) or upload a photo of it, decode it client-side, and verify server-side that the sale it points to genuinely exists, pulling the real details from the database rather than trusting anything printed on the receipt itself. Manual code entry is available as a fallback. Branch staff can only verify sales recorded at their own branch; Admin can verify any sale.
 
 ### 8. AI assistant
 
@@ -194,6 +225,18 @@ The system keeps two separate but complementary records:
 - `stock_movement_logs` — what happened to stock quantities over time, and why (sale, refill, production, dispatch, receipt, void, etc.)
 
 Together they make it possible to answer both operational and administrative "what happened and who did it" questions after the fact.
+
+### 9a. Interface behaviour
+
+- Every table, chart and list shows a short empty state (what is missing and the next step) instead of a blank box; the shared markup is `templates/_empty.html`.
+- Confirmations use a styled in-app dialog (`window.appConfirm()`), not the browser's `confirm()`.
+- Dropdowns share one smart matcher (`static/js/app/smart-match.js`): case, accents and word order are ignored and one small typo is forgiven.
+- Notes that fill in as you type (a total, a stock count, a price per unit) sit in reserved space (`.live-slot` in `style.css`), so forms and the cards sized to them do not change height.
+- The sidebar groups are labelled for screen readers and mark the current page with `aria-current`.
+- Light and dark mode work in every interface style. The sidebar wordmark is deepened to bronze on light surfaces, placeholder text and disabled buttons are kept readable, and chart and sparkline colours follow the theme live (no reload) and are kept at least 3:1 against what they are drawn on (`static/js/app/charts.js`).
+- The top bar sheds its extras as the room narrows (clock, shortcut hint, trend, "Today", full amount) so the bell, sound and theme buttons stay reachable on a tablet or with the sidebar pinned; on a phone the sales chip shows the compact amount.
+- The New sale dialog fits the screen without scrolling; the list of scents scrolls inside itself after about five rows.
+- On a phone the floating assistant button tucks away while the page scrolls down.
 
 ### 10. Backups and restore
 
@@ -272,11 +315,36 @@ The app is intentionally strict in production mode and will warn, or fail to sta
 3. Ensure MySQL is running and reachable (defaults match a stock XAMPP install: `localhost:3306`, user `root`, empty password).
 4. Load the schema in `schema.sql` into your database.
 5. Set required environment variables in a `.env` file or shell config (see above).
-6. Start the app with:
+6. Optionally load demo data into a freshly seeded local dev database only. The schema seeds the 8 materials, 2 suppliers, 31 products and two branches; the script adds logins (password `Demo@12345678`, printed at the end), batches, deliveries, a few hundred sales (including multi-scent orders that print on 2 and 3 slips), partners and logs:
+
+```bash
+python scripts/demo_data.py              # needs an empty database, see "Starting a local database over" below
+python scripts/demo_data.py --sales 900  # more sales
+```
+
+7. Start the app with:
 
 ```bash
 python app.py
 ```
+
+A local dev database can be emptied from the admin Clear data page (type `CLEAR ALL DATA`, needs `ALLOW_DATA_RESET`). It keeps users, branches and pricing/formula settings.
+
+#### Starting a local database over
+
+To go back to a clean install (only the seeded materials, suppliers, products and branches), drop the database and apply the schema again:
+
+```bash
+mysql -u root -p -e "DROP DATABASE IF EXISTS heaven_and_angel_scents;"
+mysql -u root -p < schema.sql
+python scripts/create_admin.py        # there are no logins until you make one
+```
+
+This deletes everything, so it is for a development machine only. `python scripts/demo_data.py` can then be run on top of it.
+
+#### Database schema and deploys
+
+`schema.sql` is additive and safe to run again: tables and columns are only created when missing, seeds use `INSERT IGNORE`, and migrations check `information_schema` first. Running it on a database that already holds real data does not delete or change that data (a seeded material or product you deleted is added back). The deploy workflow (`.github/workflows/deploy.yml`) takes a database dump, then applies `schema.sql` before restarting the service, so a pushed change that needs a new column or table arrives with it. The file starts with `USE heaven_and_angel_scents;`, so the live database must have that name (`MYSQL_DB`).
 
 For the partner portal front end (`public-site/`), in a second terminal:
 
@@ -296,7 +364,7 @@ For production-style WSGI serving, the repo also includes `wsgi.py` and the requ
 
 ### Running tests
 
-The test suite (`tests/`) covers RBAC, branch isolation, session and Socket.IO authorization, CSP nonce enforcement, sales/voids, stock requests, bulk batches, formulas, reports, partner portal API, dashboard trends, and more. Integration tests use a disposable MySQL database:
+The test suite (`tests/`) covers RBAC, branch isolation, session and Socket.IO authorization, CSP nonce enforcement, sales/voids, stock requests, bulk batches and batch formulas, material price trends, multi-scent orders and their receipts (slip count, layout, scan and void), Excel import grouping, the demo-data script's tables, reports, AI tool alignment, partner portal API, dashboard trends, and more. Integration tests use a disposable MySQL database:
 
 ```bash
 pip install -r requirements-dev.txt   # pytest + ruff (not in the production image)
@@ -321,11 +389,13 @@ source renders in `assets/scent-renders/` are excluded by `.gitignore`.
 ├── heaven_angel/         # the Flask application package
 │   ├── app.py, config.py, extensions.py, db.py, decorators.py, utils.py, sockets.py
 │   ├── routes/           # blueprints (admin, auth, branch, portal, ai, ai_tools, scan)
-│   └── services/         # business logic: reports, receipts, backup, mailer, ...
+│   └── services/         # business logic: reports, receipts, backup, mailer, material prices, ...
+├── scripts/              # create_admin.py, demo_data.py (fills a fresh database with demo data)
 ├── schema.sql
 ├── requirements.txt
 ├── README.md
 ├── docs/                 # design (visual system), BACKUP, DEPLOY, DOCKER_DEPLOY, HOSTINGER_DEPLOY, QA pack
+│                         # (local-only notes such as OPENING_DATA_IMPORT and OPEN_QUESTION_* are git-ignored)
 ├── public-site/          # partner portal front end (React + Vite)
 │   └── src/
 │       ├── components/
@@ -368,6 +438,15 @@ The current implementation is optimized for a real operating environment, not a 
 - the system expects a reliable MySQL environment and correct production configuration (secret key, slug, mail, CORS) to run safely
 
 This is a serious internal operations platform with real business workflows, accounting logic, and operational visibility built into the core application design.
+
+---
+
+## Known open items
+
+- Per-scent oil cost and stock is not built yet. The options are written up in a local note and waiting on a business decision, so oil scent is still tracked as a raw material, not per scent.
+- Report documents are checked structurally and by rendering; Excel files and the printed QR have not been checked by eye or by camera.
+- Sale receipts, including the long multi-slip ones, have been checked as PDFs on screen but not yet on a real thermal printer.
+- The AI assistant's tools are tested directly; the live Gemini model has not been tested end to end after the latest tool changes.
 
 ---
 

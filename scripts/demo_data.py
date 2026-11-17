@@ -1,35 +1,46 @@
-"""Fill a LOCAL dev database with ~18 months of believable demo history so every
-page and graph in the system has something to show, or take it back out again:
+"""Full demo data: fills every part of the system so it can be tested end to end.
 
-    python scripts/demo_data.py --reset     # remove old demo data, then build the new set (recommended)
-    python scripts/demo_data.py             # build it (refuses if demo data is already there)
-    python scripts/demo_data.py --clear     # remove exactly what this added
-    python scripts/demo_data.py --dry-run   # build everything, print the summary, then ROLL BACK
+    python scripts/demo_data.py              # fill an empty (freshly applied) database
+    python scripts/demo_data.py --sales 900  # same, with more sales (default 380)
 
-It is a small simulation, not random noise: HQ produces stock from bulk batches
-(which use up raw materials that get restocked from suppliers), branches request
-stock when they run low, HQ dispatches it, branches receive it (sometimes short or
-damaged), and sales only happen against stock that is really there. So the
-inventory, movement logs, cost of goods, requests and sales all agree with each
-other, and the dashboards show a long, growing, seasonal revenue curve.
+Start from a clean database, then run this:
 
-Everything it inserts is tagged so --clear can find it without touching real rows:
-products use SKUs starting "DEMO-", extra branches have a location ending in
-"demo-seed", stock requests are numbered "DEMO-xxxxxx", raw materials use receipt
-numbers starting "DEMO-", and the other tables carry "demo-seed" in notes /
-remarks / details. Existing branches and accounts are left alone (they get demo
-sales too); demo branch logins are created for the extra branches.
+    1. drop the database and apply schema.sql again (it seeds the 8 materials,
+       the 2 suppliers, the 31 products and HQ + Balayan Branch);
+    2. python scripts/demo_data.py
 
-Refuses to run when APP_ENV=production.
+The script refuses to run when business records already exist, and when
+APP_ENV=production. It never invents materials or products: everything comes from
+schema.sql. Everything that moves stock goes through the same functions the app
+itself uses (bulk batches, production runs, delivery receipts, Record Sale, void),
+so costs, stock levels and ledger rows are exactly what the pages would have made;
+only the dates are moved back in time.
+
+What it creates (all back-dated over about 80 days):
+  - Logins (admin + branch accounts, one inactive), two more branches.
+  - Supplier details, the purchase history of every material (restocks at rising,
+    falling and flat prices, with receipt numbers), unit costs and formulas, bulk rate.
+  - Bulk batches for most scents (15% / 14% / 13% formulas, 500 and 250 mL), bottled
+    production runs, and three scents deliberately left with no stock.
+  - Deliveries HQ -> branches: Fulfilled (incl. one with 28 lines, one with damage and
+    a missing unit finished by a second shipment), Partially Fulfilled, In Transit,
+    Pending and Rejected, so every receipt and status shows up.
+  - Sales at every branch: bottles, bulk by the mL, refills, freebies, cash and credit
+    (some credit settled), named customers, voids, plus a handful of receipt stress
+    cases (very long names / addresses) dated today.
+  - Partners, their investments, packages, inquiries in every status (some fulfilled),
+    AI stock drafts, login activity, the admin log and backup settings.
+
+The login passwords are printed at the end (development only).
 """
-import heapq
+import argparse
+import decimal
 import math
 import os
 import random
 import sys
-from collections import defaultdict
+import uuid
 from datetime import timedelta
-from functools import partial
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 if hasattr(sys.stdout, "reconfigure"):      # the Windows console defaults to cp1252, which has no peso sign
@@ -38,1039 +49,827 @@ if hasattr(sys.stdout, "reconfigure"):      # the Windows console defaults to cp
 from werkzeug.security import generate_password_hash  # noqa: E402
 
 from heaven_angel.app import create_app  # noqa: E402
-from heaven_angel.db import get_db, query  # noqa: E402
-from heaven_angel.utils import business_now  # noqa: E402
+from heaven_angel.db import TransactionAborted, get_db, query, transaction  # noqa: E402
+from heaven_angel.routes.admin.batch_formulas import (  # noqa: E402
+    formula_for_scent, load_catalog, load_formula_config,
+)
+from heaven_angel.routes.admin.production import (  # noqa: E402
+    _BatchPlan, _ProductionRun, _create_bulk_batch_records, _record_production_run,
+)
+from heaven_angel.routes.branch.stock_requests import _confirm_shipment_receipt  # noqa: E402
+from heaven_angel.services import sale_entry  # noqa: E402
+from heaven_angel.services.sale_stock import void_sale  # noqa: E402
+from heaven_angel.utils import bottle_size_ml, business_now, convert_material_qty  # noqa: E402
 
-TAG = "demo-seed"
-DAYS = 540                      # how far back the history starts
-DEMO_PASSWORD = "DemoPass#2026"  # login for the demo branch accounts
+D = decimal.Decimal
+rnd = random.Random(20261117)
+HQ = 1
+PASSWORD = "Demo@12345678"
 
-# code, name, variant, base 85ML price, popularity, has a bulk/refill SKU
-SCENTS = [
-    ("GH", "Golden Hour", "Male", 1450, 1.30, True),
-    ("MO", "Midnight Oud", "Male", 1650, 1.10, True),
-    ("CS", "Citrus Saint", "Male", 1250, 0.90, False),
-    ("AB", "Amber Blaze", "Male", 1550, 0.80, False),
-    ("RH", "Rose Halo", "Female", 1500, 1.30, True),
-    ("VD", "Velvet Dawn", "Female", 1400, 1.00, True),
-    ("PM", "Pearl Mist", "Female", 1300, 0.90, False),
-    ("JV", "Jasmine Veil", "Female", 1450, 0.80, False),
-]
-# unit, price factor, sales weight, mL per bottle, flat cost of goods per bottle
-UNITS = [
-    ("85ML", 1.00, 0.38, 85, 300.0),
-    ("50ML", 0.62, 0.30, 50, 185.0),
-    ("10ML", 0.20, 0.20, 10, 52.0),
-    ("3ML", 0.07, 0.12, 3, 20.0),
-]
-BULK_PRICE_PER_ML = 9.0
-
-# name, unit, package qty, package cost, supplier index, receipt code
-MATERIALS = [
-    ("Fragrance Concentrate", "Milliliter", 1000, 6800, 0),
-    ("Perfume Oil Base", "Milliliter", 5000, 8200, 0),
-    ("Fixative", "Milliliter", 1000, 2400, 1),
-    ("Ethanol 95%", "Liter", 20, 4400, 1),
-    ("85ML Glass Bottle", "Piece", 100, 3900, 2),
-    ("50ML Glass Bottle", "Piece", 100, 2700, 2),
-    ("10ML Roller Bottle", "Piece", 200, 2600, 2),
-    ("3ML Glass Vial", "Piece", 500, 2300, 2),
-    ("Bottle Caps", "Piece", 500, 1700, 3),
-    ("Labels", "Piece", 1000, 1900, 3),
-    ("Gift Boxes", "Piece", 100, 2900, 3),
-]
-SUPPLIERS = [
-    ("Manila Aroma Imports", "Rina Castillo", "0917 555 0142", "sales@manilaaroma.example", "Binondo, Manila"),
-    ("Laguna Chemical Supply", "Edgar Ramos", "0918 555 0177", "orders@lagunachem.example", "Calamba, Laguna"),
-    ("Bulacan Glassworks", "Teresita Cruz", "0920 555 0113", "hello@bulacanglass.example", "Meycauayan, Bulacan"),
-    ("Cavite Packaging Co.", "Noel Villanueva", "0922 555 0166", "sales@cavitepack.example", "Imus, Cavite"),
-]
-# unit -> [(material name, qty per bottle)]
-FORMULAS = {
-    "85ML": [("85ML Glass Bottle", 1), ("Bottle Caps", 1), ("Labels", 1), ("Gift Boxes", 1)],
-    "50ML": [("50ML Glass Bottle", 1), ("Bottle Caps", 1), ("Labels", 1)],
-    "10ML": [("10ML Roller Bottle", 1), ("Labels", 1)],
-    "3ML": [("3ML Glass Vial", 1), ("Labels", 1)],
-}
-# liquid recipe for a bulk batch: material, share of the batch volume
-RECIPE = [("Fragrance Concentrate", 0.28), ("Perfume Oil Base", 0.18), ("Fixative", 0.04), ("Ethanol 95%", 0.50)]
-
-# name, weight (relative demand), days ago opened, town. The HQ warehouse and any
-# real branches already in the database are used as they are.
-DEMO_BRANCHES = [
-    ("Tuy Branch", 1.10, 470, "Tuy, Batangas"),
-    ("Nasugbu Branch", 1.20, 360, "Nasugbu, Batangas"),
-    ("Lemery Branch", 0.90, 240, "Lemery, Batangas"),
-    ("Calatagan Branch", 0.80, 120, "Calatagan, Batangas"),
-]
-KNOWN_WEIGHTS = {"HQ Main Warehouse": 0.8, "Balayan Branch": 1.4}
-
-SEASON = {1: 0.90, 2: 1.25, 3: 0.95, 4: 0.95, 5: 1.15, 6: 1.00,
-          7: 0.90, 8: 0.95, 9: 1.00, 10: 1.10, 11: 1.25, 12: 1.70}
-WEEKLY = [0.80, 0.85, 0.90, 1.00, 1.25, 1.55, 1.30]   # Monday .. Sunday
-PROMO_DAYS = {(2, 14), (5, 12), (11, 11), (12, 12), (12, 24)}
-
-FIRST = ["Ana", "Ben", "Carla", "Dino", "Ella", "Francis", "Grace", "Harold", "Iris", "Jon", "Kris",
-         "Lara", "Mark", "Nina", "Oscar", "Paula", "Quin", "Rhea", "Sam", "Tina", "Uriel", "Vince"]
-LAST = ["Reyes", "Santos", "Cruz", "Bautista", "Garcia", "Mendoza", "Torres", "Flores", "Ramos",
-        "Aquino", "Castillo", "Villanueva", "Dela Cruz", "Navarro", "Salazar", "Mercado"]
-TOWNS = ["Balayan", "Tuy", "Nasugbu", "Lemery", "Calatagan", "Lian", "Taal", "Bauan", "Batangas City", "Lipa"]
-VOID_REASONS = ["Wrong item rung up", "Customer changed mind", "Duplicate entry", "Wrong quantity entered",
-                "Payment declined"]
-
-PARTNERS = [
-    ("Distributor", "Luzon Scent Trading", "Marco Reyes", "Quezon City"),
-    ("Distributor", "Batangas Fragrance Hub", "Allan Mercado", "Batangas City"),
-    ("Distributor", "Calabarzon Aroma Depot", "Lito Fernandez", "Santa Rosa, Laguna"),
-    ("Distributor", "Visayas Scent Merchants", "Corazon Uy", "Iloilo City"),
-    ("Reseller", "Aroma Corner Lipa", "Joy Dela Cruz", "Lipa, Batangas"),
-    ("Reseller", "Scent & Soul Tagaytay", "Mika Santos", "Tagaytay, Cavite"),
-    ("Reseller", "The Perfume Nook", "Patricia Lim", "Makati City"),
-    ("Reseller", "Fragrance Fix Lemery", "Dante Cabrera", "Lemery, Batangas"),
-    ("Reseller", "Oud & Co. Cebu", "Hannah Tan", "Cebu City"),
-    ("Reseller", "Scentsational Balayan", "Rowena Pineda", "Balayan, Batangas"),
-    ("Distributor", "Mindanao Perfume Link", "Rey Abella", "Davao City"),
-    ("Reseller", "Bloom & Bottle", "Sheila Ocampo", "Nasugbu, Batangas"),
-]
-# name, partner scope, discount %, [(sku code, unit, qty)]
-PACKAGES = [
-    ("Starter Reseller Bundle", "Both", 10, [("GH", "85ML", 6), ("RH", "85ML", 6), ("MO", "50ML", 6),
-                                             ("VD", "50ML", 6), ("CS", "10ML", 12)]),
-    ("Distributor Case Pack", "Distributor", 18, [("GH", "85ML", 24), ("MO", "85ML", 24), ("RH", "85ML", 24),
-                                                  ("VD", "85ML", 12), ("PM", "50ML", 24)]),
-    ("Best Sellers Trio", "Both", 12, [("GH", "50ML", 12), ("RH", "50ML", 12), ("MO", "50ML", 12)]),
-    ("Refill Station Kit", "Reseller", 8, [("GH", "BULK", 5000), ("RH", "BULK", 5000), ("VD", "10ML", 24)]),
-    ("Travel Size Sampler", "Both", 5, [("GH", "3ML", 60), ("MO", "3ML", 60), ("RH", "3ML", 60),
-                                        ("VD", "3ML", 60), ("AB", "3ML", 60), ("JV", "3ML", 60)]),
-]
+# ---------------------------------------------------------------------------
+# small helpers
+# ---------------------------------------------------------------------------
+NOW = None          # set in main(): the business "now"
 
 
-def clear():
-    conn = get_db()
-    cur = conn.cursor()
-    steps = [
-        # accounts / audit trail
-        ("demo branch logins", "DELETE FROM users WHERE branch_id IN (SELECT branch_id FROM branches WHERE location LIKE '%demo-seed')"),
-        ("login_activity", "DELETE FROM login_activity WHERE user_agent LIKE '%demo-seed'"),
-        ("admin_actions", "DELETE FROM admin_actions WHERE details LIKE '%demo-seed'"),
-        # requests, drafts, voids
-        ("ai_stock_drafts", "DELETE FROM ai_stock_drafts WHERE note LIKE '%demo-seed'"),
-        ("stock_requests", "DELETE FROM stock_requests WHERE delivery_number LIKE 'DEMO-%'"),
-        ("sale_voids", "DELETE FROM sale_voids WHERE sku LIKE 'DEMO-%'"),
-        # production side
-        ("material_usage_logs", "DELETE FROM material_usage_logs WHERE notes LIKE '%demo-seed'"),
-        ("bulk_batches", "DELETE FROM bulk_batches WHERE notes LIKE '%demo-seed'"),
-        ("unit_formula_items", "DELETE FROM unit_formula_items WHERE material_id IN "
-                               "(SELECT material_id FROM raw_materials WHERE receipt_number LIKE 'DEMO-%')"),
-        ("raw_materials", "DELETE FROM raw_materials WHERE receipt_number LIKE 'DEMO-%'"),
-        ("suppliers", "DELETE FROM suppliers WHERE notes LIKE '%demo-seed'"),
-        # partners
-        ("partner_inquiries", "DELETE FROM partner_inquiries WHERE remarks LIKE '%demo-seed'"),
-        ("packages", "DELETE FROM packages WHERE description LIKE '%demo-seed'"),
-        ("partners", "DELETE FROM partners WHERE notes LIKE '%demo-seed'"),
-        # products take sales, stock movement, cost of goods, production logs,
-        # branch inventory and package items with them (ON DELETE CASCADE)
-        ("products", "DELETE FROM products WHERE sku LIKE 'DEMO-%'"),
-        ("branches", "DELETE FROM branches WHERE location LIKE '%demo-seed'"),
-    ]
-    for table, sql in steps:
-        cur.execute(sql)
-        print(f"  {table}: removed {cur.rowcount}")
-    cur.execute("SELECT 1 FROM app_settings WHERE setting_key = 'demo_seed_costs'")
-    if cur.fetchone():
-        cur.execute("UPDATE unit_cogs_settings SET base_cost_per_unit = 0")
-        cur.execute("UPDATE bulk_rate_settings SET rate_per_ml = 0")
-        cur.execute("DELETE FROM app_settings WHERE setting_key = 'demo_seed_costs'")
-        print("  cost settings: reset to 0 (they were filled by the demo)")
-    conn.commit()
+def run(sql, params=()):
+    cur = get_db().cursor()
+    cur.execute(sql, params)
+    last = cur.lastrowid
+    get_db().commit()
     cur.close()
+    return last
 
 
-class Sim:
-    """Day-by-day business simulation that writes straight to the database."""
-
-    def __init__(self, conn, rng, now):
-        self.conn = conn
-        self.cur = conn.cursor()
-        self.rng = rng
-        self.now = now
-        self.start = (now - timedelta(days=DAYS)).replace(hour=0, minute=0, second=0, microsecond=0)
-        self.heap = []
-        self.seq = 0
-        self.inv = defaultdict(int)
-        self.ledger = []
-        self.actions = []
-        self.ema = defaultdict(float)
-        self.sold_today = defaultdict(float)
-        self.open_qty = defaultdict(int)       # requested but not yet received, per (branch, sku)
-        self.requests = []
-        self.batches = {}                       # scent code -> its current batch {id, remaining}
-        self.batch_left = {}                    # every batch id -> mL left
-        self.batch_seq = 0
-        self.prod_seq = 0
-        self.counts = defaultdict(int)
-        self.revenue = 0.0
-
-    # ------------------------------------------------------------------ plumbing
-    def push(self, ts, fn):
-        if ts > self.now:
-            return
-        self.seq += 1
-        heapq.heappush(self.heap, (ts, self.seq, fn))
-
-    def move(self, branch, sku, change, mtype, notes, ts, ref=None, rid=None, user=None, touch=True):
-        if touch:
-            before = self.inv[(branch, sku)]
-            after = before + change
-            if after < 0:
-                raise RuntimeError(f"stock would go negative: {branch} {sku} {before} {change}")
-            self.inv[(branch, sku)] = after
-        else:   # damage / short-delivery notes: logged, but they never entered stock
-            before = after = None
-        self.ledger.append((branch, sku, change, mtype, notes, user, ref, rid, before, after, ts))
-
-    def act(self, ts, action, target, details=None):
-        text = f"{details} · {TAG}" if details else TAG
-        self.actions.append((self.admin_id, "admin", action, str(target)[:120], text[:255], ts))
-
-    def flush_ledger(self):
-        sql = ("INSERT INTO stock_movement_logs (branch_id, sku, change_qty, movement_type, notes, "
-               "created_by_user_id, reference_type, reference_id, before_qty, after_qty, created_at) "
-               "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)")
-        for i in range(0, len(self.ledger), 5000):
-            self.cur.executemany(sql, self.ledger[i:i + 5000])
-        n = len(self.ledger)
-        self.ledger = []
-        return n
-
-    # ------------------------------------------------------------------ demand model
-    def mean_count(self, o, back):
-        if back > o["open_back"]:
-            return 0.0
-        day = self.start + timedelta(days=DAYS - back)
-        growth = 0.60 + 0.90 * (DAYS - back) / DAYS
-        age = o["open_back"] - back
-        ramp = 0.4 + 0.6 * min(age, 30) / 30
-        promo = 1.6 if (day.month, day.day) in PROMO_DAYS else 1.0
-        payday = 1.2 if day.day in (15, 30) else 1.0
-        return 10 * o["weight"] * growth * ramp * SEASON[day.month] * WEEKLY[day.weekday()] * promo * payday
-
-    def total_ema(self, sku):
-        return sum(self.ema[(o["id"], sku)] for o in self.outlets)
-
-    # ------------------------------------------------------------------ materials
-    def material_cost_now(self, m, ts):
-        drift = 1 + 0.08 * ((ts - self.start).days / DAYS)         # prices creep up ~8% over the period
-        return m["pkg_cost"] * drift * self.rng.uniform(0.97, 1.03)
-
-    def ensure_material(self, name, need, ts):
-        m = self.materials[name]
-        if m["stock"] >= need:
-            return
-        packs = math.ceil((need - m["stock"]) / m["pkg_qty"]) + (1 if m["unit"] != "Piece" else 0)
-        when = max(ts - timedelta(hours=self.rng.randint(20, 70)), self.start - timedelta(days=2))
-        cost = round(self.material_cost_now(m, when) * packs, 2)
-        qty = packs * m["pkg_qty"]
-        sup = self.suppliers[m["supplier"]]
-        self.cur.execute(
-            """INSERT INTO material_restock_events (material_id, material_name_snapshot, unit_snapshot, qty, cost,
-                      supplier_id, supplier_name_snapshot, purchased_at, created_by_user_id)
-               VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
-            (m["id"], name, m["unit"], qty, cost, sup["id"], sup["name"], when, self.admin_id))
-        m["stock"] += qty
-        m["cost_per_unit"] = cost / qty
-        m["pkg_cost_latest"] = cost / packs
-        self.act(when, "restock_material", name, f"{qty:g} {m['unit'].lower()} from {sup['name']} for ₱{cost:,.2f}")
-        self.counts["restocks"] += 1
-
-    def new_batch(self, code, volume_ml, ts):
-        scent = self.scent_by_code[code]
-        self.batch_seq += 1
-        litres = volume_ml / 1000
-        batch_code = f"DEMO-B{ts:%y%m}-{code}-{self.batch_seq:03d}"
-        lines, total = [], 0.0
-        for name, share in RECIPE:
-            m = self.materials[name]
-            qty_unit = "Liter" if m["unit"] == "Liter" else "Milliliter"
-            qty = litres * share if qty_unit == "Liter" else volume_ml * share
-            self.ensure_material(name, qty, ts)
-            line_cost = round(qty * m["cost_per_unit"], 4)
-            total += line_cost
-            lines.append((m, qty_unit, round(qty, 3), round(m["cost_per_unit"], 4), line_cost))
-        total = round(total, 2)
-        self.cur.execute(
-            """INSERT INTO bulk_batches (batch_code, scent_name, input_qty, input_unit, total_volume_ml, total_cost,
-                      cost_per_ml, remaining_ml, notes, created_by_user_id, created_at)
-               VALUES (%s,%s,%s,'Liter',%s,%s,%s,%s,%s,%s,%s)""",
-            (batch_code, scent[1], litres, volume_ml, total, round(total / volume_ml, 6), volume_ml,
-             f"{scent[1]} liquid batch · {TAG}", self.admin_id, ts))
-        batch_id = self.cur.lastrowid
-        for m, qty_unit, qty, unit_cost, line_cost in lines:
-            self.cur.execute(
-                """INSERT INTO bulk_batch_materials (batch_id, material_id, qty_used_unit, qty_used,
-                          cost_per_unit_snapshot, line_cost, is_packaging)
-                   VALUES (%s,%s,%s,%s,%s,%s,0)""",
-                (batch_id, m["id"], qty_unit, qty, unit_cost, line_cost))
-            m["stock"] -= qty
-        self.batches[code] = {"id": batch_id, "remaining": float(volume_ml)}
-        self.batch_left[batch_id] = float(volume_ml)
-        self.act(ts, "create_bulk_batch", scent[1], f"{volume_ml:,.0f} mL · {batch_code} · ₱{total:,.2f}")
-        self.counts["batches"] += 1
-
-    # ------------------------------------------------------------------ production
-    def produce(self, sku, qty, ts):
-        p = self.products[sku]
-        batch_id = None
-        if p["category"] == "Bottled":
-            need_ml = p["ml"] * qty
-            b = self.batches.get(p["code"])
-            if b is None or b["remaining"] < need_ml:
-                size = max(10000, math.ceil(need_ml / 5000) * 5000)
-                self.new_batch(p["code"], size, ts - timedelta(hours=self.rng.randint(1, 5)))
-                b = self.batches[p["code"]]
-            b["remaining"] -= need_ml
-            batch_id = b["id"]
-            self.batch_left[batch_id] = b["remaining"]
-            drift = 0.93 + 0.07 * ((ts - self.start).days / DAYS)
-            per_unit = round(p["flat_cost"] * drift * self.rng.uniform(0.98, 1.02), 4)
-            for mat, per in FORMULAS[p["unit"]]:
-                self.ensure_material(mat, per * qty, ts)
-        else:
-            per_unit = round(self.rng.uniform(2.9, 3.7), 4)
-        self.prod_seq += 1
-        code = f"DEMO-P{ts:%y%m%d}-{self.prod_seq:04d}"
-        self.cur.execute(
-            "INSERT INTO production_logs (sku, batch_code, qty_produced, produced_at) VALUES (%s,%s,%s,%s)",
-            (sku, code, qty, ts))
-        log_id = self.cur.lastrowid
-        self.move(self.hq, sku, qty, "PRODUCTION", f"Batch {code}", ts, "PRODUCTION_LOG", log_id, self.admin_id)
-        self.cur.execute(
-            """INSERT INTO cogs_logs (sku, production_log_id, bulk_batch_id, qty_produced, cogs_per_unit,
-                      total_cogs, notes, created_by_user_id, created_at)
-               VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
-            (sku, log_id, batch_id, qty, per_unit, round(per_unit * qty, 2), TAG, self.admin_id, ts))
-        cogs_id = self.cur.lastrowid
-        if p["category"] == "Bottled":
-            for mat, per in FORMULAS[p["unit"]]:
-                used = per * qty
-                self.materials[mat]["stock"] -= used
-                self.cur.execute(
-                    """INSERT INTO material_usage_logs (material_id, production_log_id, cogs_log_id, qty_used, notes,
-                              created_by_user_id, created_at)
-                       VALUES (%s,%s,%s,%s,%s,%s,%s)""",
-                    (self.materials[mat]["id"], log_id, cogs_id, used, f"{code} · {TAG}", self.admin_id, ts))
-        self.counts["production_runs"] += 1
-        self.counts["units_produced"] += qty if p["category"] == "Bottled" else 0
-
-    def daily_production(self, day):
-        rng = self.rng
-        skus = list(self.products)
-        rng.shuffle(skus)
-        runs = 0
-        for sku in skus:
-            p = self.products[sku]
-            bulk = p["category"] != "Bottled"
-            tot = self.total_ema(sku)
-            low = max(tot * 14, 3000 if bulk else 40)
-            if self.inv[(self.hq, sku)] >= low:
-                continue
-            raw = tot * 35
-            qty = (min(30000, max(4000, round(raw / 500) * 500)) if bulk
-                   else min(900, max(60, round(raw / 10) * 10)))
-            ts = day + timedelta(hours=8, minutes=15 * runs + rng.randint(0, 10))
-            self.push(ts, partial(self.produce, sku, qty, ts))
-            runs += 1
-            if runs >= 10:
-                break
-
-    # ------------------------------------------------------------------ sales
-    def sale(self, o, ts):
-        rng = self.rng
-        b = o["id"]
-        roll = rng.random()
-        stype, mtype, payment = "Sale", "SALE", "Cash"
-        if roll < 0.06 and self.bulk_skus:                       # refill from bulk, sold by the mL
-            sku = rng.choices(self.bulk_skus, self.bulk_w)[0]
-            qty = rng.choice([50, 100, 150, 250, 300])
-            self.sold_today[(b, sku)] += qty          # demand counts for forecasting even if it can't be met
-            avail = self.inv[(b, sku)]
-            if avail < qty:
-                qty = (avail // 50) * 50
-            if qty <= 0:
-                self.counts["lost_to_stockout"] += 1
-                self.counts[f"lost:{o['name']}:refill"] += 1
-                return
-            stype, mtype = "Refill", "REFILL"
-            price = BULK_PRICE_PER_ML
-        else:
-            sku, qty = None, 0
-            want = rng.choices([1, 2, 3, 4, 6, 12], [0.52, 0.26, 0.10, 0.05, 0.05, 0.02])[0]
-            for attempt in range(3):                             # a customer settles for another size/scent if out
-                cand = rng.choices(self.bottled_skus, self.bottled_w)[0]
-                if attempt == 0:
-                    self.sold_today[(b, cand)] += want    # demand counts for forecasting even if it can't be met
-                avail = self.inv[(b, cand)]
-                if avail > 0:
-                    sku, qty = cand, min(want, avail)
-                    break
-            if not sku:
-                self.counts["lost_to_stockout"] += 1
-                self.counts[f"lost:{o['name']}:{ts:%Y-%m}"] += 1
-                return
-            p = self.products[sku]
-            since = (ts - self.start).days / DAYS
-            price = p["price"] * (0.94 + 0.06 * since) * o["price_factor"]
-            if (ts.month, ts.day) in PROMO_DAYS:
-                price *= 0.92
-            price = round(price, 2)
-            if roll < 0.085:
-                stype, mtype, price = "Freebie", "FREEBIE", 0
-                qty = 1
-            elif rng.random() < 0.09:
-                payment = "Credit"
-        buyer = settled_at = settled_by = customer = address = None
-        if payment == "Credit":
-            buyer = f"{rng.choice(FIRST)} {rng.choice(LAST)}"
-            if rng.random() < 0.85:
-                settle = ts + timedelta(days=rng.randint(3, 40), hours=rng.randint(0, 8))
-                if settle <= self.now:
-                    settled_at, settled_by = settle, "admin"
-        elif stype != "Freebie" and rng.random() < 0.15:
-            customer = f"{rng.choice(FIRST)} {rng.choice(LAST)}"
-            address = f"{rng.randint(1, 240)} {rng.choice(['Rizal', 'Mabini', 'P. Burgos', 'Quezon', 'Bonifacio'])} St., {rng.choice(TOWNS)}"
-        self.cur.execute(
-            """INSERT INTO sales (branch_id, sku, qty_sold, unit_price, sale_type, payment_method, buyer_name,
-                      credit_settled_at, credit_settled_by, customer_name, customer_address, sold_at, recorded_at)
-               VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
-            (b, sku, qty, price, stype, payment, buyer, settled_at, settled_by, customer, address, ts, ts))
-        sale_id = self.cur.lastrowid
-        self.move(b, sku, -qty, mtype, f"{stype} #{sale_id}", ts, "SALE", sale_id, o["user_id"])
-        self.counts["sales"] += 1
-        self.revenue += qty * price
-        if rng.random() < 0.004:                                  # a small share get voided the same day
-            at = ts + timedelta(minutes=rng.randint(20, 240))
-            snap = (sale_id, b, sku, qty, price, stype, payment, buyer, customer, ts)
-            self.push(at, partial(self.void_sale, o, snap, at))
-
-    def void_sale(self, o, snap, ts):
-        sale_id, b, sku, qty, price, stype, payment, buyer, customer, sold_at = snap
-        p = self.products[sku]
-        reason = self.rng.choice(VOID_REASONS)
-        self.cur.execute("DELETE FROM sales WHERE sale_id = %s", (sale_id,))
-        self.cur.execute(
-            """INSERT INTO sale_voids (sale_id, branch_id, sku, item_name, unit, qty_sold, unit_price, sale_type,
-                      payment_method, buyer_name, customer_name, sold_at, reason, voided_by_user_id,
-                      voided_by_username, voided_at)
-               VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
-            (sale_id, b, sku, p["name"], p["unit"], qty, price, stype, payment, buyer, customer, sold_at,
-             f"{reason} · {TAG}", o["user_id"], o["username"], ts))
-        self.move(b, sku, qty, "SALE_VOID", f"Void of sale #{sale_id}: {reason}", ts, "SALE", sale_id, o["user_id"])
-        self.sold_today[(b, sku)] -= qty
-        self.counts["voids"] += 1
-        self.counts["sales"] -= 1
-        self.revenue -= qty * price
-
-    # ------------------------------------------------------------------ stock requests
-    def make_request(self, o, ts, target_days):
-        b = o["id"]
-        lines = []
-        for sku, p in self.products.items():
-            bulk = p["category"] != "Bottled"
-            ema = self.ema[(b, sku)]
-            have = self.inv[(b, sku)] + self.open_qty[(b, sku)]
-            if ema < 0.02 or have >= max(ema * 12, 0 if bulk else 4):
-                continue
-            need = ema * target_days - have
-            if bulk:
-                qty = max(1000, math.ceil(need / 500) * 500)
-            else:
-                qty = max(6, math.ceil(need / 6) * 6)
-            lines.append((sku, qty))
-        if not lines:
-            return
-        self.cur.execute(
-            "INSERT INTO stock_requests (branch_id, delivery_number, status, requested_at, updated_at) "
-            "VALUES (%s,%s,'Pending',%s,%s)", (b, f"DEMO-T{self.seq:09d}", ts, ts))
-        rid = self.cur.lastrowid
-        delivery = f"DEMO-{rid:06d}"
-        self.cur.execute("UPDATE stock_requests SET delivery_number = %s, updated_at = %s WHERE request_id = %s",
-                         (delivery, ts, rid))
-        req = {"id": rid, "branch": o, "delivery": delivery, "status": "Pending", "items": [], "chain": 0,
-               "partial_plan": self.rng.random() < 0.10, "dispatches": 0}
-        for sku, qty in lines:
-            self.cur.execute(
-                "INSERT INTO stock_request_items (request_id, sku, requested_qty, unit_price) VALUES (%s,%s,%s,%s)",
-                (rid, sku, qty, self.products[sku]["price"]))
-            req["items"].append({"id": self.cur.lastrowid, "sku": sku, "req": qty, "disp": 0, "recv": 0, "dmg": 0})
-            self.open_qty[(b, sku)] += qty
-        self.requests.append(req)
-        self.counts["requests"] += 1
-        slow = self.rng.random() < 0.25          # some requests sit waiting for HQ for a few days
-        when = ts + timedelta(hours=self.rng.randint(30, 90) if slow else self.rng.randint(4, 30))
-        self.push(when, partial(self.dispatch, req, when, 0))
-
-    def set_status(self, req, status, ts):
-        req["status"] = status
-        self.cur.execute("UPDATE stock_requests SET status = %s, updated_at = %s WHERE request_id = %s",
-                         (status, ts, req["id"]))
-
-    def release_open(self, req):
-        b = req["branch"]["id"]
-        for it in req["items"]:
-            left = it["req"] - it["recv"]
-            self.open_qty[(b, it["sku"])] = max(0, self.open_qty[(b, it["sku"])] - left)
-
-    def dispatch(self, req, ts, attempt):
-        if req["status"] in ("Fulfilled", "Rejected", "In Transit"):
-            return
-        rng = self.rng
-        if req["dispatches"] == 0 and attempt == 0 and rng.random() < 0.04:
-            self.set_status(req, "Rejected", ts)
-            self.release_open(req)
-            self.counts["rejected"] += 1
-            return
-        lines = []
-        for it in req["items"]:
-            rem = it["req"] - it["recv"]
-            if rem <= 0:
-                continue
-            q = min(rem, self.inv[(self.hq, it["sku"])])
-            if req["partial_plan"] and req["dispatches"] == 0:
-                q = min(q, max(1, int(rem * 0.6)))
-            if q > 0:
-                lines.append((it, q))
-        if not lines:
-            if req["dispatches"] == 0 and (attempt >= 3 or rng.random() < 0.03):
-                self.set_status(req, "Rejected", ts)
-                self.release_open(req)
-                self.counts["rejected"] += 1
-            elif attempt < 3:
-                when = ts + timedelta(days=1)
-                self.push(when, partial(self.dispatch, req, when, attempt + 1))
-            else:
-                self.release_open(req)
-            return
-        self.cur.execute("INSERT INTO stock_request_shipments (request_id, status, dispatched_by_user_id, dispatched_at) "
-                         "VALUES (%s,'In Transit',%s,%s)", (req["id"], self.admin_id, ts))
-        sid = self.cur.lastrowid
-        shipped = []
-        for it, q in lines:
-            self.cur.execute(
-                "INSERT INTO stock_request_shipment_items (shipment_id, request_item_id, dispatched_qty) VALUES (%s,%s,%s)",
-                (sid, it["id"], q))
-            ship_item = self.cur.lastrowid
-            it["disp"] += q
-            self.cur.execute("UPDATE stock_request_items SET dispatched_qty = %s WHERE item_id = %s",
-                             (it["disp"], it["id"]))
-            self.move(self.hq, it["sku"], -q, "DISPATCH", f"Dispatched on {req['delivery']} shipment #{sid}", ts,
-                      "STOCK_REQUEST", req["id"], self.admin_id)
-            shipped.append((it, q, ship_item))
-        req["dispatches"] += 1
-        self.set_status(req, "In Transit", ts)
-        when = ts + timedelta(hours=rng.randint(20, 70))
-        self.push(when, partial(self.receive, req, sid, shipped, when))
-
-    def receive(self, req, sid, shipped, ts):
-        rng = self.rng
-        o = req["branch"]
-        b = o["id"]
-        for it, q, ship_item in shipped:
-            damaged = short = 0
-            if rng.random() < 0.05:
-                damaged = rng.randint(1, max(1, q // 10))
-            if rng.random() < 0.02:
-                short = rng.randint(1, max(1, q // 20))
-            got = max(0, q - damaged - short)
-            damaged = min(damaged, q - got)
-            short = q - got - damaged
-            self.cur.execute("UPDATE stock_request_shipment_items SET received_qty = %s, damaged_qty = %s "
-                             "WHERE shipment_item_id = %s", (got, damaged, ship_item))
-            it["recv"] += got
-            it["dmg"] += damaged
-            self.cur.execute("UPDATE stock_request_items SET received_qty = %s, damaged_qty = %s WHERE item_id = %s",
-                             (it["recv"], it["dmg"], it["id"]))
-            self.open_qty[(b, it["sku"])] = max(0, self.open_qty[(b, it["sku"])] - got)
-            if got > 0:
-                self.move(b, it["sku"], got, "RECEIPT",
-                          f"Receipt for delivery {req['delivery']}, shipment #{sid}", ts,
-                          "STOCK_REQUEST", req["id"], o["user_id"])
-            if damaged:
-                self.move(b, it["sku"], -damaged, "DAMAGE",
-                          f"{damaged} unit(s) damaged in transit, delivery {req['delivery']}, shipment #{sid}", ts,
-                          "STOCK_REQUEST", req["id"], o["user_id"], touch=False)
-            if short:
-                self.move(b, it["sku"], -short, "ADJUSTMENT",
-                          f"{short} unit(s) dispatched but not received or reported damaged — delivery "
-                          f"{req['delivery']}, shipment #{sid}, flagged for HQ follow-up", ts,
-                          "STOCK_REQUEST", req["id"], o["user_id"], touch=False)
-        self.cur.execute("UPDATE stock_request_shipments SET status = 'Received', received_at = %s "
-                         "WHERE shipment_id = %s", (ts, sid))
-        open_lines = any(it["recv"] < it["req"] for it in req["items"])
-        self.set_status(req, "Partially Fulfilled" if open_lines else "Fulfilled", ts)
-        if open_lines:
-            if req["chain"] < 2 and rng.random() < 0.65:
-                req["chain"] += 1
-                when = ts + timedelta(days=rng.randint(1, 3), hours=rng.randint(0, 6))
-                self.push(when, partial(self.dispatch, req, when, 0))
-            else:
-                self.release_open(req)     # HQ never ships the remainder; stays Partially Fulfilled
-
-    def daily_requests(self, day, back):
-        rng = self.rng
-        for o in self.outlets:
-            if o["is_hq"] or back > o["open_back"]:
-                continue
-            ts = day + timedelta(hours=rng.randint(9, 15), minutes=rng.randint(0, 59))
-            if back == o["open_back"]:
-                self.push(ts, partial(self.make_request, o, ts, 35))             # opening stock order
-            elif day.weekday() == o["req_weekday"]:
-                self.push(ts, partial(self.make_request, o, ts, 28))             # weekly top-up
-            elif day.weekday() == (o["req_weekday"] + 3) % 7:
-                self.push(ts, partial(self.make_request, o, ts, 21))             # mid-week top-up
-            elif rng.random() < 0.04:
-                self.push(ts, partial(self.make_request, o, ts, 14))             # ad-hoc top-up
-
-    # ------------------------------------------------------------------ package orders
-    def fulfill(self, inq, ts):
-        rng = self.rng
-        for sku, qty in inq["items"]:
-            short = qty - self.inv[(self.hq, sku)]
-            if short > 0:      # "produce the shortfall on Production Log first"
-                p = self.products[sku]
-                step = 500 if p["category"] != "Bottled" else 12
-                self.produce(sku, math.ceil((short + step) / step) * step, ts - timedelta(hours=rng.randint(2, 20)))
-        for sku, qty in inq["items"]:
-            self.move(self.hq, sku, -qty, "PACKAGE_ORDER", f"Package order for {inq['company']}", ts,
-                      "PARTNER_INQUIRY", inq["id"], self.admin_id)
-        self.cur.execute("UPDATE partner_inquiries SET fulfilled_at = %s, fulfilled_by_user_id = %s WHERE inquiry_id = %s",
-                         (ts, self.admin_id, inq["id"]))
-        self.act(ts, "fulfill_package_order", inq["company"], f"{len(inq['items'])} item(s) from HQ stock")
-        self.counts["fulfilled_orders"] += 1
-
-    # ------------------------------------------------------------------ main loop
-    def run(self):
-        rng = self.rng
-        for back in range(DAYS, -1, -1):
-            day = self.start + timedelta(days=DAYS - back)
-            self.sold_today.clear()
-            self.daily_production(day)
-            self.daily_requests(day, back)
-            for o in self.outlets:
-                mean = self.mean_count(o, back)
-                if mean <= 0:
-                    continue
-                for _ in range(max(0, round(rng.gauss(mean, math.sqrt(mean) * 0.6)))):
-                    ts = day + timedelta(hours=rng.randint(9, 20), minutes=rng.randint(0, 59), seconds=rng.randint(0, 59))
-                    self.push(ts, partial(self.sale, o, ts))
-            end = day + timedelta(days=1)
-            while self.heap and self.heap[0][0] < end:
-                _, _, fn = heapq.heappop(self.heap)
-                if fn is not None:
-                    fn()
-            for key in list(self.ema):
-                self.ema[key] *= 0.93
-            for key, units in self.sold_today.items():
-                self.ema[key] += 0.07 * max(0, units)
-            if day.day == 1:
-                print(f"  ...{day:%Y-%m}: {self.counts['sales']:,} sales so far")
-        while self.heap:           # anything left is stamped after "now" and was already filtered out
-            _, _, fn = heapq.heappop(self.heap)
-            if fn is not None:
-                fn()
+def ago(days, hour=None, minute=None):
+    """A business time `days` ago; a random working hour unless one is given."""
+    h = rnd.randint(9, 20) if hour is None else hour
+    m = rnd.randint(0, 59) if minute is None else minute
+    return (NOW - timedelta(days=days)).replace(hour=h, minute=m, second=rnd.randint(0, 59), microsecond=0)
 
 
-def verify(cur):
-    """Cross-checks that the generated rows agree with each other. Returns a list of problems."""
-    checks = [
-        ("negative branch stock",
-         "SELECT COUNT(*) FROM branch_inventory WHERE stock_qty < 0"),
-        ("branch stock that does not equal its movement ledger",
-         """SELECT COUNT(*) FROM branch_inventory bi
-            LEFT JOIN (SELECT branch_id, sku, SUM(change_qty) AS net FROM stock_movement_logs
-                       WHERE before_qty IS NOT NULL GROUP BY branch_id, sku) m
-              ON m.branch_id = bi.branch_id AND m.sku = bi.sku
-            WHERE bi.sku LIKE 'DEMO-%' AND bi.stock_qty <> COALESCE(m.net, 0)"""),
-        ("ledger rows whose before/after do not match the change",
-         "SELECT COUNT(*) FROM stock_movement_logs WHERE sku LIKE 'DEMO-%' AND before_qty IS NOT NULL "
-         "AND after_qty <> before_qty + change_qty"),
-        ("shipment lines that received + damaged more than was dispatched",
-         "SELECT COUNT(*) FROM stock_request_shipment_items WHERE received_qty IS NOT NULL "
-         "AND received_qty + damaged_qty > dispatched_qty"),
-        ("request lines that received more than requested",
-         "SELECT COUNT(*) FROM stock_request_items sri JOIN stock_requests sr ON sr.request_id = sri.request_id "
-         "WHERE sr.delivery_number LIKE 'DEMO-%' AND COALESCE(sri.received_qty, 0) > sri.requested_qty"),
-        ("bulk batches with impossible remaining mL",
-         "SELECT COUNT(*) FROM bulk_batches WHERE notes LIKE '%demo-seed' "
-         "AND (remaining_ml < 0 OR remaining_ml > total_volume_ml)"),
-        ("raw materials below zero",
-         "SELECT COUNT(*) FROM raw_materials WHERE receipt_number LIKE 'DEMO-%' AND stock_qty < 0"),
-        ("sales for a branch before it existed in the demo",
-         "SELECT COUNT(*) FROM sales s JOIN branches b ON b.branch_id = s.branch_id "
-         "WHERE s.sku LIKE 'DEMO-%' AND b.location LIKE '%demo-seed' AND s.sold_at < b.created_at"),
+def max_id(table, col):
+    row = query(f"SELECT COALESCE(MAX({col}), 0) AS m FROM {table}", fetchone=True)
+    return row["m"]
+
+
+def retime_logs(after_log_id, when):
+    run("UPDATE stock_movement_logs SET created_at = %s WHERE log_id > %s", (when, after_log_id))
+
+
+ADMIN_ID = {}       # username -> user_id
+ACTIONS = []        # (when, actor, action, target, details)
+
+
+def audit(when, actor, action, target=None, details=None):
+    ACTIONS.append((when, actor, action, target, details))
+
+
+def section(title):
+    print(f"\n== {title}")
+
+
+# ---------------------------------------------------------------------------
+# 1. branches and logins
+# ---------------------------------------------------------------------------
+def add_branches_and_users():
+    section("Branches and logins")
+    for name, loc in (("Lipa Branch", "Lipa City, Batangas"), ("Tanauan Branch", "Tanauan City, Batangas")):
+        bid = run("INSERT INTO branches (branch_name, location) VALUES (%s, %s)", (name, loc))
+        run("INSERT IGNORE INTO branch_inventory (branch_id, sku, stock_qty) SELECT %s, sku, 0 FROM products", (bid,))
+        audit(ago(84), "admin", "add_branch", name, loc)
+    run("UPDATE branches SET location = 'Poblacion, Balayan, Batangas' WHERE branch_id = 2")
+    branches = {b["branch_name"]: b["branch_id"] for b in query("SELECT branch_id, branch_name FROM branches")}
+
+    pw = generate_password_hash(PASSWORD)
+    users = [
+        ("admin", "Admin", None, True), ("maria.admin", "Admin", None, True),
+        ("balayan", "Branch", branches["Balayan Branch"], True),
+        ("lipa", "Branch", branches["Lipa Branch"], True),
+        ("tanauan", "Branch", branches["Tanauan Branch"], True),
+        ("balayan.ana", "Branch", branches["Balayan Branch"], True),
+        ("former.staff", "Branch", branches["Lipa Branch"], False),
     ]
-    problems = []
-    for label, sql in checks:
-        cur.execute(sql)
-        n = cur.fetchone()[0]
-        if n:
-            problems.append(f"{n} {label}")
-    return problems
+    for username, role, bid, active in users:
+        uid = run(
+            """INSERT INTO users (username, password_hash, role, branch_id, is_active, must_change_password, created_at)
+               VALUES (%s, %s, %s, %s, %s, FALSE, %s)""",
+            (username, pw, role, bid, active, ago(90, 9, 0)))
+        ADMIN_ID[username] = uid
+        audit(ago(88), "admin", "create_user", username, f"{role} account")
+    audit(ago(40), "admin", "deactivate_user", "former.staff", "left the company")
+    return branches
 
 
-def add(dry_run=False):
-    if query("SELECT 1 FROM products WHERE sku LIKE 'DEMO-%' LIMIT 1", fetchone=True):
-        print("Demo data is already present. Run with --reset to rebuild it from scratch.")
-        return
-    rng = random.Random(42)
-    conn = get_db()
-    cur = conn.cursor()
-    now = business_now()
-    start = (now - timedelta(days=DAYS)).replace(hour=0, minute=0, second=0, microsecond=0)
+# ---------------------------------------------------------------------------
+# 2. suppliers, settings, formulas
+# ---------------------------------------------------------------------------
+def add_suppliers_and_settings():
+    section("Suppliers, unit costs and formulas")
+    run("""UPDATE suppliers SET contact_person = 'Mang Rey Bautista', phone = '0917 555 0142',
+           email = 'orders@bubblemix.example', notes = 'Oils and fixatives. Cash on delivery, 3 days lead time.'
+           WHERE supplier_name LIKE 'BubbleMix%'""")
+    run("""UPDATE suppliers SET contact_person = 'Ms. Liza Ocampo', phone = '0922 555 0188',
+           email = 'sales@centralpack.example', notes = 'Bottles and alcohol. Free delivery from 5,000 pesos.'
+           WHERE supplier_name = 'Centralpack'""")
+    for name, person, phone, email, addr, notes in (
+        ("LabelWorks Printing", "Jun Mendoza", "0933 555 0121", "jun@labelworks.example",
+         "21 P. Tuazon Blvd., Cubao, Quezon City", "Sticker printing. Not used yet: quote only."),
+        ("Pure Aqua Refilling Station", None, "0945 555 0107", None, "Poblacion, Balayan, Batangas", None),
+    ):
+        run("""INSERT INTO suppliers (supplier_name, contact_person, phone, email, address, notes)
+               VALUES (%s, %s, %s, %s, %s, %s)""", (name, person, phone, email, addr, notes))
 
-    cur.execute("SELECT user_id FROM users WHERE role = 'Admin' ORDER BY user_id LIMIT 1")
-    row = cur.fetchone()
-    admin_id = row[0] if row else None
+    run("UPDATE bulk_rate_settings SET rate_per_ml = 7.0000 WHERE id = 1")
+    for unit, cost in (("85ML", 58.00), ("50ML", 36.00), ("10ML", 11.50), ("3ML", 4.25)):
+        run("UPDATE unit_cogs_settings SET base_cost_per_unit = %s WHERE unit = %s", (cost, unit))
 
-    # --- branches, outlets and demo branch logins ------------------------
-    outlets = []
-    cur.execute("SELECT branch_id, branch_name, is_hq FROM branches ORDER BY branch_id")
-    existing = cur.fetchall()
-    have = {name for _, name, _ in existing}
-    for name, weight, opened, town in DEMO_BRANCHES:
-        if name not in have:
-            cur.execute("INSERT INTO branches (branch_name, location, is_hq, created_at) VALUES (%s,%s,0,%s)",
-                        (name, f"{town} · {TAG}", now - timedelta(days=opened)))
-    cur.execute("SELECT branch_id, branch_name, is_hq FROM branches ORDER BY branch_id")
-    demo_meta = {n: (w, d) for n, w, d, _ in DEMO_BRANCHES}
-    pw_hash = generate_password_hash(DEMO_PASSWORD)
-    retail_i = 0
-    for bid, name, is_hq in cur.fetchall():
-        weight, opened = demo_meta.get(name, (KNOWN_WEIGHTS.get(name, 1.0), DAYS))
-        cur.execute("SELECT user_id, username FROM users WHERE branch_id = %s AND role = 'Branch' ORDER BY user_id LIMIT 1", (bid,))
-        u = cur.fetchone()
-        if not is_hq and u is None and name in demo_meta:
-            username = name.split()[0].lower()
-            cur.execute("SELECT user_id FROM users WHERE username = %s", (username,))
-            if cur.fetchone() is None:
-                cur.execute(
-                    "INSERT INTO users (username, password_hash, role, branch_id, is_active, must_change_password, created_at) "
-                    "VALUES (%s,%s,'Branch',%s,1,0,%s)", (username, pw_hash, bid, now - timedelta(days=opened)))
-                u = (cur.lastrowid, username)
-        outlets.append({
-            "id": bid, "name": name, "is_hq": bool(is_hq), "weight": weight, "open_back": min(opened, DAYS),
-            "price_factor": rng.choice([0.97, 1.0, 1.0, 1.03, 1.05]),
-            "user_id": u[0] if u else None, "username": u[1] if u else "branch",
-            "req_weekday": retail_i % 7,
-        })
-        if not is_hq:
-            retail_i += 2
-    hq = next(o for o in outlets if o["is_hq"])["id"]
+    mats = {m["material_name"]: m for m in query("SELECT material_id, material_name, cost_per_unit FROM raw_materials")}
+    formulas = {
+        "85ML": {"Oil Scent": 12.75, "Fixative": 0.5, "Perfume Alcohol": 60, "Moisturizer": 0.8,
+                 "Frosted 85 ml Bottle": 1, "Sticker": 1, "Plastic Seal": 1},
+        "50ML": {"Oil Scent": 7.5, "Perfume Alcohol": 35, "Sticker": 1, "Plastic Seal": 1},
+        "10ML": {"Oil Scent": 1.5, "Perfume Alcohol": 7, "Sticker": 1},
+        "3ML": {"Oil Scent": 0.45, "Perfume Alcohol": 2, "Sticker": 1},
+    }
+    for unit, lines in formulas.items():
+        for mat, qty in lines.items():
+            m = mats[mat]
+            run("""INSERT INTO unit_formula_items (unit, material_id, qty_per_unit, line_cost)
+                   VALUES (%s, %s, %s, %s)""", (unit, m["material_id"], qty, D(str(qty)) * m["cost_per_unit"]))
+    audit(ago(86), "admin", "save_bulk_rate", "Bulk rate", "7.00 per mL")
+    audit(ago(86), "admin", "save_unit_cogs", "Unit costs", "85ML 58.00, 50ML 36.00, 10ML 11.50, 3ML 4.25")
 
-    # --- products ---------------------------------------------------------
-    products = {}
-    for code, name, variant, base, pop, has_bulk in SCENTS:
-        for unit, factor, _, ml, flat in UNITS:
-            sku = f"DEMO-{code}-{unit}"
-            price = max(10, round(base * factor / 10) * 10)
+
+# ---------------------------------------------------------------------------
+# 3. bulk batches: plan, buy the materials, make them
+# ---------------------------------------------------------------------------
+# material -> (stock left over as a share of what the batches need, price story)
+# a price story is [(days ago, share of the total bought, price multiplier)]
+STOCK_MARGIN = {"Oil Scent": 1.03, "Fixative": 1.25, "Moisturizer": 1.5, "Perfume Alcohol": 1.2,
+                "Frosted 85 ml Bottle": 1.12, "Distilled Water": 1.3, "Sticker": 1.25, "Plastic Seal": 1.04}
+PRICE_STORY = {
+    "Oil Scent": [(200, 0.16, 1.00), (165, .08, 1.03), (130, .16, 1.08), (95, .08, 1.05), (60, .16, 1.15), (30, .08, 1.22), (8, .28, 1.18)],
+    "Fixative": [(200, .15, 1.00), (150, .15, .97), (110, .15, .94), (75, .20, .90), (40, .15, .95), (12, .20, 1.00)],
+    "Moisturizer": [(200, .12, 1.00), (160, .12, 1.00), (120, .12, 1.06), (85, .12, 1.06), (50, .30, .95), (20, .22, .92)],
+    "Perfume Alcohol": [(200, .08, 1.00), (170, .08, 1.02), (140, .16, 1.10), (105, .08, 1.18), (70, .16, 1.12), (45, .12, 1.25), (15, .32, 1.30)],
+    "Frosted 85 ml Bottle": [(200, .06, 1.00), (155, .12, .93), (120, .12, .87), (80, .24, .80), (40, .12, .85), (10, .34, .80)],
+    "Distilled Water": [(200, .15, 1.00), (150, .15, 1.01), (110, .15, .99), (70, .15, 1.02), (30, .20, 1.00), (5, .20, 1.03)],
+    "Sticker": [(200, .10, 1.00), (140, .20, 1.10), (100, .20, 1.10), (60, .30, .80), (25, .20, .90)],
+    "Plastic Seal": [(200, .08, 1.00), (130, .16, 1.00), (90, .16, 1.20), (55, .16, 1.20), (20, .44, 1.40)],
+}
+RECEIPT_PREFIX = {"Oil Scent": "BM", "Fixative": "BM", "Moisturizer": "BM", "Perfume Alcohol": "CP",
+                  "Frosted 85 ml Bottle": "CP", "Distilled Water": "", "Sticker": "", "Plastic Seal": ""}
+
+
+def _materials():
+    return query("SELECT material_id, material_name, unit, stock_qty, cost_per_unit FROM raw_materials")
+
+
+def plan_batches(config):
+    """Which scents get a bulk batch, at what size, and when."""
+    products = query("SELECT sku, item_name, unit FROM products WHERE unit = %s ORDER BY item_name", (config["bottle_unit"],))
+    scents = [{"sku": p["sku"], "name": p["item_name"], "code": p["sku"][:-(len(p["unit"]) + 1)]} for p in products]
+    rnd.shuffle(scents)                         # which scents are popular is random but repeatable
+    for i, s in enumerate(scents):
+        s["rank"] = i
+    big, small = scents[:26], scents[26:28]     # the last 3 are never made: zero stock
+    plan = []
+    for i, s in enumerate(big + small):
+        size = 500 if s in big else 250
+        plan.append({"scent": s, "formula": formula_for_scent(config, s["code"]), "size": size,
+                     "code": f"HA-B{i + 1:03d}", "days": 82 - int(i * 24 / 28)})
+    return scents, plan
+
+
+def buy_materials(plan, catalog):
+    section("Material purchases")
+    mats = {m["material_name"]: m for m in _materials()}
+    by_id = {m["material_id"]: m for m in mats.values()}
+    need = {m["material_id"]: D(0) for m in mats.values()}
+    for b in plan:
+        calc = catalog[b["formula"]][b["size"]]
+        for ln in calc["lines"]:
+            need[ln["material_id"]] += convert_material_qty(ln["qty"], ln["qty_unit"], by_id[ln["material_id"]]["unit"])
+        for p in calc["packaging"]:
+            need[p["material_id"]] += D(p["per_bottle"]) * calc["bottles"]
+
+    for name, m in mats.items():
+        total = need[m["material_id"]] * D(str(STOCK_MARGIN[name]))
+        step = 1 if m["unit"] == "Piece" else (5 if m["unit"] in ("Gram", "Milliliter") else 1)
+        total = D(math.ceil(total / step) * step)
+        story = PRICE_STORY[name]
+        qtys = [D(math.floor(total * D(str(w)) / step) * step) for _d, w, _p in story]
+        qtys[-1] += total - sum(qtys)
+        base = m["cost_per_unit"]
+        first_days, _w, first_mult = story[0]
+        total_qty = qtys[0]
+        total_cost = (qtys[0] * base * D(str(first_mult))).quantize(D("0.01"))
+        for (days, _w2, mult), qty in zip(story[1:], qtys[1:]):
+            cost = (qty * base * D(str(mult))).quantize(D("0.01"))
+            sup = query("SELECT s.supplier_id, s.supplier_name FROM raw_materials rm LEFT JOIN suppliers s "
+                        "ON s.supplier_id = rm.supplier_id WHERE rm.material_id = %s", (m["material_id"],), fetchone=True)
+            run("""INSERT INTO material_restock_events
+                       (material_id, material_name_snapshot, unit_snapshot, qty, cost, supplier_id,
+                        supplier_name_snapshot, purchased_at, created_by_user_id)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+                (m["material_id"], name, m["unit"], qty, cost, sup["supplier_id"], sup["supplier_name"],
+                 ago(days, 10), ADMIN_ID["admin"]))
+            total_qty += qty
+            total_cost += cost
+            audit(ago(days, 10), "admin", "restock_material", name, f"{qty:g} {m['unit'].lower()} for {cost:,.2f}")
+        prefix = RECEIPT_PREFIX[name]
+        receipt = f"{prefix}-{rnd.randint(10000, 99999)}" if prefix else None
+        run("""UPDATE raw_materials SET package_qty = %s, package_cost = %s, cost_per_unit = %s,
+               stock_qty = %s, receipt_number = %s, created_at = %s WHERE material_id = %s""",
+            (total_qty, total_cost, (total_cost / total_qty).quantize(D("0.0001")), total_qty, receipt,
+             ago(first_days, 10), m["material_id"]))
+        print(f"  {name:<22} {len(story)} purchases, bought {total_qty:>9g} {m['unit'].lower():<10} "
+              f"blended ₱{total_cost / total_qty:,.4f}/{m['unit'].lower()}")
+
+
+def make_batches(plan, catalog, config):
+    section("Bulk batches")
+    for b in plan:
+        calc = catalog[b["formula"]][b["size"]]
+        total_ml = calc["total_ml"].quantize(D("0.001"))
+        scent = b["scent"]
+        bp = _BatchPlan(
+            scent["name"], b["code"], total_ml, "Milliliter", None, config["bottle_unit"], calc["bottles"], total_ml,
+            [(ln["material_id"], ln["qty"], ln["qty_unit"]) for ln in calc["lines"]], calc["label"],
+            [(p["material_id"], p["per_bottle"]) for p in calc["packaging"]], scent["code"])
+        total_cost, _ = _create_bulk_batch_records(bp, ADMIN_ID["admin"])
+        when = ago(b["days"], 9)
+        run("UPDATE bulk_batches SET created_at = %s WHERE batch_code = %s", (when, b["code"]))
+        b["batch_id"] = query("SELECT batch_id FROM bulk_batches WHERE batch_code = %s", (b["code"],), fetchone=True)["batch_id"]
+        b["bottles"] = calc["bottles"]
+        audit(when, "admin", "create_bulk_batch", b["code"], f"{scent['name']} {calc['label']}")
+        print(f"  {b['code']}  {scent['name']:<34} {calc['label']:<24} {calc['bottles']:>3} bottles  ₱{total_cost:>10,.2f}")
+
+
+def produce_bottles(plan):
+    section("Production runs (bottling)")
+    total = 0
+    for b in plan:
+        qty = int(b["bottles"] * (0.85 if b["size"] == 500 else 0.8))
+        sku = b["scent"]["sku"]
+        cogs = query("SELECT base_cost_per_unit FROM unit_cogs_settings WHERE unit = '85ML'", fetchone=True)["base_cost_per_unit"]
+        run_ = _ProductionRun(sku, b["code"], qty, b["batch_id"], bottle_size_ml("85ML"), cogs,
+                              (cogs * qty).quantize(D("0.01")))
+        before = max_id("stock_movement_logs", "log_id")
+        _record_production_run(run_, ADMIN_ID["admin"])
+        when = ago(b["days"] - 2, 11)
+        run("UPDATE production_logs SET produced_at = %s WHERE batch_code = %s", (when, b["code"]))
+        run("UPDATE cogs_logs SET created_at = %s WHERE production_log_id = (SELECT log_id FROM production_logs WHERE batch_code = %s)",
+            (when, b["code"]))
+        retime_logs(before, when)
+        b["produced"] = qty
+        total += qty
+        audit(when, "admin", "log_production", b["scent"]["name"], f"{qty} bottles from {b['code']}")
+    print(f"  {len(plan)} runs, {total} bottles now in the HQ warehouse")
+
+
+# ---------------------------------------------------------------------------
+# 4. deliveries HQ -> branches
+# ---------------------------------------------------------------------------
+def new_request(branch_id, lines, when):
+    """A branch's delivery request: lines = [(sku, qty)]."""
+    rid = run("INSERT INTO stock_requests (branch_id, delivery_number, requested_at) VALUES (%s, %s, %s)",
+              (branch_id, uuid.uuid4().hex[:20], when))
+    run("UPDATE stock_requests SET delivery_number = %s WHERE request_id = %s", (f"DR-{rid:06d}", rid))
+    for sku, qty in lines:
+        price = query("SELECT price FROM products WHERE sku = %s", (sku,), fetchone=True)["price"]
+        run("INSERT INTO stock_request_items (request_id, sku, requested_qty, unit_price) VALUES (%s, %s, %s, %s)",
+            (rid, sku, qty, price))
+    return rid
+
+
+def dispatch(request_id, qty_by_sku, when):
+    """HQ ships (part of) a request; the same writes as Dispatch on the admin page."""
+    req = query("SELECT delivery_number FROM stock_requests WHERE request_id = %s", (request_id,), fetchone=True)
+    items = {i["sku"]: i for i in query("SELECT * FROM stock_request_items WHERE request_id = %s", (request_id,))}
+    before = max_id("stock_movement_logs", "log_id")
+    with transaction() as conn:
+        cur = conn.cursor(dictionary=True)
+        cur.execute("INSERT INTO stock_request_shipments (request_id, dispatched_by_user_id, dispatched_at) VALUES (%s, %s, %s)",
+                    (request_id, ADMIN_ID["admin"], when))
+        shipment_id = cur.lastrowid
+        for sku, qty in qty_by_sku.items():
+            if qty <= 0:
+                continue
+            cur.execute("SELECT stock_qty FROM branch_inventory WHERE branch_id = %s AND sku = %s FOR UPDATE", (HQ, sku))
+            have = cur.fetchone()["stock_qty"]
+            if have < qty:
+                raise TransactionAborted(f"HQ has only {have} of {sku}")
+            cur.execute("UPDATE branch_inventory SET stock_qty = %s WHERE branch_id = %s AND sku = %s", (have - qty, HQ, sku))
+            cur.execute("UPDATE stock_request_items SET dispatched_qty = COALESCE(dispatched_qty, 0) + %s WHERE item_id = %s",
+                        (qty, items[sku]["item_id"]))
+            cur.execute("INSERT INTO stock_request_shipment_items (shipment_id, request_item_id, dispatched_qty) VALUES (%s, %s, %s)",
+                        (shipment_id, items[sku]["item_id"], qty))
             cur.execute(
-                "INSERT INTO products (sku, item_name, variant, category, unit, price, created_at) "
-                "VALUES (%s,%s,%s,'Bottled',%s,%s,%s)", (sku, name, variant, unit, price, start))
-            products[sku] = {"sku": sku, "code": code, "name": name, "unit": unit, "ml": ml, "price": price,
-                             "category": "Bottled", "flat_cost": flat}
-        if has_bulk:
-            sku = f"DEMO-{code}-BULK"
-            cur.execute(
-                "INSERT INTO products (sku, item_name, variant, category, unit, price, created_at) "
-                "VALUES (%s,%s,%s,'Bulk/Refill','BULK',%s,%s)", (sku, name, variant, BULK_PRICE_PER_ML, start))
-            products[sku] = {"sku": sku, "code": code, "name": name, "unit": "BULK", "ml": 1,
-                             "price": BULK_PRICE_PER_ML, "category": "Bulk/Refill", "flat_cost": 0}
+                """INSERT INTO stock_movement_logs (branch_id, sku, change_qty, movement_type, notes, created_by_user_id,
+                       reference_type, reference_id, before_qty, after_qty)
+                   VALUES (%s, %s, %s, 'DISPATCH', %s, %s, 'STOCK_REQUEST', %s, %s, %s)""",
+                (HQ, sku, -qty, f"Dispatched on {req['delivery_number']} shipment #{shipment_id}",
+                 ADMIN_ID["admin"], request_id, have, have - qty))
+        cur.execute("UPDATE stock_requests SET status = 'In Transit' WHERE request_id = %s", (request_id,))
+        cur.close()
+    retime_logs(before, when)
+    run("UPDATE stock_requests SET updated_at = %s WHERE request_id = %s", (when, request_id))
+    audit(when, "admin", "dispatch_request", req["delivery_number"], f"shipment #{shipment_id}")
+    return shipment_id
 
-    # --- suppliers, raw materials, formulas -------------------------------
-    suppliers = []
-    for name, contact, phone, email, address in SUPPLIERS:
-        cur.execute("SELECT supplier_id, supplier_name FROM suppliers WHERE supplier_name = %s", (name,))
-        row = cur.fetchone()
-        if row:
-            suppliers.append({"id": row[0], "name": row[1]})
-            continue
-        cur.execute(
-            "INSERT INTO suppliers (supplier_name, contact_person, phone, email, address, notes, created_at) "
-            "VALUES (%s,%s,%s,%s,%s,%s,%s)", (name, contact, phone, email, address, TAG, start))
-        suppliers.append({"id": cur.lastrowid, "name": name})
-    materials = {}
-    for i, (name, unit, pkg_qty, pkg_cost, sup) in enumerate(MATERIALS):
-        cur.execute("SELECT 1 FROM raw_materials WHERE material_name = %s", (name,))
-        db_name = f"{name} (Demo)" if cur.fetchone() else name
-        cur.execute(
-            """INSERT INTO raw_materials (material_name, unit, purchase_mode, package_qty, package_cost, receipt_number,
-                      cost_per_unit, stock_qty, supplier_id, created_at)
-               VALUES (%s,%s,'Package',%s,%s,%s,%s,0,%s,%s)""",
-            (db_name, unit, pkg_qty, pkg_cost, f"DEMO-{i + 1:03d}", pkg_cost / pkg_qty, suppliers[sup]["id"], start))
-        materials[name] = {"id": cur.lastrowid, "db_name": db_name, "unit": unit, "pkg_qty": pkg_qty,
-                           "pkg_cost": pkg_cost, "pkg_cost_latest": pkg_cost, "supplier": sup,
-                           "stock": 0.0, "cost_per_unit": pkg_cost / pkg_qty}
-    for unit, parts in FORMULAS.items():
-        for mat, per in parts:
-            m = materials[mat]
-            cur.execute(
-                "INSERT INTO unit_formula_items (unit, material_id, qty_per_unit, unit_cost, line_cost) "
-                "VALUES (%s,%s,%s,%s,%s) ON DUPLICATE KEY UPDATE qty_per_unit = VALUES(qty_per_unit)",
-                (unit, m["id"], per, round(m["cost_per_unit"], 4), round(m["cost_per_unit"] * per, 4)))
 
-    # --- cost settings (only if still at their untouched default of 0) ------
-    cur.execute("SELECT COALESCE(SUM(base_cost_per_unit), 0) FROM unit_cogs_settings")
-    cogs_total = cur.fetchone()[0]
-    cur.execute("SELECT COALESCE(SUM(rate_per_ml), 0) FROM bulk_rate_settings")
-    rate_total = cur.fetchone()[0]
-    if not cogs_total and not rate_total:
-        for unit, _, _, _, flat in UNITS:
-            cur.execute("UPDATE unit_cogs_settings SET base_cost_per_unit = %s WHERE unit = %s", (flat, unit))
-        cur.execute("UPDATE bulk_rate_settings SET rate_per_ml = %s", (BULK_PRICE_PER_ML,))
-        cur.execute("REPLACE INTO app_settings (setting_key, setting_value) VALUES ('demo_seed_costs', '1')")
+def receive(shipment_id, branch_id, user, when, damaged=None, missing=None):
+    """The branch confirms a shipment. damaged / missing = {sku: units}."""
+    damaged, missing = damaged or {}, missing or {}
+    rows = query("""SELECT ssi.shipment_item_id, ssi.dispatched_qty, sri.sku, sr.delivery_number, sr.request_id
+                    FROM stock_request_shipment_items ssi
+                    JOIN stock_request_items sri ON sri.item_id = ssi.request_item_id
+                    JOIN stock_requests sr ON sr.request_id = sri.request_id
+                    WHERE ssi.shipment_id = %s""", (shipment_id,))
+    ids, got, dmg = [], {}, {}
+    for r in rows:
+        k = str(r["shipment_item_id"])
+        ids.append(k)
+        dmg[k] = min(damaged.get(r["sku"], 0), r["dispatched_qty"])
+        got[k] = max(0, r["dispatched_qty"] - dmg[k] - missing.get(r["sku"], 0))
+    before = max_id("stock_movement_logs", "log_id")
+    number, shortfall = _confirm_shipment_receipt(branch_id, ADMIN_ID[user], shipment_id, ids, got, dmg)
+    retime_logs(before, when)
+    run("UPDATE stock_request_shipments SET received_at = %s WHERE shipment_id = %s", (when, shipment_id))
+    run("UPDATE stock_requests SET updated_at = %s WHERE request_id = %s", (when, rows[0]["request_id"]))
+    audit(when, user, "receive_shipment", number, f"shortfall {shortfall}" if shortfall else "all accounted for")
+    return shortfall
 
-    # --- packages and package items --------------------------------------
-    package_ids = []
-    for name, scope, disc, items in PACKAGES:
-        cur.execute(
-            "INSERT INTO packages (package_name, description, partner_scope, discount_percent, is_active, created_at) "
-            "VALUES (%s,%s,%s,%s,1,%s)", (name, f"{name} · {TAG}", scope, disc, start))
-        pid = cur.lastrowid
-        resolved = [(f"DEMO-{c}-{u}", q) for c, u, q in items]
-        for sku, qty in resolved:
-            cur.execute("INSERT INTO package_items (package_id, sku, qty) VALUES (%s,%s,%s)", (pid, sku, qty))
-        package_ids.append({"id": pid, "name": name, "scope": scope, "disc": disc, "items": resolved})
 
-    # --- partners, investments and package inquiries ------------------------
-    partners = []
-    for ptype, pname, contact, town in PARTNERS:
-        cur.execute(
-            "INSERT INTO partners (partner_type, partner_name, contact_person, phone, email, address, notes, created_at) "
-            "VALUES (%s,%s,%s,%s,%s,%s,%s,%s)",
-            (ptype, pname, contact, f"09{rng.randint(10, 99)} {rng.randint(100, 999)} {rng.randint(1000, 9999)}",
-             f"{contact.split()[0].lower()}@{pname.split()[0].lower().replace('&', '')}.example", town, TAG, start))
-        partners.append({"id": cur.lastrowid, "type": ptype, "name": pname, "contact": contact, "town": town,
-                         "first": None, "last": None, "count": 0})
-    for p in partners:
-        if p["type"] == "Distributor" or rng.random() < 0.4:
-            for _ in range(rng.randint(1, 3)):
-                cur.execute(
-                    "INSERT INTO partner_investments (partner_id, amount, note, logged_by_user_id, created_at) "
-                    "VALUES (%s,%s,%s,%s,%s)",
-                    (p["id"], rng.choice([50000, 75000, 100000, 150000, 250000, 400000]),
-                     rng.choice(["Territory deposit", "Opening stock investment", "Display fixtures contribution",
-                                 "Marketing co-investment"]),
-                     admin_id, now - timedelta(days=rng.randint(10, DAYS))))
-    inquiries = []
-    for _ in range(95):
-        back = int(rng.betavariate(1, 1.25) * DAYS)
-        created = now - timedelta(days=back, hours=rng.randint(0, 20), minutes=rng.randint(0, 59))
-        if created < start:
-            created = start + timedelta(hours=rng.randint(1, 100))
-        partner = rng.choice(partners)
-        fits = [p for p in package_ids if p["scope"] in ("Both", partner["type"])]
-        pkg = rng.choice(fits)
-        age = (now - created).days
-        if age <= 14:
-            status = rng.choices(["New", "Contacted", "Follow-up", "On Hold", "Closed", "Declined"],
-                                 [0.3, 0.25, 0.2, 0.05, 0.15, 0.05])[0]
+def hq_stock():
+    return {r["sku"]: r["stock_qty"] for r in query("SELECT sku, stock_qty FROM branch_inventory WHERE branch_id = %s", (HQ,))}
+
+
+def deliveries(branches, plan):
+    section("Deliveries HQ -> branches")
+    produced = {b["scent"]["sku"]: b["produced"] for b in plan}
+    # (branch, user, wave-1 share, wave-2 share, day of wave 1, day of wave 2)
+    setups = [
+        ("Balayan Branch", "balayan", 0.18, 0.13, 55, 24),
+        ("Lipa Branch", "lipa", 0.15, 0.10, 52, 21),
+        ("Tanauan Branch", "tanauan", 0.11, 0.08, 49, 18),
+    ]
+    for branch, user, s1, s2, d1, d2 in setups:
+        bid = branches[branch]
+        for wave, share, day in ((1, s1, d1), (2, s2, d2)):
+            qty = {sku: max(1, int(p * share)) for sku, p in produced.items()}
+            lines = sorted(qty.items())
+            # every branch asks for exactly what it is sent, except one delivery below
+            over = branch == "Tanauan Branch" and wave == 2      # this one asks for more than HQ can send: stays Partially Fulfilled
+            requested = [(sku, q + (rnd.randint(1, 3) if over and rnd.random() < 0.25 else 0)) for sku, q in lines]
+            when = ago(day, 10)
+            rid = new_request(bid, requested, when)
+            audit(when, user, "request_stock", f"DR-{rid:06d}", f"{len(requested)} products")
+            ship = {sku: q for sku, q in lines}
+            sid = dispatch(rid, ship, ago(day - 1, 14))
+            if branch == "Balayan Branch" and wave == 1:
+                # damage on two lines and one unit never arrived; a second shipment finishes it
+                skus = [sku for sku, _ in lines]
+                dmg = {skus[2]: 2, skus[9]: 1}
+                miss = {skus[5]: 1}
+                receive(sid, bid, user, ago(day - 2, 11), damaged=dmg, missing=miss)
+                remaining = {}
+                for it in query("SELECT sku, requested_qty, COALESCE(received_qty, 0) AS got FROM stock_request_items WHERE request_id = %s", (rid,)):
+                    if it["requested_qty"] > it["got"]:
+                        remaining[it["sku"]] = it["requested_qty"] - it["got"]
+                sid2 = dispatch(rid, {k: min(v, hq_stock()[k]) for k, v in remaining.items()}, ago(day - 4, 15))
+                receive(sid2, bid, user, ago(day - 5, 12))
+            elif branch == "Lipa Branch" and wave == 2:
+                receive(sid, bid, user, ago(day - 2, 11), damaged={lines[0][0]: 1}, missing={lines[4][0]: 2})   # stays Partially Fulfilled
+            else:
+                receive(sid, bid, user, ago(day - 2, 11))
+            print(f"  {branch:<16} wave {wave}: {len(lines)} lines, {sum(q for _s, q in lines)} bottles")
+
+    # one in transit, one pending, one rejected, so those statuses all exist
+    stocks = hq_stock()
+    sellable = sorted((s for s, q in stocks.items() if q >= 6), key=lambda s: -stocks[s])
+    rid = new_request(branches["Lipa Branch"], [(s, 6) for s in sellable[:5]], ago(2, 9))
+    dispatch(rid, {s: 6 for s in sellable[:5]}, ago(1, 15))
+    audit(ago(2, 9), "lipa", "request_stock", f"DR-{rid:06d}", "5 products")
+    rid = new_request(branches["Balayan Branch"], [(s, rnd.randint(3, 8)) for s in sellable[5:13]], ago(0, 8, 30))
+    audit(ago(0, 8, 30), "balayan", "request_stock", f"DR-{rid:06d}", "8 products")
+    rid = new_request(branches["Tanauan Branch"], [(s, 10) for s in sellable[:3]], ago(0, 9, 10))
+    audit(ago(0, 9, 10), "tanauan", "request_stock", f"DR-{rid:06d}", "3 products")
+    rid = new_request(branches["Tanauan Branch"], [(s, 40) for s in sellable[:4]], ago(10, 10))
+    run("UPDATE stock_requests SET status = 'Rejected', updated_at = %s WHERE request_id = %s", (ago(9, 10), rid))
+    audit(ago(9, 10), "admin", "reject_request", f"DR-{rid:06d}", "quantity too large for current stock")
+    print("  + 1 In Transit, 2 Pending, 1 Rejected")
+
+
+# ---------------------------------------------------------------------------
+# 5. partners, packages, inquiries
+# ---------------------------------------------------------------------------
+PARTNERS = [
+    ("Distributor", "Calabarzon Scents Trading", "Roberto Magsaysay", "0917 301 4455", "roberto@calabarzonscents.example", "Brgy. Sambat, Tanauan City, Batangas"),
+    ("Distributor", "Southern Luzon Fragrance Distribution Corporation", "Atty. Imelda Fernandez-Aquino", "0918 220 9087", "imelda@slfdc.example", "Km 52 National Highway, Sto. Tomas, Batangas"),
+    ("Distributor", "Bicol Aroma Wholesale", "Joey Alcantara", "0927 118 3342", None, "Magsaysay Ave., Naga City, Camarines Sur"),
+    ("Reseller", "Ate Joy's Perfume Corner", "Joy Dela Cruz", "0915 889 2210", "joy.perfumes@example.com", "Public Market Stall 14, Lipa City"),
+    ("Reseller", "Kuya Mark Online Scents", "Mark Villanueva", "0939 662 1175", "markscents@example.com", "Blk 4 Lot 9 Mabuhay Homes, Calamba, Laguna"),
+    ("Reseller", "Fragrance Fix PH", "Camille Reyes", "0906 774 5521", "hello@fragrancefix.example", "Unit 3B, Ayala Malls Feliz, Pasig City"),
+    ("Reseller", "Mercado Gift Shop", "Nena Mercado", "0928 445 7788", None, "Rizal Ave., Balayan, Batangas"),
+    ("Reseller", "Tindahan ni Aling Baby", "Baby Lopez", "0916 530 4412", None, "Brgy. Gulod, Balayan, Batangas"),
+]
+
+PACKAGES = [  # name, description, scope, discount, active, n skus, qty each
+    ("Starter Reseller Set", "Five best-selling scents, four bottles each. A first order for a new reseller.", "Reseller", 10, True, 5, 4),
+    ("Distributor Case", "Eight scents, six bottles each, for stocking a shop.", "Distributor", 18, True, 8, 6),
+    ("Gift Mix", "Six scents, two bottles each. Good for gift shops.", "Both", 8, True, 6, 2),
+    ("Best Sellers Bundle", "Ten popular scents, three bottles each.", "Both", 12, True, 10, 3),
+    ("Holiday Promo 2025 (retired)", "Last year's holiday bundle, no longer offered.", "Both", 5, False, 4, 5),
+]
+
+
+def partners_and_packages(plan):
+    section("Partners, packages and inquiries")
+    stocks = hq_stock()
+    ranked = [b["scent"]["sku"] for b in sorted(plan, key=lambda b: b["scent"]["rank"])]
+    by_stock = sorted(ranked, key=lambda s: -stocks.get(s, 0))
+    prices = {p["sku"]: p for p in query("SELECT sku, item_name, unit, price FROM products")}
+
+    partner_ids = []
+    for i, (ptype, name, person, phone, email, addr) in enumerate(PARTNERS):
+        pid = run("""INSERT INTO partners (partner_type, partner_name, contact_person, phone, email, address, notes, created_at)
+                     VALUES (%s, %s, %s, %s, %s, %s, %s, %s)""",
+                  (ptype, name, person, phone, email, addr,
+                   "Came in through the partner portal." if i % 2 == 0 else "Referred by an existing reseller.", ago(70 - i * 6)))
+        partner_ids.append(pid)
+    invest = [(0, 50000, "Initial buy-in", 66), (0, 25000, "Top-up for the December stock", 30),
+              (1, 120000, "First pallet order", 58), (2, 35000, "Initial buy-in", 40),
+              (3, 8000, "Starter set", 44), (3, 8500, "Second starter set", 12), (4, 12000, "Online store opening stock", 25),
+              (5, 15000, "Pop-up booth stock", 18), (6, -1500, "Correction: duplicate entry reversed", 9), (6, 6000, "Gift shop restock", 20)]
+    for idx, amount, note, days in invest:
+        run("INSERT INTO partner_investments (partner_id, amount, note, logged_by_user_id, created_at) VALUES (%s, %s, %s, %s, %s)",
+            (partner_ids[idx], amount, note, ADMIN_ID["admin"], ago(days)))
+
+    pkg_ids = []
+    start = 0
+    for name, desc, scope, disc, active, n, qty in PACKAGES:
+        pid = run("INSERT INTO packages (package_name, description, partner_scope, discount_percent, is_active, created_at) VALUES (%s, %s, %s, %s, %s, %s)",
+                  (name, desc, scope, disc, active, ago(60)))
+        skus = by_stock[start:start + n] if len(pkg_ids) < 4 else ranked[-n:]
+        for sku in skus:
+            run("INSERT INTO package_items (package_id, sku, qty) VALUES (%s, %s, %s)", (pid, sku, qty))
+        pkg_ids.append((pid, name, disc, [(s, qty) for s in skus], scope))
+        audit(ago(60), "admin", "create_package", name, f"{disc}% off")
+        start = (start + 2) % 10
+    audit(ago(35), "admin", "deactivate_package", PACKAGES[4][0], "no longer offered")
+
+    # (partner idx, package idx, status, days ago, fulfil?)
+    inquiries = [
+        (3, 0, "Closed", 52, True), (4, 0, "Closed", 33, True), (0, 1, "Closed", 47, False), (1, 3, "Closed", 28, True),
+        (5, 2, "Closed", 14, False), (6, 2, "Contacted", 11, False), (2, 1, "Follow-up", 16, False),
+        (7, 0, "On Hold", 21, False), (3, 3, "Follow-up", 6, False), (4, 2, "New", 3, False),
+        (5, 0, "New", 1, False), (0, 3, "New", 0, False), (6, 0, "Declined", 38, False), (7, 2, "Declined", 26, False),
+    ]
+    fulfilled = 0
+    for p_idx, k_idx, status, days, fulfil in inquiries:
+        pid, pname, disc, items, scope = pkg_ids[k_idx]
+        ptype, company, person, phone, email, addr = PARTNERS[p_idx]
+        if scope not in ("Both", ptype):
+            ptype = scope            # keep the partner type consistent with the package's audience
+        reference = sum(prices[s]["price"] * q for s, q in items)
+        amount = (reference * (D(100) - D(disc)) / D(100)).quantize(D("0.01"))
+        when = ago(days, 14)
+        pref = (None, "Call", "SMS", "Viber", "Email")[p_idx % 5]
+        iid = run(
+            """INSERT INTO partner_inquiries (package_id, partner_id, partner_type, company_name, contact_person, phone, email, address,
+                   message, preferred_contact, remarks, package_name_snapshot, order_amount, status, email_sent, created_at)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+            (pid, partner_ids[p_idx], ptype, company, person, phone, email, addr,
+             "Hi, interested in this package. Can you deliver to our area?" if p_idx % 2 == 0 else "Do you have a bigger set?",
+             pref, "Called twice, will confirm by Friday." if status in ("Follow-up", "On Hold") else
+             ("Declined: price too high for now." if status == "Declined" else None),
+             pname, amount, status, bool(email), when))
+        for s, q in items:
+            run("INSERT INTO partner_inquiry_items (inquiry_id, sku, item_name, unit, qty, unit_price) VALUES (%s, %s, %s, %s, %s, %s)",
+                (iid, s, prices[s]["item_name"], prices[s]["unit"], q, prices[s]["price"]))
+        if status != "New":
+            audit(ago(days - 1 if days else 0, 10), "admin", "update_inquiry_status", company, status)
+        if fulfil:
+            stocks = hq_stock()
+            if all(stocks.get(s, 0) >= q for s, q in items):
+                before = max_id("stock_movement_logs", "log_id")
+                with transaction() as conn:
+                    cur = conn.cursor(dictionary=True)
+                    for s, q in items:
+                        cur.execute("SELECT stock_qty FROM branch_inventory WHERE branch_id = %s AND sku = %s FOR UPDATE", (HQ, s))
+                        have = cur.fetchone()["stock_qty"]
+                        cur.execute("UPDATE branch_inventory SET stock_qty = %s WHERE branch_id = %s AND sku = %s", (have - q, HQ, s))
+                        cur.execute(
+                            """INSERT INTO stock_movement_logs (branch_id, sku, change_qty, movement_type, notes, created_by_user_id,
+                                   reference_type, reference_id, before_qty, after_qty)
+                               VALUES (%s, %s, %s, 'PACKAGE_ORDER', %s, %s, 'PARTNER_INQUIRY', %s, %s, %s)""",
+                            (HQ, s, -q, f"Package order for {company}", ADMIN_ID["admin"], iid, have, have - q))
+                    cur.close()
+                when_f = ago(max(days - 3, 0), 16)
+                retime_logs(before, when_f)
+                run("UPDATE partner_inquiries SET fulfilled_at = %s, fulfilled_by_user_id = %s WHERE inquiry_id = %s",
+                    (when_f, ADMIN_ID["admin"], iid))
+                audit(when_f, "admin", "fulfill_inquiry", company, pname)
+                fulfilled += 1
+    # the partner list's rollup columns, as the portal keeps them
+    run("""UPDATE partners p SET inquiry_count = (SELECT COUNT(*) FROM partner_inquiries i WHERE i.partner_id = p.partner_id),
+           last_inquiry_at = (SELECT MAX(created_at) FROM partner_inquiries i WHERE i.partner_id = p.partner_id)""")
+    print(f"  {len(PARTNERS)} partners, {len(invest)} investments, {len(PACKAGES)} packages, "
+          f"{len(inquiries)} inquiries ({fulfilled} fulfilled)")
+
+
+# ---------------------------------------------------------------------------
+# 6. sales
+# ---------------------------------------------------------------------------
+CUSTOMERS = [
+    ("Maria Santos", "Brgy. Poblacion, Balayan, Batangas"),
+    ("Jose Reyes", "12 Mabini St., Lipa City, Batangas"),
+    ("Ana Dela Cruz", "Blk 3 Lot 5 Sampaguita Homes, Tanauan City"),
+    ("Carlo Mendoza", None),
+    ("Liza Bautista", "Brgy. Gulod, Balayan, Batangas"),
+    ("Rowena Garcia", "45 Rizal Ave., Batangas City"),
+    ("Miguel Aquino", "Unit 8, Lakeview Condominium, Calamba, Laguna"),
+    ("Grace Villanueva", "Brgy. Sambat, Tanauan City"),
+    ("Noel Castillo", None),
+    ("Jenny Ramos", "San Juan, Batangas"),
+    ("Aling Nena's Sari-sari Store", "Brgy. Caloocan, Balayan, Batangas"),
+    ("Dr. Patricia Lim", "Lim Dental Clinic, P. Burgos St., Lipa City"),
+    ("Kuya Boy", None),
+    ("Cecilia Torres", "88 Gen. Luna St., Nasugbu, Batangas"),
+    ("Engr. Ramil Navarro", "Navarro Construction, Brgy. Darasa, Tanauan City"),
+    ("Teresita Flores", "Purok 5, Brgy. Navotas, Balayan, Batangas"),
+    ("Bea Salazar", "Rosario, Batangas"),
+    ("Dennis Pascual", None),
+    ("Mylene Cruz", "Blk 12 Lot 2 Villa Rosa, Lipa City"),
+    ("Joel Domingo", "Calaca, Batangas"),
+    ("Sheila Marquez", "Brgy. San Piro, Balayan, Batangas"),
+    ("Paolo Espiritu", "Lemery, Batangas"),
+    ("Hannah Gonzales", "Taal, Batangas"),
+    ("Benjie Alvarez", None),
+    ("Fe Concepcion", "Sto. Tomas, Batangas"),
+    ("Rhea Mangubat", "Brgy. Wawa, Lian, Batangas"),
+    ("Tomas Evangelista", "Alitagtag, Batangas"),
+    ("Marites Soriano", "Brgy. Banay-banay, Lipa City"),
+]
+STAFF = ["Ate Joy (staff)", "Kuya Mark (staff)", "Ana (staff)", "Boss Rey"]
+VOID_REASONS = ["Wrong scent picked", "Customer changed mind", "Entered twice by mistake",
+                "Wrong quantity typed", "Customer returned it right away"]
+
+
+def sales(branches, plan, total_sales):
+    section(f"Sales (about {total_sales})")
+    branch_users = {branches["Balayan Branch"]: "balayan", branches["Lipa Branch"]: "lipa",
+                    branches["Tanauan Branch"]: "tanauan", HQ: "admin"}
+    weights = {branches["Balayan Branch"]: 0.36, branches["Lipa Branch"]: 0.24,
+               branches["Tanauan Branch"]: 0.15, HQ: 0.25}
+    products = query("SELECT sku, item_name, unit FROM products ORDER BY item_name")
+    ranked_skus = [b["scent"]["sku"] for b in sorted(plan, key=lambda b: b["scent"]["rank"])]
+    pop = [1 / (i + 4) for i in range(len(ranked_skus))]
+    bulk_codes = [b["scent"]["code"] for b in plan]
+    first_day = {b: d for b, d in ((branches["Balayan Branch"], 46), (branches["Lipa Branch"], 44),
+                                   (branches["Tanauan Branch"], 41), (HQ, 54))}
+
+    events = []
+    for bid, share in weights.items():
+        for _ in range(int(total_sales * share)):
+            days = min(first_day[bid], int(rnd.triangular(0, first_day[bid] + 1, 8)))
+            events.append((days, rnd.randint(9, 20), rnd.randint(0, 59), bid))
+    events.sort(key=lambda e: (-e[0], e[1], e[2]))
+
+    stats = {"orders": 0, "done": 0, "skipped": 0, "bottle": 0, "bulk": 0, "refill": 0, "freebie": 0, "credit": 0}
+    credit_ids = []
+    for days, hour, minute, bid in events:
+        user = branch_users[bid]
+        for _attempt in range(6):
+            roll = rnd.random()
+            if bid == HQ:
+                kind = "bulk" if roll < 0.14 else "refill" if roll < 0.29 else "freebie" if roll < 0.36 else "sale"
+            else:
+                kind = "freebie" if roll < 0.06 else "sale"
+            code_pick = rnd.choices(ranked_skus, weights=pop)[0]
+            base = code_pick[:-5]
+            if kind == "bulk":
+                sku, qty, price = f"{rnd.choice(bulk_codes)}-BULK", rnd.choice([30, 50, 60, 100, 100, 150, 200, 250, 300, 500]), D(rnd.choice(["7.00", "7.00", "7.50", "6.50"]))
+            elif kind == "refill":
+                sku, qty, price = code_pick, rnd.choice([1, 1, 1, 2, 3]), D(rnd.choice(["60", "60", "65", "55"]))
+            elif kind == "freebie":
+                sku, qty, price = code_pick, 1, D(0)
+            else:
+                sku = code_pick
+                qty = rnd.choices([1, 2, 3, 4, 6, 10], weights=[60, 24, 9, 4, 2, 1])[0]
+                price = D(rnd.choices(["85", "80", "75", "90", "100"], weights=[70, 12, 6, 8, 4])[0])
+            credit = kind in ("sale", "refill") and rnd.random() < 0.15
+            cust = rnd.choice(CUSTOMERS) if rnd.random() < 0.45 else (None, None)
+            buyer = (cust[0] if cust[0] and rnd.random() < 0.6 else rnd.choice(STAFF)) if credit else None
+            when = ago(days, hour, minute)
+            form = sale_entry.SaleInput(sku, qty, price, {"sale": "Sale", "bulk": "Sale", "refill": "Refill", "freebie": "Freebie"}[kind],
+                                        "Credit" if credit else "Cash", buyer, cust[0], cust[1], when)
+            forms = [form]
+            if kind == "sale" and rnd.random() < 0.14:        # a customer buying several scents at once
+                for other in rnd.sample([k for k in ranked_skus if k != sku], rnd.randint(1, 5)):
+                    forms.append(sale_entry.SaleInput(other, rnd.choice([1, 1, 2, 3]), price, "Sale", form.payment_method,
+                                                      buyer, cust[0], cust[1], when))
+            before = max_id("stock_movement_logs", "log_id")
+            try:
+                sale_id = sale_entry.record_sale_order(forms, branch_id=bid, user_id=ADMIN_ID[user])
+            except TransactionAborted:
+                continue
+            run("UPDATE sales SET sold_at = %s, recorded_at = %s WHERE sale_id = %s OR order_id = %s",
+                (when, when, sale_id, sale_id))
+            retime_logs(before, when)
+            stats["orders"] += len(forms) > 1
+            stats["done"] += 1
+            stats[kind if kind != "sale" else "bottle"] += 1
+            if credit:
+                stats["credit"] += 1
+                credit_ids.append((sale_id, bid, when))
+            break
         else:
-            status = rng.choices(["Closed", "Declined", "On Hold", "Follow-up", "Contacted"],
-                                 [0.62, 0.17, 0.07, 0.07, 0.07])[0]
-        mult = rng.choice([2, 3, 4, 5]) if partner["type"] == "Distributor" else rng.choice([1, 1, 2, 3])
-        items = [(sku, qty * mult) for sku, qty in pkg["items"]]
-        gross = sum(qty * products[sku]["price"] for sku, qty in items)
-        amount = round(gross * (1 - pkg["disc"] / 100), 2) if status == "Closed" else None
-        closed_at = fulfilled_at = None
-        if status == "Closed":
-            closed_at = min(created + timedelta(days=rng.randint(1, 5), hours=rng.randint(0, 6)), now)
-            ful = closed_at + timedelta(days=rng.randint(1, 4), hours=rng.randint(0, 8))
-            if ful <= now and rng.random() < 0.9:
-                fulfilled_at = ful
-        cur.execute(
-            """INSERT INTO partner_inquiries (package_id, partner_id, partner_type, company_name, contact_person, phone,
-                      email, address, message, preferred_contact, remarks, package_name_snapshot, order_amount, status,
-                      email_sent, fulfilled_at, fulfilled_by_user_id, closed_at, created_at)
-               VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
-            (pkg["id"], partner["id"], partner["type"], partner["name"], partner["contact"],
-             f"09{rng.randint(10, 99)} {rng.randint(100, 999)} {rng.randint(1000, 9999)}",
-             f"{partner['contact'].split()[0].lower()}@{partner['name'].split()[0].lower().replace('&', '')}.example",
-             partner["town"],
-             rng.choice(["Interested in stocking your best sellers.", "Please send the price list and terms.",
-                         "We want to open a refill corner in our shop.", "Looking for a monthly supply arrangement.",
-                         "Can we get a sample set before ordering?"]),
-             rng.choice(["Call", "SMS", "Viber", "Email"]), TAG, pkg["name"], amount, status,
-             1 if rng.random() < 0.7 else 0, None, None, closed_at, created))
-        iid = cur.lastrowid
-        for sku, qty in items:
-            p = products[sku]
-            cur.execute(
-                "INSERT INTO partner_inquiry_items (inquiry_id, sku, item_name, unit, qty, unit_price) "
-                "VALUES (%s,%s,%s,%s,%s,%s)", (iid, sku, p["name"], p["unit"], qty, p["price"]))
-        partner["count"] += 1
-        partner["first"] = created if partner["first"] is None else min(partner["first"], created)
-        partner["last"] = created if partner["last"] is None else max(partner["last"], created)
-        inquiries.append({"id": iid, "company": partner["name"], "items": items, "fulfilled_at": fulfilled_at,
-                          "created": created, "status": status, "amount": amount})
+            stats["skipped"] += 1
 
-    # --- the simulation: production, requests, shipments, sales, voids --------
-    sim = Sim(conn, rng, now)
-    sim.admin_id, sim.hq, sim.outlets = admin_id, hq, outlets
-    sim.products, sim.materials = products, materials
-    sim.suppliers, sim.scent_by_code = suppliers, {s[0]: s for s in SCENTS}
-    pop = {s[0]: s[4] for s in SCENTS}
-    sim.bottled_skus = [s for s, p in products.items() if p["category"] == "Bottled"]
-    unit_w = {u[0]: u[2] for u in UNITS}
-    sim.bottled_w = [pop[products[s]["code"]] * unit_w[products[s]["unit"]] for s in sim.bottled_skus]
-    sim.bulk_skus = [s for s, p in products.items() if p["category"] != "Bottled"]
-    sim.bulk_w = [pop[products[s]["code"]] for s in sim.bulk_skus]
-    tot_w = sum(sim.bottled_w)
-    for o in outlets:                          # demand estimates to size the very first orders
-        base = 10 * o["weight"] * 0.6
-        for s, w in zip(sim.bottled_skus, sim.bottled_w):
-            sim.ema[(o["id"], s)] = base * w / tot_w * 1.6
-        for s, w in zip(sim.bulk_skus, sim.bulk_w):
-            sim.ema[(o["id"], s)] = base * 0.06 * 130 * w / sum(sim.bulk_w)
-    for inq in inquiries:
-        if inq["fulfilled_at"]:
-            sim.push(inq["fulfilled_at"], partial(sim.fulfill, inq, inq["fulfilled_at"]))
-    for ts_off, unit in ((1, "85ML"), (1, "50ML"), (1, "10ML"), (1, "3ML")):
-        sim.act(start + timedelta(days=ts_off, hours=9), "save_unit_cogs", unit, "Base cost set")
-    sim.act(start + timedelta(days=1, hours=9), "save_bulk_rate", None, f"₱{BULK_PRICE_PER_ML:.4f}/mL")
-    for p in products.values():
-        sim.act(start + timedelta(hours=rng.randint(1, 60)), "add_product", p["sku"], f"{p['name']} {p['unit']}")
-    sim.run()
+    # settle about half of the credit sales, a few days after
+    settled = 0
+    for sale_id, bid, when in credit_ids:
+        if rnd.random() < 0.55:
+            run("UPDATE sales SET credit_settled_at = %s, credit_settled_by = %s WHERE sale_id = %s",
+                (min(when + timedelta(days=rnd.randint(2, 10)), NOW), branch_users[bid], sale_id))
+            settled += 1
+    print(f"  {stats['done']} recorded ({stats['bottle']} bottle sales, {stats['bulk']} bulk, {stats['refill']} refills, "
+          f"{stats['freebie']} freebies), {stats['orders']} of them several scents on one receipt; {stats['credit']} on credit, {settled} settled; {stats['skipped']} skipped (out of stock)")
+    return stats
 
-    # --- final state: inventory, batches, materials ------------------------------
-    n_ledger = sim.flush_ledger()
-    for o in outlets:
-        for sku, p in products.items():
-            level = 1000 if p["category"] != "Bottled" else 12
-            cur.execute(
-                "INSERT INTO branch_inventory (branch_id, sku, stock_qty, reorder_level) VALUES (%s,%s,%s,%s) "
-                "ON DUPLICATE KEY UPDATE stock_qty = VALUES(stock_qty), reorder_level = VALUES(reorder_level)",
-                (o["id"], sku, sim.inv[(o["id"], sku)], level))
-    for bid, left in sim.batch_left.items():
-        cur.execute("UPDATE bulk_batches SET remaining_ml = %s WHERE batch_id = %s", (round(max(0.0, left), 3), bid))
-    for m in materials.values():
-        cur.execute("UPDATE raw_materials SET stock_qty = %s, cost_per_unit = %s, package_cost = %s WHERE material_id = %s",
-                    (round(max(0.0, m["stock"]), 6), round(m["cost_per_unit"], 4), round(m["pkg_cost_latest"], 2), m["id"]))
-    for p in partners:
-        if p["count"]:
-            cur.execute("UPDATE partners SET inquiry_count = %s, last_inquiry_at = %s, created_at = %s WHERE partner_id = %s",
-                        (p["count"], p["last"], p["first"] - timedelta(days=rng.randint(2, 20)), p["id"]))
-    sim.act(start + timedelta(hours=2), "add_branch", "demo branches", f"{len(outlets)} outlets")
 
-    # --- AI stock drafts ------------------------------------------------------------
-    drafts = 0
-    retail = [o for o in outlets if not o["is_hq"]]
-    for i in range(18):
-        o = rng.choice(retail)
-        when = now - timedelta(days=rng.randint(1, 120), hours=rng.randint(0, 20))
-        if when < now - timedelta(days=o["open_back"] - 7):
+def void_some(branches):
+    section("Voided sales")
+    rows = query("""SELECT s.sale_id, s.branch_id, s.sold_at FROM sales s JOIN products p ON p.sku = s.sku
+                    WHERE s.sale_type = 'Sale' AND s.credit_settled_at IS NULL ORDER BY RAND(7) LIMIT 14""")
+    names = {1: "admin", branches["Balayan Branch"]: "balayan", branches["Lipa Branch"]: "lipa", branches["Tanauan Branch"]: "tanauan"}
+    for r in rows:
+        who = names[r["branch_id"]]
+        before = max_id("stock_movement_logs", "log_id")
+        with transaction() as conn:
+            cur = conn.cursor(dictionary=True)
+            void_sale(cur, sale_id=r["sale_id"], reason=rnd.choice(VOID_REASONS), user_id=ADMIN_ID[who], username=who)
+            cur.close()
+        when = r["sold_at"] + timedelta(hours=rnd.randint(1, 5))
+        when = min(when, NOW)
+        run("UPDATE sale_voids SET voided_at = %s WHERE sale_id = %s", (when, r["sale_id"]))
+        retime_logs(before, when)
+        audit(when, who, "void_sale", f"Sale #{r['sale_id']}", "voided")
+    print(f"  {len(rows)} sales voided")
+
+
+def receipt_stress_sales(branches):
+    """Real sales dated today that make the receipt slip work hard: very long names and addresses."""
+    section("Receipt stress sales (today)")
+    long_name = "Maria Cristina Dela Cruz-Villanueva Ramos y Fernandez de Los Santos"
+    long_addr = ("Unit 1204, Tower 2, The Residences at Greenbelt Heights Condominium Complex, "
+                 "Corner of Ayala Avenue and Makati Avenue, Brgy. San Lorenzo, Makati City, Metro Manila, 1223, Philippines")
+    cases = []
+    balayan = branches["Balayan Branch"]
+    stock = {r["sku"]: r["stock_qty"] for r in query("SELECT sku, stock_qty FROM branch_inventory WHERE branch_id = %s", (balayan,))}
+    names = {p["sku"]: p["item_name"] for p in query("SELECT sku, item_name FROM products")}
+    in_stock = {s: q for s, q in stock.items() if q >= 3}
+    if in_stock:
+        longest = max(in_stock, key=lambda s: len(names[s]))
+        cases.append((balayan, "balayan", longest, min(12, in_stock[longest] - 2), D("85"), "Sale", "Cash", None, long_name, long_addr))
+        cases.append((balayan, "balayan", longest, 1, D("85"), "Sale", "Credit", "Engr. Bartolome Evangelista-Magsaysay Jr.", "Walk-in", None))
+        cases.append((balayan, "balayan", longest, 1, D(0), "Freebie", "Cash", None, "Dr. Patricia Lim", "Lim Dental Clinic, P. Burgos St., Lipa City"))
+    hq_bulk = query("SELECT base_code FROM bulk_batches WHERE remaining_ml >= 2000 AND base_code IS NOT NULL ORDER BY remaining_ml DESC LIMIT 1", fetchone=True)
+    if hq_bulk:
+        cases.append((HQ, "admin", f"{hq_bulk['base_code']}-BULK", 1800, D("7.50"), "Sale", "Cash", None, long_name, long_addr))
+    hq_left = [s for s, q in hq_stock().items() if q >= 1]
+    if hq_left:
+        hq_sku = max(hq_left, key=lambda s: len(names[s]))
+        cases.append((HQ, "admin", hq_sku, 2, D("60"), "Refill", "Credit", "Boss Rey", "Kuya Boy", None))
+    # Orders of several scents: 10 products (one full slip), 11 (a second slip with one line)
+    # and 23 (three slips), the last with a long name and address.
+    def stocked(loc, minimum=1):
+        have = {r["sku"]: r["stock_qty"] for r in query(
+            "SELECT sku, stock_qty FROM branch_inventory WHERE branch_id = %s", (loc,))}
+        return [k for k, q in sorted(have.items(), key=lambda kv: -kv[1]) if q >= minimum]
+    for loc, user, count, cname, caddr, pay, buyer in (
+            (HQ, "admin", 10, "Dr. Patricia Lim", "Lim Dental Clinic, P. Burgos St., Lipa City", "Cash", None),
+            (HQ, "admin", 11, "Aling Nena's Sari-sari Store", "Brgy. Caloocan, Balayan, Batangas", "Cash", None),
+            (HQ, "admin", 23, long_name, long_addr, "Cash", None)):
+        skus = stocked(loc)[:count]
+        if len(skus) < 2:
             continue
-        status = "Pending Review" if when > now - timedelta(days=4) else rng.choices(
-            ["Approved", "Rejected"], [0.75, 0.25])[0]
-        linked = [r for r in sim.requests if r["branch"]["id"] == o["id"] and r["status"] != "Rejected"]
-        req_id = rng.choice(linked)["id"] if (status == "Approved" and linked) else None
-        cur.execute(
-            """INSERT INTO ai_stock_drafts (branch_id, created_by_user_id, created_by_username, status, note, reasoning,
-                      resulting_request_id, reviewed_by_user_id, reviewed_at, created_at)
-               VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
-            (o["id"], o["user_id"], o["username"], status, f"Restock suggestion · {TAG}",
-             rng.choice(["Top sellers are under a week of cover based on the last 4 weeks of sales.",
-                         "Sales are trending up for the weekend; 50ML and 85ML sizes are running low.",
-                         "Refill stock is nearly out while refills sold steadily this month."]),
-             req_id, admin_id if status != "Pending Review" else None,
-             when + timedelta(hours=rng.randint(1, 20)) if status != "Pending Review" else None, when))
-        did = cur.lastrowid
-        for sku in rng.sample(sim.bottled_skus, rng.randint(4, 8)):
-            cur.execute("INSERT INTO ai_stock_draft_items (draft_id, sku, suggested_qty) VALUES (%s,%s,%s)",
-                        (did, sku, rng.choice([12, 18, 24, 36, 48])))
-        drafts += 1
-
-    # --- sign-in history ----------------------------------------------------------------
-    logins = []
-    accounts = [("admin", "Admin", admin_id)] + [(o["username"], "Branch", o["user_id"]) for o in retail if o["user_id"]]
-    for back in range(200, -1, -1):
-        day = (now - timedelta(days=back)).replace(hour=0, minute=0, second=0, microsecond=0)
-        for username, role, uid in accounts:
-            for _ in range(rng.choice([0, 1, 1, 2, 2, 3])):
-                at = day + timedelta(hours=rng.randint(7, 20), minutes=rng.randint(0, 59))
-                if at > now:
-                    continue
-                ua = f"Chrome 126 on {rng.choice(['Windows 11', 'Android 14', 'iPhone iOS 17'])} · {TAG}"
-                ip = f"192.168.1.{rng.randint(10, 80)}"
-                if rng.random() < 0.06:
-                    logins.append((uid, username, role, 0, rng.choice(["bad_credentials", "bad_credentials", "wrong_role_tab"]), ip, ua, at - timedelta(minutes=1)))
-                logins.append((uid, username, role, 1, None, ip, ua, at))
-    cur.executemany(
-        "INSERT INTO login_activity (user_id, username_attempted, role_attempted, success, failure_reason, ip_address, "
-        "user_agent, created_at) VALUES (%s,%s,%s,%s,%s,%s,%s,%s)", logins)
-    cur.executemany(
-        "INSERT INTO admin_actions (actor_user_id, actor_username, action, target, details, created_at) "
-        "VALUES (%s,%s,%s,%s,%s,%s)", sim.actions)
-
-    problems = verify(cur)
-    if problems:
-        conn.rollback()
-        print("Integrity check FAILED, nothing was saved:")
-        for line in problems:
-            print("  -", line)
-        sys.exit(1)
-
-    cur.execute("SELECT COALESCE(SUM(bi.stock_qty), 0) FROM branch_inventory bi JOIN products p ON p.sku = bi.sku "
-                "WHERE p.category = 'Bottled' AND bi.branch_id = %s", (hq,))
-    hq_bottles = int(cur.fetchone()[0])
-    cur.execute("SELECT COALESCE(SUM(bi.stock_qty), 0) FROM branch_inventory bi JOIN products p ON p.sku = bi.sku "
-                "WHERE p.category = 'Bottled' AND bi.branch_id <> %s", (hq,))
-    branch_bottles = int(cur.fetchone()[0])
-    cur.execute("SELECT COALESCE(SUM(total_cogs), 0) FROM cogs_logs WHERE notes LIKE '%demo-seed'")
-    cogs_total = float(cur.fetchone()[0])
-    if dry_run:
-        conn.rollback()
-    else:
-        conn.commit()
-
-    # --- summary ----------------------------------------------------------------------------
-    c = sim.counts
-    by_status = defaultdict(int)
-    for r in sim.requests:
-        by_status[r["status"]] += 1
-    partner_revenue = sum(float(i["amount"] or 0) for i in inquiries)
-    print()
-    print("Demo data " + ("built, then ROLLED BACK (dry run, nothing was saved):" if dry_run else "is ready:"))
-    print(f"  {len(outlets)} outlets over {DAYS} days, {len(products)} products, {len(materials)} raw materials, {len(suppliers)} suppliers")
-    print(f"  Stock on hand now: {hq_bottles:,} bottles at HQ, {branch_bottles:,} across branches  ·  cost of goods logged ₱{cogs_total:,.0f}")
-    print("  Integrity check: OK (inventory = movement ledger, no negative stock, shipments add up)")
-    print(f"  {c['sales']:,} sales ({c['lost_to_stockout']:,} more lost to stock-outs)  ·  ₱{sim.revenue:,.0f} sales revenue  ·  {c['voids']} voided sales")
-    print(f"  {c['production_runs']:,} production runs ({c['units_produced']:,} bottles) from {c['batches']} bulk batches, {c['restocks']} material restocks")
-    print(f"  {c['requests']} stock requests  ·  {dict(by_status)}")
-    print(f"  {len(inquiries)} package inquiries ({c['fulfilled_orders']} fulfilled) worth ₱{partner_revenue:,.0f} closed, "
-          f"{len(partners)} partners, {len(package_ids)} packages")
-    if os.environ.get("DEMO_DEBUG"):
-        for k in sorted(c):
-            if k.startswith("lost:"):
-                print("   ", k, c[k])
-    print(f"  {n_ledger:,} stock movement rows, {drafts} AI stock drafts, {len(logins):,} sign-in records, {len(sim.actions)} audit entries")
-    print(f"  Demo branch logins (password {DEMO_PASSWORD}): " + ", ".join(o["username"] for o in retail if o["user_id"] and o["name"] in demo_meta))
-    print("Remove it again with:  python scripts/demo_data.py --clear")
+        when = ago(0, rnd.randint(8, 9), rnd.randint(0, 59))
+        forms = [sale_entry.SaleInput(k, 1, D("85"), "Sale", pay, buyer,
+                                      None if pay == "Credit" else cname, None if pay == "Credit" else caddr, when) for k in skus]
+        before = max_id("stock_movement_logs", "log_id")
+        try:
+            sid = sale_entry.record_sale_order(forms, branch_id=loc, user_id=ADMIN_ID[user])
+        except TransactionAborted as err:
+            print("  skipped a big order:", err)
+            continue
+        run("UPDATE sales SET sold_at = %s, recorded_at = %s WHERE sale_id = %s OR order_id = %s", (when, when, sid, sid))
+        retime_logs(before, when)
+        print(f"  SR-{sid:06d}  ORDER of {len(skus)} products ({-(-len(skus) // 10)} slip(s))")
+    for bid, user, sku, qty, price, stype, pay, buyer, cname, caddr in cases:
+        when = ago(0, rnd.randint(8, 9), rnd.randint(0, 59))
+        cname_final = None if cname == "Walk-in" else cname
+        form = sale_entry.SaleInput(sku, qty, price, stype, pay, buyer, cname_final, caddr, when)
+        before = max_id("stock_movement_logs", "log_id")
+        try:
+            sale_entry.record_sale(form, branch_id=bid, user_id=ADMIN_ID[user])
+        except TransactionAborted as err:
+            print("  skipped a stress case:", err)
+            continue
+        sid = max_id("sales", "sale_id")
+        run("UPDATE sales SET sold_at = %s, recorded_at = %s WHERE sale_id = %s", (when, when, sid))
+        retime_logs(before, when)
+        print(f"  SR-{sid:06d}  {stype:<8} {names.get(sku, sku)[:34]:<34} x{qty}")
 
 
-if __name__ == "__main__":
+# ---------------------------------------------------------------------------
+# 7. AI drafts, login activity, admin log, settings
+# ---------------------------------------------------------------------------
+def ai_drafts(branches, plan):
+    section("AI stock drafts, login activity, admin log, settings")
+    skus = [b["scent"]["sku"] for b in plan]
+    req_id = query("SELECT request_id FROM stock_requests WHERE branch_id = %s ORDER BY request_id LIMIT 1",
+                   (branches["Balayan Branch"],), fetchone=True)["request_id"]
+    drafts = [
+        (branches["Balayan Branch"], "balayan", "Pending Review", "Restock the fast movers", "Sold 18 bottles of these in the last 7 days; stock is under the reorder level.", None, None),
+        (branches["Lipa Branch"], "lipa", "Approved", "Weekend restock", "Weekend sales run about 40% above weekdays.", req_id, "admin"),
+        (branches["Tanauan Branch"], "tanauan", "Rejected", "Big restock before payday", "HQ is low on these scents right now.", None, "admin"),
+    ]
+    for bid, user, status, note, reason, rid, reviewer in drafts:
+        did = run("""INSERT INTO ai_stock_drafts (branch_id, created_by_user_id, created_by_username, status, note, reasoning,
+                         resulting_request_id, reviewed_by_user_id, reviewed_at, created_at)
+                     VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+                  (bid, ADMIN_ID[user], user, status, note, reason, rid, ADMIN_ID[reviewer] if reviewer else None,
+                   ago(3) if reviewer else None, ago(4)))
+        for sku in rnd.sample(skus, 5):
+            run("INSERT INTO ai_stock_draft_items (draft_id, sku, suggested_qty) VALUES (%s, %s, %s)", (did, sku, rnd.choice([6, 8, 10, 12])))
+
+    agents = ["Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/130.0 Safari/537.36",
+              "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) Safari/604.1",
+              "Mozilla/5.0 (Linux; Android 14) Chrome/130.0 Mobile Safari/537.36"]
+    rows = []
+    for d in range(45, -1, -1):
+        for user in ("admin", "balayan", "lipa", "tanauan"):
+            if rnd.random() < 0.8:
+                rows.append((ADMIN_ID[user], user, "Admin" if user == "admin" else "Branch", True, None, ago(d, rnd.randint(7, 9))))
+    for _ in range(10):
+        rows.append((None, rnd.choice(["admin", "balayan", "root", "test", "lipa"]), rnd.choice(["Admin", "Branch"]), False,
+                     rnd.choice(["bad_credentials", "bad_credentials", "wrong_role_tab", "missing_fields"]), ago(rnd.randint(0, 30))))
+    rows.append((ADMIN_ID["former.staff"], "former.staff", "Branch", False, "inactive_account", ago(30)))
+    for _ in range(5):
+        rows.append((None, "admin", "Admin", False, "bad_credentials", ago(2, 3, rnd.randint(0, 59))))
+    rows.append((None, "admin", "Admin", False, "locked_out", ago(2, 3, 59)))
+    for uid, uname, role, ok, reason, when in rows:
+        run("""INSERT INTO login_activity (user_id, username_attempted, role_attempted, success, failure_reason, ip_address, user_agent, created_at)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s)""",
+            (uid, uname, role, ok, reason, f"192.168.1.{rnd.randint(20, 90)}", rnd.choice(agents), when))
+
+    for when, actor, action, target, details in sorted(ACTIONS, key=lambda a: a[0]):
+        run("""INSERT INTO admin_actions (actor_user_id, actor_username, action, target, details, created_at)
+               VALUES (%s, %s, %s, %s, %s, %s)""",
+            (ADMIN_ID.get(actor), actor, action, target, details, when))
+    for key, value in (("backup_days", "15"), ("backup_auto", "0"), ("backup_hour", "2")):
+        run("INSERT INTO app_settings (setting_key, setting_value) VALUES (%s, %s) ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)",
+            (key, value))
+    print(f"  3 drafts, {len(rows)} login attempts, {len(ACTIONS)} admin log rows, backup settings")
+
+
+# ---------------------------------------------------------------------------
+def summary():
+    section("What is in the database now")
+    tables = ["users", "branches", "suppliers", "raw_materials", "material_restock_events", "products", "bulk_batches",
+              "production_logs", "cogs_logs", "stock_requests", "stock_request_shipments", "stock_movement_logs",
+              "sales", "sale_voids", "partners", "partner_investments", "packages", "partner_inquiries",
+              "ai_stock_drafts", "login_activity", "admin_actions"]
+    for t in tables:
+        print(f"  {t:<26}{query(f'SELECT COUNT(*) AS c FROM {t}', fetchone=True)['c']:>7}")
+    print("\nLogins (all use the same password):")
+    for u in query("SELECT username, role, is_active FROM users ORDER BY user_id"):
+        print(f"  {u['username']:<14}{u['role']:<8}{'' if u['is_active'] else '(inactive)'}")
+    print(f"  password: {PASSWORD}")
+
+
+def main():
+    global NOW
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("--sales", type=int, default=380, help="how many sales to attempt (default 380)")
+    args = parser.parse_args()
+
     if os.environ.get("APP_ENV", "development").lower() == "production":
-        print("Refusing to run: APP_ENV=production.")
-        sys.exit(1)
+        sys.exit("Refusing to run: APP_ENV=production.")
     app = create_app()
     with app.app_context():
+        if query("SELECT 1 FROM users LIMIT 1") or query("SELECT 1 FROM sales LIMIT 1") or query("SELECT 1 FROM bulk_batches LIMIT 1"):
+            sys.exit("The database already has records. Drop it and apply schema.sql again first, then re-run this.")
+        if not query("SELECT 1 FROM raw_materials WHERE material_name = 'Oil Scent'", fetchone=True):
+            sys.exit("The seeded materials are missing. Apply schema.sql first.")
+        NOW = business_now()
         try:
-            if "--clear" in sys.argv:
-                clear()
-            else:
-                if "--reset" in sys.argv:
-                    print("Clearing old demo data...")
-                    clear()
-                print("Building demo data (this takes a minute or two)...")
-                add(dry_run="--dry-run" in sys.argv)
+            branches = add_branches_and_users()
+            add_suppliers_and_settings()
+            config = load_formula_config()
+            _scents, plan = plan_batches(config)
+            _resolved, catalog, missing = load_catalog(_materials(), config)
+            if missing:
+                sys.exit("Formula materials aren't set up: " + ", ".join(missing))
+            buy_materials(plan, catalog)
+            make_batches(plan, catalog, config)
+            produce_bottles(plan)
+            deliveries(branches, plan)
+            partners_and_packages(plan)
+            sales(branches, plan, args.sales)
+            void_some(branches)
+            receipt_stress_sales(branches)
+            ai_drafts(branches, plan)
+            summary()
         except Exception:
             get_db().rollback()
             raise
+
+
+if __name__ == "__main__":
+    main()

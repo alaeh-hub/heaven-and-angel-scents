@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% import "_empty.html" as empty %}
 {% import "_macros.html" as m %}
 {% block title %}Partners{% endblock %}
 {% block heading %}Partners{% endblock %}
@@ -143,9 +144,7 @@
           {% endfor %}
         </tbody>
       </table>
-      <div class="empty-state smart-no-match" style="display:none;">
-        <p>No partners match your search.</p>
-      </div>
+      {{ empty.no_match('partners') }}
     </div>
     <div class="smart-pagination" style="display:none;">
       <button type="button" class="btn btn-ghost btn-sm" data-page-prev>Previous</button>
@@ -157,9 +156,7 @@
   <p class="ptn-note">Package sales counts only inquiries an admin has marked Closed, see <a href="{{ url_for('admin.partner_inquiries') }}">Partner Inquiries</a>. A New or Contacted lead hasn&rsquo;t converted into a sale yet, so it isn&rsquo;t counted here.</p>
   {% endif %}
   {% else %}
-  <div class="empty-state">
-    <p>No {{ 'distributors' if type_filter == 'Distributor' else ('resellers' if type_filter == 'Reseller' else 'partners') }} yet. Add the first one below.</p>
-  </div>
+  {{ empty.state('No ' ~ ('distributors' if type_filter == 'Distributor' else ('resellers' if type_filter == 'Reseller' else 'partners')) ~ ' yet', 'Add the first one below. Partners can then send inquiries from the private portal.', icon='users') }}
   {% endif %}
 </div>
 

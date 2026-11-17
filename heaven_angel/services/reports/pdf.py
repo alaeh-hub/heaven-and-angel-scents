@@ -1,18 +1,26 @@
-"""PDF rendering of a report."""
+"""PDF rendering of a report.
+
+A plain, printable document: the title and what it covers at the top left, the brand small at
+the top right, then one table. The table follows the usual rules for a printed table: heads in
+sentence case over a single dark rule, hairlines between rows, no outer box, numbers right
+aligned under right aligned heads, columns sized to what they hold. The one accent colour is
+the rule under the header."""
 import io
+from xml.sax.saxutils import escape
 
 from reportlab.lib import colors
 from reportlab.lib.enums import TA_RIGHT
 from reportlab.lib.pagesizes import landscape, letter
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import mm
+from reportlab.pdfbase.pdfmetrics import stringWidth
 from reportlab.platypus import (
-    HRFlowable, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle,
+    HRFlowable, Paragraph, Spacer, Table, TableStyle,
 )
 
-from heaven_angel.services.brand_assets import NumberedCanvas, logo_drawing, register_fonts
+from heaven_angel.services.brand_assets import NumberedCanvas, logo_drawing, plain_document, register_fonts
 from heaven_angel.services.reports.constants import MAX_ROWS
-from heaven_angel.services.reports.formatting import ACCENT, ACCENT_INK, ACCENT_SOFT, BORDER, INK, INK_FAINT, ROW_ALT, badge_colors, fmt_cell
+from heaven_angel.services.reports.formatting import ACCENT, BORDER, INK, INK_FAINT, badge_colors, fmt_cell, sentence_case
 
 
 # Built-in PDF fonts (Helvetica etc.) only cover Latin-1 and have no glyph
@@ -27,196 +35,199 @@ from heaven_angel.services.reports.formatting import ACCENT, ACCENT_INK, ACCENT_
 register_fonts()
 
 
+BODY_PT = 8
+NUM_TYPES = ("money", "price", "int", "num")
+CELL_PAD = 6          # pt of padding each side of a cell
+SLACK = 4             # pt of room beyond a word's exact width, so it never breaks at the last letter
+LONGEST_COLUMN = 170  # pt: a text column never asks for more than this before it wraps
+
+
 # ---------------------------------------------------------------- PDF rendering
 def _pdf_styles():
     base = getSampleStyleSheet()
     return {
+        "title": ParagraphStyle("title", parent=base["Normal"], fontName="IBMPlexSans-Bold",
+                                fontSize=16, textColor=INK, leading=20),
+        "subtitle": ParagraphStyle("subtitle", parent=base["Normal"], fontName="IBMPlexSans",
+                                   fontSize=9, textColor=INK, leading=13),
+        "meta": ParagraphStyle("meta", parent=base["Normal"], fontName="IBMPlexSans",
+                               fontSize=8, textColor=INK_FAINT, leading=11),
         "brand": ParagraphStyle("brand", parent=base["Normal"], fontName="IBMPlexSans-Bold",
-                                fontSize=16, textColor=INK, leading=19),
-        "brand_sub": ParagraphStyle("brand_sub", parent=base["Normal"], fontName="IBMPlexSans",
-                                    fontSize=8, textColor=INK_FAINT, leading=11),
-        "doc_title": ParagraphStyle("doc_title", parent=base["Normal"], fontName="IBMPlexSans-Bold",
-                                    fontSize=13, textColor=ACCENT_INK, alignment=TA_RIGHT, leading=16),
-        "doc_meta": ParagraphStyle("doc_meta", parent=base["Normal"], fontName="IBMPlexSans",
-                                   fontSize=8.5, textColor=INK_FAINT, alignment=TA_RIGHT, leading=12),
+                                fontSize=9, textColor=INK, leading=12),
         "th": ParagraphStyle("th", parent=base["Normal"], fontName="IBMPlexSans-Bold",
-                             fontSize=7.6, textColor=colors.white, leading=10),
+                             fontSize=BODY_PT, textColor=INK, leading=10.5),
+        "th_num": ParagraphStyle("th_num", parent=base["Normal"], fontName="IBMPlexSans-Bold",
+                                 fontSize=BODY_PT, textColor=INK, leading=10.5, alignment=TA_RIGHT),
         "td": ParagraphStyle("td", parent=base["Normal"], fontName="IBMPlexSans",
-                             fontSize=7.6, textColor=INK, leading=10),
+                             fontSize=BODY_PT, textColor=INK, leading=10.5),
         "td_num": ParagraphStyle("td_num", parent=base["Normal"], fontName="IBMPlexSans",
-                                 fontSize=7.6, textColor=INK, leading=10, alignment=TA_RIGHT),
+                                 fontSize=BODY_PT, textColor=INK, leading=10.5, alignment=TA_RIGHT),
         "footer": ParagraphStyle("footer", parent=base["Normal"], fontName="IBMPlexSans",
-                                 fontSize=7.3, textColor=INK_FAINT, leading=10),
+                                 fontSize=8, textColor=INK_FAINT, leading=11),
     }
+
+
+def _p(text, style):
+    """A table cell. The PDF engine reads cell text as markup, so a name like B&B Works or D&G has to be
+    escaped or it comes out as "B&B; Works"."""
+    return Paragraph(escape(str(text)), style)
+
+
+def _column_widths(columns, texts, heads, available):
+    """Width in points for each column, sized to its content.
+
+    A column wants the width of its widest value (up to LONGEST_COLUMN, past which text wraps)
+    and never less than its longest single word, so nothing breaks mid-word. Spare space is
+    shared in proportion to what each column wants, so the table always fills the page."""
+    ideal, floor = [], []
+    for c in range(len(columns)):
+        values = texts[c] + [heads[c]]
+        widest = max(stringWidth(v, "IBMPlexSans", BODY_PT) for v in values)
+        longest_word = max(
+            (stringWidth(w, "IBMPlexSans-Bold" if v is heads[c] else "IBMPlexSans", BODY_PT)
+             for v in values for w in v.split()), default=0)
+        ctype = columns[c][2]
+        ideal.append(min(widest, LONGEST_COLUMN) + CELL_PAD * 2 + SLACK)
+        # Dates, amounts, counts and statuses are short and fixed in shape: they never wrap, so only
+        # free text columns (names, suppliers, notes) give up width when the table is tight.
+        fixed = ctype in NUM_TYPES or ctype == "datetime" or ctype.startswith("badge:")
+        floor.append((ideal[-1]) if fixed else min(longest_word, LONGEST_COLUMN) + CELL_PAD * 2 + SLACK)
+    if sum(ideal) <= available:
+        spare = available - sum(ideal)
+        return [w + spare * (w / sum(ideal)) for w in ideal]
+    if sum(floor) >= available:
+        return [w * available / sum(floor) for w in floor]
+    room = available - sum(floor)
+    want = [i - f for i, f in zip(ideal, floor)]
+    total_want = sum(want) or 1
+    return [f + room * (w / total_want) for f, w in zip(floor, want)]
 
 
 def render_report_pdf(report):
     """Return a BytesIO PDF for a report dict built by get_report()."""
     s = _pdf_styles()
     buf = io.BytesIO()
-    doc = SimpleDocTemplate(
+    doc = plain_document(
         buf, pagesize=landscape(letter),
-        topMargin=16 * mm, bottomMargin=14 * mm, leftMargin=16 * mm, rightMargin=16 * mm,
-        title=f"{report['title']} Report",
+        topMargin=15 * mm, bottomMargin=14 * mm, leftMargin=16 * mm, rightMargin=16 * mm,
+        title=f"{report['title']} report", author="Heaven & Angel Scents",
     )
     story = []
 
-    # The three header columns add up to exactly the frame width
-    # (doc.width), the same width the data table and rules below use.
-    # They used to be fixed at 265mm on a 247mm frame, so the centered
-    # header hung past both margins, pushing the logo toward the page edge.
-    logo_w = 12 * mm
-    brand_w = 100 * mm
-    title_w = doc.width - logo_w - brand_w
+    # Title and what it covers on the left, the brand small on the right.
+    generated = f"Generated {report['generated_at'].strftime('%b')} {report['generated_at'].day}, " \
+                f"{report['generated_at'].year} {report['generated_at'].strftime('%I:%M %p').lstrip('0')}"
+    if report["actor_label"]:
+        generated += f" by {report['actor_label']}"
+    left = [_p(report["title"] + " report", s["title"])]
+    if report["subtitle"]:
+        left.append(_p(report["subtitle"], s["subtitle"]))
+    left.append(Spacer(1, 2))
+    left.append(_p(generated, s["meta"]))
 
-    header = Table(
-        [[
-            logo_drawing(30),
-            Table([[Paragraph(
-                "<font color='#8A6D1F'>Heaven</font> <font color='#5B5445'>&amp;</font> "
-                "<font color='#17140D'>Angel</font> Scents", s["brand"])],
-                [Paragraph("Perfume Manufacturing &amp; Retail &middot; Inventory System", s["brand_sub"])]],
-                colWidths=[brand_w]),
-            Table([[Paragraph(report["title"] + " report", s["doc_title"])],
-                   [Paragraph(report["subtitle"], s["doc_meta"])],
-                   [Paragraph(
-                       f"Generated {report['generated_at'].strftime('%b %d, %Y %I:%M %p')}"
-                       + (f" by {report['actor_label']}" if report["actor_label"] else ""),
-                       s["doc_meta"])]],
-                  colWidths=[title_w]),
-        ]],
-        colWidths=[logo_w, brand_w, title_w],
-    )
-    header.setStyle(TableStyle([
+    name_w = stringWidth("Heaven & Angel Scents", "IBMPlexSans-Bold", 9) + 4
+    brand_w = 22 + name_w
+    brand = Table([[logo_drawing(16), Paragraph("Heaven &amp; Angel Scents", s["brand"])]],
+                  colWidths=[22, name_w], hAlign="RIGHT")
+    brand.setStyle(TableStyle([
         ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-        ("LEFTPADDING", (0, 0), (0, 0), 0),
-        ("RIGHTPADDING", (0, 0), (0, 0), 0),
+        ("LEFTPADDING", (0, 0), (-1, -1), 0), ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+        ("TOPPADDING", (0, 0), (-1, -1), 0), ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
+    ]))
+    header = Table([[left, brand]], colWidths=[doc.width - brand_w, brand_w])
+    header.setStyle(TableStyle([
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 0), ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+        ("TOPPADDING", (0, 0), (-1, -1), 0), ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
+        ("ALIGN", (1, 0), (1, 0), "RIGHT"),
     ]))
     story.append(header)
-    story.append(Spacer(1, 6))
-    story.append(HRFlowable(width="100%", thickness=1.2,
-                 color=ACCENT, spaceAfter=10))
+    story.append(Spacer(1, 8))
+    story.append(HRFlowable(width="100%", thickness=1.2, color=ACCENT, spaceAfter=10))
 
-    # Columns are (key, label, ctype) from most report builders, or
-    # (key, label, ctype, weight) from ones that specify custom relative
-    # widths (see the width-weight comment further down) — normalize to
-    # the 4-tuple shape once here so every loop below can unpack it the
-    # same way regardless of which builder produced it.
-    columns = [c if len(c) == 4 else (*c, 1) for c in report["columns"]]
+    # Columns are (key, label, ctype) from most builders, or (key, label, ctype, weight) from ones
+    # that set a width weight. Widths now come from the content, so the weight is no longer used.
+    columns = [tuple(c[:3]) for c in report["columns"]]
     rows = report["rows"]
 
     if not rows:
         story.append(Spacer(1, 30))
-        story.append(
-            Paragraph("No data matches the selected filters.", s["footer"]))
+        story.append(Paragraph("No data matches the selected filters.", s["footer"]))
     else:
-        num_types = ("money", "int", "num")
-        header_row = [Paragraph(label, s["th"]) for _, label, _, _ in columns]
-        data = [header_row]
-        # Collect (row, col, bg_hex) for every badge-kind cell that
-        # matched a known value, so the table style below can paint
-        # just that cell — same colored-pill look as the web UI,
-        # instead of every column rendering as flat black text.
-        badge_cells = []
-        for r_idx, row in enumerate(rows, start=1):
+        heads = [sentence_case(label) for _, label, _ in columns]
+
+        # Plain text of every cell first, so the columns can be sized from it.
+        texts = [[] for _ in columns]
+        for row in rows:
+            for c_idx, (key, _, ctype) in enumerate(columns):
+                texts[c_idx].append(fmt_cell(row.get(key), "str" if ctype.startswith("badge:") else ctype))
+        totals = report.get("totals") or {}
+        if totals:
+            for c_idx, (key, _, ctype) in enumerate(columns):
+                if c_idx == 0:
+                    texts[c_idx].append("Total")
+                elif key in totals:
+                    texts[c_idx].append(fmt_cell(totals[key], ctype))
+
+        data = [[_p(heads[i], s["th_num"] if columns[i][2] in NUM_TYPES else s["th"])
+                 for i in range(len(columns))]]
+        for row in rows:
             cells = []
-            for c_idx, (key, _, ctype, _) in enumerate(columns):
+            for key, _, ctype in columns:
                 value = row.get(key)
                 if ctype.startswith("badge:"):
-                    kind = ctype.split(":", 1)[1]
-                    badge = badge_colors(kind, value)
-                    text = fmt_cell(value, "str")
+                    # A status reads as coloured bold text, not a filled chip: lighter on paper and
+                    # on a black-and-white printer it is still just bold text.
+                    badge = badge_colors(ctype.split(":", 1)[1], value)
+                    style = s["td"]
                     if badge:
-                        bg_hex, text_hex = badge
-                        badge_cells.append((r_idx, c_idx, bg_hex))
-                        badge_style = ParagraphStyle(
-                            f"badge_{r_idx}_{c_idx}", parent=s["td"],
-                            textColor=colors.HexColor(text_hex), fontName="IBMPlexSans-Bold",
-                        )
-                        cells.append(Paragraph(text, badge_style))
-                    else:
-                        cells.append(Paragraph(text, s["td"]))
+                        style = ParagraphStyle("status", parent=s["td"], fontName="IBMPlexSans-Bold",
+                                               textColor=colors.HexColor(badge[1]))
+                    cells.append(_p(fmt_cell(value, "str"), style))
                 else:
-                    cells.append(Paragraph(
-                        fmt_cell(value, ctype), s["td_num"] if ctype in num_types else s["td"]))
+                    cells.append(_p(fmt_cell(value, ctype), s["td_num"] if ctype in NUM_TYPES else s["td"]))
             data.append(cells)
 
-        # ---- totals row ----
-        # Bold, right-aligned sums under every money/int column, with a
-        # "Total" label in the first column. Tracked separately (rather
-        # than reusing s["td"]/s["td_num"]) so it can be bolded without
-        # touching the styles ordinary cells use.
         total_row_idx = None
-        if report.get("totals"):
-            totals = report["totals"]
-            total_label_style = ParagraphStyle(
-                "total_label", parent=s["td"], fontName="IBMPlexSans-Bold", textColor=ACCENT_INK)
-            total_num_style = ParagraphStyle(
-                "total_num", parent=s["td_num"], fontName="IBMPlexSans-Bold", textColor=ACCENT_INK)
+        if totals:
+            bold = ParagraphStyle("total", parent=s["td"], fontName="IBMPlexSans-Bold")
+            bold_num = ParagraphStyle("total_num", parent=s["td_num"], fontName="IBMPlexSans-Bold")
             total_row = []
-            for c_idx, (key, _, ctype, _) in enumerate(columns):
+            for c_idx, (key, _, ctype) in enumerate(columns):
                 if c_idx == 0:
-                    total_row.append(Paragraph("Total", total_label_style))
+                    total_row.append(_p("Total", bold))
                 elif key in totals:
-                    total_row.append(
-                        Paragraph(fmt_cell(totals[key], ctype), total_num_style))
+                    total_row.append(_p(fmt_cell(totals[key], ctype), bold_num))
                 else:
                     total_row.append(Paragraph("", s["td"]))
             data.append(total_row)
             total_row_idx = len(data) - 1
 
-        # Columns default to equal width (weight 1 each). A report can
-        # give a column a different weight (see e.g. report_partners /
-        # report_partner_inquiries) when an even split leaves some
-        # columns too narrow to hold their content without ugly
-        # mid-word wraps (a badge word breaking across two lines, a
-        # phone number splitting mid-digit) while others sit mostly
-        # empty — narrow columns shrink, columns that need the room
-        # (Email, Address, Remarks, ...) grow to take up the slack.
-        available_width = doc.width
-        n = len(columns)
-        weights = [w for _, _, _, w in columns]
-        total_weight = sum(weights) or n
-        col_widths = [available_width * (w / total_weight) for w in weights]
+        col_widths = _column_widths(columns, texts, heads, doc.width)
         table = Table(data, colWidths=col_widths, repeatRows=1)
         style = [
-            ("BACKGROUND", (0, 0), (-1, 0), ACCENT),
             ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-            ("TOPPADDING", (0, 0), (-1, -1), 4.5),
-            ("BOTTOMPADDING", (0, 0), (-1, -1), 4.5),
-            ("LEFTPADDING", (0, 0), (-1, -1), 6),
-            ("RIGHTPADDING", (0, 0), (-1, -1), 6),
-            ("LINEBELOW", (0, 0), (-1, -1), 0.5, BORDER),
-            ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, ROW_ALT]),
+            ("TOPPADDING", (0, 0), (-1, -1), 4),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+            ("LEFTPADDING", (0, 0), (-1, -1), CELL_PAD),
+            ("RIGHTPADDING", (0, 0), (-1, -1), CELL_PAD),
+            # The first and last column sit on the page margin, not inside a box.
+            ("LEFTPADDING", (0, 0), (0, -1), 0),
+            ("RIGHTPADDING", (-1, 0), (-1, -1), 0),
+            ("LINEBELOW", (0, 0), (-1, 0), 0.9, INK),           # one dark rule under the heads
+            ("LINEBELOW", (0, 1), (-1, -1), 0.4, BORDER),       # hairlines between rows
         ]
-        # Badge backgrounds are appended after ROWBACKGROUNDS so they
-        # win for their specific cell — later commands override earlier
-        # ones on the same cell in ReportLab's TableStyle.
-        for r_idx, c_idx, bg_hex in badge_cells:
-            style.append(
-                ("BACKGROUND", (c_idx, r_idx), (c_idx, r_idx), colors.HexColor(bg_hex)))
         if total_row_idx is not None:
-            style.append(("BACKGROUND", (0, total_row_idx),
-                         (-1, total_row_idx), ACCENT_SOFT))
-            style.append(("LINEABOVE", (0, total_row_idx),
-                         (-1, total_row_idx), 1, ACCENT))
+            style.append(("LINEABOVE", (0, total_row_idx), (-1, total_row_idx), 0.9, INK))
+            style.append(("LINEBELOW", (0, total_row_idx), (-1, total_row_idx), 0, colors.white))
         table.setStyle(TableStyle(style))
         story.append(table)
 
         story.append(Spacer(1, 8))
-        count_note = f"{report['row_count']:,} row{'s' if report['row_count'] != 1 else ''} shown."
+        count_note = f"{report['row_count']:,} row{'s' if report['row_count'] != 1 else ''}."
         if report["truncated"]:
-            count_note += f" Results were capped at {MAX_ROWS:,} rows — narrow the filters for a complete report."
+            count_note += f" Results were capped at {MAX_ROWS:,} rows. Narrow the filters for a complete report."
         story.append(Paragraph(count_note, s["footer"]))
-
-    story.append(Spacer(1, 14))
-    story.append(HRFlowable(width="100%", thickness=0.5,
-                 color=BORDER, spaceAfter=6))
-    story.append(Paragraph(
-        "Generated from the Heaven &amp; Angel Scents inventory system. Figures reflect the underlying "
-        "data at the moment this report was generated.",
-        s["footer"],
-    ))
 
     doc.build(story, canvasmaker=NumberedCanvas)
     buf.seek(0)

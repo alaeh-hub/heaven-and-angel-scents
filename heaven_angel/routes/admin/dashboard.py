@@ -5,7 +5,9 @@ from flask import (
 
 from heaven_angel.db import query
 from heaven_angel.decorators import admin_required
-from heaven_angel.services.finance import PACKAGE_DATE_SQL, UNIT_COST_SQL, cogs_sold
+from heaven_angel.services.finance import (
+    PACKAGE_DATE_SQL, SALE_COST_EXPR, SALES_WITH_COST_SQL, UNIT_COST_SQL, cogs_sold,
+)
 from heaven_angel.services.reports import (LOW_STOCK_WHERE)
 from heaven_angel.utils import (
     business_today, percent_change,
@@ -167,8 +169,8 @@ def dashboard():
     }
     cogs_by_day = {}
     for r in query(
-        f"""SELECT DATE(s.sold_at) AS day, SUM(s.qty_sold * COALESCE(uc.unit_cost, 0)) AS amount
-            FROM sales s LEFT JOIN {UNIT_COST_SQL} uc ON uc.sku = s.sku
+        f"""SELECT DATE(s.sold_at) AS day, SUM({SALE_COST_EXPR}) AS amount
+            FROM {SALES_WITH_COST_SQL}
             WHERE s.sold_at >= CURDATE() - INTERVAL 14 DAY GROUP BY DATE(s.sold_at)"""):
         cogs_by_day[r["day"]] = cogs_by_day.get(r["day"], 0.0) + float(r["amount"] or 0)
     for r in query(

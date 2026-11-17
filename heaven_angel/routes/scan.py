@@ -52,21 +52,28 @@ bp = Blueprint("scan", __name__, url_prefix="/scan")
 
 
 def _fetch_sale_for_verify(sale_id, branch_id=None):
-    sql = """SELECT s.sale_id, s.sku, s.qty_sold, s.unit_price, s.sale_type, s.payment_method,
+    """The sale a receipt code points to. An order of several scents comes back as its
+    first remaining row plus every row in "lines" (see sales.order_id)."""
+    sql = """SELECT s.sale_id, s.order_id, s.sku, s.qty_sold, s.unit_price, s.sale_type, s.payment_method,
                     s.customer_name, s.customer_address, s.sold_at,
                     s.credit_settled_at, DATE(s.recorded_at) = CURDATE() AS recorded_today,
                     p.item_name, p.variant, p.unit, b.branch_name,
                     COALESCE(s.buyer_name, bu.username) AS buyer_username
              FROM sales s
-             JOIN products p ON s.sku = p.sku
+             JOIN sale_catalog p ON s.sku = p.sku
              JOIN branches b ON s.branch_id = b.branch_id
              LEFT JOIN users bu ON s.buyer_user_id = bu.user_id
-             WHERE s.sale_id = %s"""
-    params = [sale_id]
+             WHERE (s.sale_id = %s OR s.order_id = %s)"""
+    params = [sale_id, sale_id]
     if branch_id is not None:
         sql += " AND s.branch_id = %s"
         params.append(branch_id)
-    return query(sql, tuple(params), fetchone=True)
+    rows = query(sql + " ORDER BY s.sale_id", tuple(params))
+    if not rows:
+        return None
+    head = dict(rows[0])
+    head["lines"] = rows
+    return head
 
 
 def _scope():
@@ -114,7 +121,8 @@ def verify():
         )
         return jsonify(match=False, message=message)
 
-    line_total = sale["qty_sold"] * sale["unit_price"]
+    lines = sale["lines"]
+    line_total = sum((ln["qty_sold"] * ln["unit_price"] for ln in lines), type(sale["unit_price"])(0))
     payment_value = sale["payment_method"]
     is_credit = sale["payment_method"] == "Credit"
     credit_settled = sale["credit_settled_at"] is not None
@@ -127,7 +135,13 @@ def verify():
         match=True,
         sale={
             "sale_id": sale["sale_id"],
-            "receipt_no": f"SR-{sale['sale_id']:06d}",
+            "receipt_no": f"SR-{sale['order_id'] or sale['sale_id']:06d}",
+            "items": [
+                {"item_name": ln["item_name"], "sku": ln["sku"], "unit": ln["unit"],
+                 "qty_sold": ln["qty_sold"], "unit_price": float(ln["unit_price"]),
+                 "line_total": float(ln["qty_sold"] * ln["unit_price"])}
+                for ln in lines
+            ] if len(lines) > 1 else [],
             "item_name": sale["item_name"],
             "sku": sale["sku"],
             "variant": sale["variant"],
@@ -160,9 +174,14 @@ def void_sale_scan(sale_id):
     try:
         with transaction() as conn:
             cur = conn.cursor(dictionary=True)
-            sale = void_sale(cur, sale_id=sale_id, reason=reason,
-                              user_id=session.get("user_id"), username=session.get("username"),
-                              branch_id=branch_id, today_only=not is_admin)
+            # A receipt of several scents is one order: voiding it voids every row.
+            cur.execute("SELECT sale_id FROM sales WHERE sale_id = %s OR order_id = %s ORDER BY sale_id",
+                        (sale_id, sale_id))
+            ids = [r["sale_id"] for r in cur.fetchall()] or [sale_id]
+            for one in ids:
+                sale = void_sale(cur, sale_id=one, reason=reason,
+                                 user_id=session.get("user_id"), username=session.get("username"),
+                                 branch_id=branch_id, today_only=not is_admin)
             cur.close()
     except TransactionAborted as err:
         return jsonify(ok=False, message=str(err)), 400
@@ -174,7 +193,9 @@ def void_sale_scan(sale_id):
                details=f"via Scan Receipt · {sale['sale_type']} × {sale['qty_sold']} · {reason}"[:255])
     return jsonify(
         ok=True,
-        message=f"Voided the {sale['sale_type'].lower()} of {sale['item_name']} — its stock was returned.",
+        message=(f"Voided the {sale['sale_type'].lower()} of {sale['item_name']} — its stock was returned."
+                 if len(ids) == 1 else
+                 f"Voided all {len(ids)} products on this receipt — their stock was returned."),
     )
 
 
@@ -186,8 +207,14 @@ def settle_credit_scan(sale_id):
     try:
         with transaction() as conn:
             cur = conn.cursor(dictionary=True)
-            sale = settle_credit(cur, sale_id=sale_id, username=session.get("username"),
-                                  branch_id=branch_id)
+            # An order of several scents is paid back as one: settle every unpaid row of it.
+            cur.execute("SELECT sale_id FROM sales WHERE (sale_id = %s OR order_id = %s) "
+                        "AND payment_method = 'Credit' AND credit_settled_at IS NULL ORDER BY sale_id",
+                        (sale_id, sale_id))
+            ids = [r["sale_id"] for r in cur.fetchall()] or [sale_id]
+            for one in ids:
+                sale = settle_credit(cur, sale_id=one, username=session.get("username"),
+                                     branch_id=branch_id)
             cur.close()
     except TransactionAborted as err:
         return jsonify(ok=False, message=str(err)), 400

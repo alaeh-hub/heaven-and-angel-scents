@@ -30,8 +30,14 @@ def sale_receipt(sale_id):
         abort(404)
     return send_file(
         pdf_buffer, mimetype="application/pdf",
-        as_attachment=True, download_name=f"SR-{sale_id:06d}.pdf",
+        as_attachment=True, download_name=f"SR-{sale.get('order_number', sale_id):06d}.pdf",
     )
+
+
+def _recorded_message(sales):
+    if len(sales) == 1:
+        return f"{sales[0].sale_type} recorded."
+    return f"{sales[0].sale_type} recorded: {len(sales)} products on one receipt."
 
 
 @bp.route("/record-sale", methods=["GET", "POST"])
@@ -59,7 +65,7 @@ def record_sale():
             return redirect(url_for("branch.record_sale"))
 
         try:
-            sale = sale_entry.parse_sale_form(
+            sales = sale_entry.parse_sale_order_form(
                 request.form, qty_label="Quantity sold",
                 sale_type_prompt="Select whether this is a sale or a freebie.",
                 product_prompt="Select a product to sell.",
@@ -71,15 +77,15 @@ def record_sale():
             return redirect(url_for("branch.record_sale"))
 
         try:
-            sale_entry.record_sale(sale, branch_id=bid, user_id=session.get("user_id"))
+            sale_entry.record_sale_order(sales, branch_id=bid, user_id=session.get("user_id"))
             notify_admin_and_branch(
                 bid, ["inventory", "sales", "movement_logs"])
-            flash(f"{sale.sale_type} recorded.", "success")
+            flash(_recorded_message(sales), "success")
         except TransactionAborted as err:
             flash(str(err), "error")
         except Exception:
             current_app.logger.exception(
-                "record_sale failed for branch_id=%s sku=%s", bid, sale.sku)
+                "record_sale failed for branch_id=%s sku=%s", bid, sales[0].sku)
             flash("Couldn't record that sale — please try again.", "error")
         return redirect(url_for("branch.record_sale"))
 
@@ -94,11 +100,12 @@ def record_sale():
     )["rate_per_ml"]
     recent_sales = query(
         """SELECT s.*, p.item_name, p.unit, COALESCE(s.buyer_name, bu.username) AS buyer_username
-           FROM sales s JOIN products p ON s.sku = p.sku
+           FROM sales s JOIN sale_catalog p ON s.sku = p.sku
            LEFT JOIN users bu ON s.buyer_user_id = bu.user_id
            WHERE s.branch_id = %s ORDER BY s.sold_at DESC LIMIT 10""",
         (bid,),
     )
+    sale_entry.annotate_receipts(recent_sales)
     employees = query(
         "SELECT user_id, username, role FROM users WHERE is_active = TRUE ORDER BY username"
     )
@@ -170,10 +177,11 @@ def import_sales():
 
     try:
         raw_rows = parse_sales_import_workbook(upload)
-        inserted = import_sales_rows(bid, raw_rows, session.get("user_id"))
+        inserted, receipts = import_sales_rows(bid, raw_rows, session.get("user_id"))
         notify_admin_and_branch(bid, ["inventory", "sales", "movement_logs"])
         flash(
-            f"Imported {inserted} sale{'s' if inserted != 1 else ''} from the file.", "success")
+            f"Imported {inserted} sale{'s' if inserted != 1 else ''} from the file"
+            + (f", on {receipts} receipt{'s' if receipts != 1 else ''}." if receipts != inserted else "."), "success")
     except (ValidationError, TransactionAborted) as err:
         for line in str(err).split("\n"):
             if line.strip():
@@ -193,15 +201,16 @@ def sales_history():
     sales = query(
         # voidable: branch staff can void only what was recorded today.
         """SELECT s.*, p.item_name, p.variant, p.unit, DATE(s.recorded_at) = CURDATE() AS voidable
-           FROM sales s JOIN products p ON s.sku = p.sku
+           FROM sales s JOIN sale_catalog p ON s.sku = p.sku
            WHERE s.branch_id = %s ORDER BY s.sold_at DESC LIMIT 200""",
         (bid,),
     )
+    sale_entry.annotate_receipts(sales)
     totals = query(
         """SELECT COALESCE(SUM(CASE WHEN p.unit <> 'BULK' THEN s.qty_sold ELSE 0 END),0) AS units,
                   COALESCE(SUM(CASE WHEN p.unit = 'BULK' THEN s.qty_sold ELSE 0 END),0) AS bulk_ml,
                   COALESCE(SUM(s.qty_sold*s.unit_price),0) AS revenue
-           FROM sales s JOIN products p ON p.sku = s.sku WHERE s.branch_id = %s""",
+           FROM sales s JOIN sale_catalog p ON p.sku = s.sku WHERE s.branch_id = %s""",
         (bid,), fetchone=True,
     )
     return render_template("branch/sales_history.html", sales=sales, totals=totals)
@@ -233,7 +242,7 @@ def customers():
                       MIN(sa.sold_at) AS first_sold_at,
                       MAX(sa.sold_at) AS last_purchase_at
                FROM sales sa
-               JOIN products p ON p.sku = sa.sku
+               JOIN sale_catalog p ON p.sku = sa.sku
                WHERE sa.branch_id = %s AND sa.customer_name IS NOT NULL AND sa.customer_name <> ''
                GROUP BY sa.customer_name
            ) agg
@@ -274,7 +283,7 @@ def credit_purchases():
                   COALESCE(SUM(s.qty_sold * s.unit_price), 0) AS total_amount,
                   MAX(s.sold_at) AS last_taken_at
            FROM sales s
-           JOIN products p ON p.sku = s.sku
+           JOIN sale_catalog p ON p.sku = s.sku
            LEFT JOIN users bu ON s.buyer_user_id = bu.user_id
            WHERE s.branch_id = %s AND s.payment_method = 'Credit' AND s.credit_settled_at IS NULL
            GROUP BY COALESCE(s.buyer_name, bu.username)

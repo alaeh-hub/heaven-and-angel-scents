@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% import "_empty.html" as empty %}
 {% import "_macros.html" as m %}
 {% block title %}Dashboard{% endblock %}
 {% block heading %}Welcome, {{ session.username }}{% endblock %}
@@ -115,9 +116,9 @@
     <div class="table-wrap">
       <table class="table-fixed">
         <colgroup>
-          <col style="width:22%">
-          <col style="width:38%">
-          <col style="width:40%">
+          <col style="width:36%">
+          <col style="width:30%">
+          <col style="width:34%">
         </colgroup>
         <thead>
           <tr>
@@ -142,9 +143,7 @@
       </table>
     </div>
     {% else %}
-    <div class="empty-state">
-      <p>All HQ and branch inventory is above its reorder threshold.</p>
-    </div>
+    {{ empty.state('Nothing running low', 'HQ and every branch are above their reorder thresholds.', icon='check', tone='clear', compact=True) }}
     {% endif %}
   </div>
 
@@ -186,9 +185,7 @@
       </table>
     </div>
     {% else %}
-    <div class="empty-state">
-      <p>No requests have been submitted yet.</p>
-    </div>
+    {{ empty.state('No requests yet', 'Branch stock requests land here for review.', icon='truck', compact=True, action='Open requests', href=url_for('admin.requests_list')) }}
     {% endif %}
   </div>
 </div>
@@ -227,9 +224,7 @@
       </table>
     </div>
     {% else %}
-    <div class="empty-state">
-      <p>No branches are carrying stock yet.</p>
-    </div>
+    {{ empty.state('No branch stock yet', 'Branches appear here once they hold inventory.', icon='store', compact=True) }}
     {% endif %}
   </div>
 
@@ -278,9 +273,7 @@
       </table>
     </div>
     {% else %}
-    <div class="empty-state">
-      <p>Movement will appear here once production or sales begin.</p>
-    </div>
+    {{ empty.state('No movement yet', 'Production, sales and refills show up here as they happen.', icon='clock', compact=True) }}
     {% endif %}
   </div>
 </div>

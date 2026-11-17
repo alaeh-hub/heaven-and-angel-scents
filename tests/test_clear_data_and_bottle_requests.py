@@ -6,7 +6,7 @@
   is a 404 unless ALLOW_DATA_RESET is on, needs the exact confirmation
   phrase, and keeps accounts/branches while emptying everything else.
 """
-from factories import (get_form_token, login, make_branch, make_inventory,
+from factories import (get_form_token, login, make_branch, make_inventory, unique_suffix,
                        make_product, make_user)
 
 REQUEST_STOCK_URL = "/branch/request-stock"
@@ -37,7 +37,7 @@ def _count(sql, table, where="1=1", params=()):
 def test_request_stock_page_lists_bottles_but_not_bulk(client, sql):
     _signed_in_branch(client, sql)
     bottle = make_product(sql, unit="50ML")
-    bulk = make_product(sql, unit="BULK")
+    bulk = f"NOPE-{unique_suffix().upper()}-BULK"  # bulk is not a product
 
     html = client.get(REQUEST_STOCK_URL).get_data(as_text=True)
 
@@ -47,7 +47,7 @@ def test_request_stock_page_lists_bottles_but_not_bulk(client, sql):
 
 def test_request_stock_rejects_a_tampered_bulk_sku(client, sql):
     branch_id = _signed_in_branch(client, sql)
-    bulk = make_product(sql, unit="BULK")
+    bulk = f"NOPE-{unique_suffix().upper()}-BULK"  # bulk is not a product
     token = get_form_token(client, REQUEST_STOCK_URL)
 
     resp = client.post(REQUEST_STOCK_URL, data={
@@ -59,8 +59,7 @@ def test_request_stock_rejects_a_tampered_bulk_sku(client, sql):
 
 def test_dashboard_hides_reorder_for_low_stock_bulk(client, sql):
     branch_id = _signed_in_branch(client, sql)
-    bulk = make_product(sql, unit="BULK")
-    make_inventory(sql, branch_id, bulk, stock_qty=0, reorder_level=5)
+    bulk = f"NOPE-{unique_suffix().upper()}-BULK"  # bulk is not a product
 
     html = client.get("/branch/").get_data(as_text=True)
 
@@ -134,9 +133,8 @@ def test_branch_inventory_unit_filter_has_no_bulk_option(client, sql):
 
 def test_branch_inventory_lists_bottles_only(client, sql):
     branch_id = _signed_in_branch(client, sql)
-    bulk = make_product(sql, unit="BULK")
+    bulk = f"NOPE-{unique_suffix().upper()}-BULK"  # bulk is not a product
     bottle = make_product(sql, unit="50ML")
-    make_inventory(sql, branch_id, bulk, stock_qty=0, reorder_level=5)
     make_inventory(sql, branch_id, bottle, stock_qty=0, reorder_level=5)
 
     html = client.get("/branch/inventory").get_data(as_text=True)
@@ -147,8 +145,7 @@ def test_branch_inventory_lists_bottles_only(client, sql):
 
 def test_branch_low_stock_ignores_bulk(client, sql):
     branch_id = _signed_in_branch(client, sql)
-    bulk = make_product(sql, unit="BULK")
-    make_inventory(sql, branch_id, bulk, stock_qty=0, reorder_level=5)
+    bulk = f"NOPE-{unique_suffix().upper()}-BULK"  # bulk is not a product
 
     html = client.get("/branch/").get_data(as_text=True)
 
@@ -157,9 +154,8 @@ def test_branch_low_stock_ignores_bulk(client, sql):
 
 def test_admin_low_stock_page_and_dashboard_ignore_bulk(client, sql):
     branch_id = make_branch(sql)
-    bulk = make_product(sql, unit="BULK")
+    bulk = f"NOPE-{unique_suffix().upper()}-BULK"  # bulk is not a product
     bottle = make_product(sql, unit="50ML")
-    make_inventory(sql, branch_id, bulk, stock_qty=0, reorder_level=5)
     make_inventory(sql, branch_id, bottle, stock_qty=0, reorder_level=5)
     _signed_in_admin(client, sql)
 
@@ -173,9 +169,8 @@ def test_admin_low_stock_includes_hq_warehouse(client, sql):
     # HQ's warehouse is branch_id 1 (schema.sql). BULK has no reorder
     # level at HQ either, so only the bottle shows up.
     bottle = make_product(sql, unit="50ML")
-    bulk = make_product(sql, unit="BULK")
+    bulk = f"NOPE-{unique_suffix().upper()}-BULK"  # bulk is not a product
     make_inventory(sql, 1, bottle, stock_qty=0, reorder_level=5)
-    make_inventory(sql, 1, bulk, stock_qty=0, reorder_level=5)
     _signed_in_admin(client, sql)
 
     page = client.get("/admin/low-stock?branch_id=1").get_data(as_text=True)
@@ -190,9 +185,8 @@ def test_ai_low_stock_tool_includes_hq_warehouse(app, sql):
     from heaven_angel.routes.ai_tools.stock import get_low_stock as _get_low_stock
 
     bottle = make_product(sql, unit="50ML")
-    bulk = make_product(sql, unit="BULK")
+    bulk = f"NOPE-{unique_suffix().upper()}-BULK"  # bulk is not a product
     make_inventory(sql, 1, bottle, stock_qty=0, reorder_level=5)
-    make_inventory(sql, 1, bulk, stock_qty=0, reorder_level=5)
     ctx = {"role": "Admin", "branch_id": None}
 
     with app.app_context():
@@ -210,7 +204,7 @@ def test_branch_skus_carried_counts_base_codes(client, sql):
     branch_id = _signed_in_branch(client, sql)
     code = "T" + uuid.uuid4().hex[:6].upper()
     cur = sql.cursor()
-    for unit, category in (("85ML", "Bottled"), ("50ML", "Bottled"), ("BULK", "Bulk/Refill")):
+    for unit, category in (("85ML", "Bottled"), ("50ML", "Bottled")):
         cur.execute(
             "INSERT INTO products (sku, item_name, variant, category, unit, price) "
             "VALUES (%s, 'Seraph', 'Male', %s, %s, 1)", (f"{code}-{unit}", category, unit))
@@ -221,4 +215,4 @@ def test_branch_skus_carried_counts_base_codes(client, sql):
 
     html = client.get("/branch/").get_data(as_text=True)
 
-    assert re.search(r'SKUs carried</div>\s*<div class="kpi-value">1</div>', html)
+    assert re.search(r'SKUs carried</div>\s*<div class="(?:stat|kpi)-value">1</div>', html)

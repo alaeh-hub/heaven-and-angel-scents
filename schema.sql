@@ -1852,7 +1852,8 @@ BEGIN
     IF NOT EXISTS (
         SELECT 1 FROM information_schema.columns
         WHERE table_schema = DATABASE() AND table_name = 'products'
-              AND column_name = 'unit' AND column_type = "enum('85ML','50ML','10ML','3ML','BULK')"
+              AND column_name = 'unit'
+              AND column_type IN ("enum('85ML','50ML','10ML','3ML','BULK')", "enum('85ML','50ML','10ML','3ML')")
     ) THEN
         ALTER TABLE products
             MODIFY COLUMN unit ENUM('85ML', '50ML', '10ML', '3ML', 'BULK') NOT NULL DEFAULT '50ML';
@@ -2608,3 +2609,498 @@ DELIMITER ;
 
 CALL _migrate_stats_indexes_and_closed_at();
 DROP PROCEDURE _migrate_stats_indexes_and_closed_at;
+
+-- ----------------------------------------------------------------------------
+-- 50. Migration — built-in bulk batch formulas (formula.txt)
+--
+--     The business has three fixed formulas (15% / 14% / 13%), each in
+--     three timpla sizes (500 / 250 / 125 ml oil scent), kept in these tables
+--     and seeded below, so a fresh database has them. A batch is produced by
+--     choosing one, so nothing is entered material by material.
+--
+--       bulk_formulas           one row per formula (name; is_default marks the one
+--                               every scent uses unless listed below)
+--       bulk_formula_scents     the scents that use a different formula (the SKU Map's
+--                               exceptions): base code -> formula
+--       bulk_formula_sizes      its amounts per size: oil ml, fixative g,
+--                               alcohol + water mix ml, moisturizer ml
+--       bulk_formula_settings   the single row of shared settings: the bottle
+--                               size batches are filled into, and the mixing
+--                               recipe (parts alcohol : parts water) that the
+--                               "alcohol" amount is split by
+--       bulk_formula_packaging  how many of each packaging item go in one
+--                               bottle (bottle, sticker, plastic seal)
+--
+--     batch_formula_materials says which raw material plays each role in
+--     those formulas (oil scent, fixative, alcohol, moisturizer, distilled
+--     water) and their packaging (bottle, sticker, plastic seal — one of
+--     each per bottle, so the amount needed is just the bottle count).
+--     Unset roles are guessed from the material names.
+--
+--     bulk_batches.formula_label is the text of the formula a batch was
+--     produced from (e.g. "Formula 15%, 500 ml"); NULL for batches logged
+--     before this existed.
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS batch_formula_materials (
+    role        ENUM('oil', 'fixative', 'alcohol', 'moisturizer', 'water', 'bottle', 'sticker', 'seal') PRIMARY KEY,
+    material_id INT NOT NULL,
+    FOREIGN KEY (material_id) REFERENCES raw_materials(material_id)
+);
+
+CREATE TABLE IF NOT EXISTS bulk_formulas (
+    formula_id INT AUTO_INCREMENT PRIMARY KEY,
+    name       VARCHAR(30) NOT NULL UNIQUE,      -- e.g. '15%'
+    is_default BOOLEAN NOT NULL DEFAULT FALSE    -- the formula for every scent not in bulk_formula_scents
+);
+
+CREATE TABLE IF NOT EXISTS bulk_formula_scents (
+    base_code  VARCHAR(40) PRIMARY KEY,          -- product base code, e.g. 'A9' (SKU A9-85ML)
+    formula_id INT NOT NULL,
+    FOREIGN KEY (formula_id) REFERENCES bulk_formulas(formula_id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS bulk_formula_sizes (
+    size_id        INT AUTO_INCREMENT PRIMARY KEY,
+    formula_id     INT NOT NULL,
+    oil_ml         DECIMAL(10, 3) NOT NULL,      -- the timpla size: ml of oil scent
+    fixative_g     DECIMAL(10, 3) NOT NULL,
+    mix_ml         DECIMAL(10, 3) NOT NULL,      -- alcohol + distilled water, together
+    moisturizer_ml DECIMAL(10, 3) NOT NULL,
+    FOREIGN KEY (formula_id) REFERENCES bulk_formulas(formula_id) ON DELETE CASCADE,
+    UNIQUE KEY uq_bulk_formula_size (formula_id, oil_ml),
+    CHECK (oil_ml > 0),
+    CHECK (fixative_g >= 0),
+    CHECK (mix_ml >= 0),
+    CHECK (moisturizer_ml >= 0)
+);
+
+CREATE TABLE IF NOT EXISTS bulk_formula_settings (
+    id                INT PRIMARY KEY,
+    bottle_unit       ENUM('85ML', '50ML', '10ML', '3ML') NOT NULL DEFAULT '85ML',
+    mix_alcohol_parts DECIMAL(10, 3) NOT NULL DEFAULT 200.000,
+    mix_water_parts   DECIMAL(10, 3) NOT NULL DEFAULT 1000.000,
+    CHECK (id = 1),
+    CHECK (mix_alcohol_parts > 0),
+    CHECK (mix_water_parts >= 0)
+);
+
+CREATE TABLE IF NOT EXISTS bulk_formula_packaging (
+    role           ENUM('bottle', 'sticker', 'seal') PRIMARY KEY,
+    qty_per_bottle DECIMAL(10, 3) NOT NULL DEFAULT 1.000,
+    CHECK (qty_per_bottle >= 0)
+);
+
+-- Databases that ran an earlier version of this migration have bulk_formulas
+-- with a free-text "scents" column and no is_default: add is_default (the 15%
+-- formula is the default), and drop the text column — the scents now come from
+-- bulk_formula_scents. A no-op on a fresh database.
+DELIMITER $$
+
+DROP PROCEDURE IF EXISTS _migrate_bulk_formulas_default$$
+
+CREATE PROCEDURE _migrate_bulk_formulas_default()
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = DATABASE() AND table_name = 'bulk_formulas' AND column_name = 'is_default'
+    ) THEN
+        ALTER TABLE bulk_formulas ADD COLUMN is_default BOOLEAN NOT NULL DEFAULT FALSE;
+        UPDATE bulk_formulas SET is_default = TRUE WHERE name = '15%';
+    END IF;
+    IF EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = DATABASE() AND table_name = 'bulk_formulas' AND column_name = 'scents'
+    ) THEN
+        ALTER TABLE bulk_formulas DROP COLUMN scents;
+    END IF;
+END$$
+
+DELIMITER ;
+
+CALL _migrate_bulk_formulas_default();
+DROP PROCEDURE _migrate_bulk_formulas_default;
+
+-- Seed: formula.txt / Costing_Calculator_By_Formula.xlsx. INSERT IGNORE, so
+-- re-running never overwrites a value you have since changed.
+INSERT IGNORE INTO bulk_formulas (name, is_default) VALUES
+    ('15%', TRUE),
+    ('14%', FALSE),
+    ('13%', FALSE);
+
+-- formula.txt / the SKU Map sheet: these scents use 14% and 13%; every other
+-- scent uses the default (15%).
+INSERT IGNORE INTO bulk_formula_scents (base_code, formula_id)
+SELECT v.base_code, f.formula_id
+FROM (
+    SELECT 'A9' AS base_code, '14%' AS name
+    UNION ALL SELECT 'H14', '14%'
+    UNION ALL SELECT 'H13', '14%'
+    UNION ALL SELECT 'H10', '14%'
+    UNION ALL SELECT 'H2', '14%'
+    UNION ALL SELECT 'H8', '13%'
+    UNION ALL SELECT 'H9', '13%'
+) v
+JOIN bulk_formulas f ON f.name = v.name;
+
+INSERT IGNORE INTO bulk_formula_sizes (formula_id, oil_ml, fixative_g, mix_ml, moisturizer_ml)
+SELECT f.formula_id, v.oil_ml, v.fixative_g, v.mix_ml, v.moisturizer_ml
+FROM (
+    SELECT '15%' AS name, 500 AS oil_ml, 10 AS fixative_g, 2800 AS mix_ml, 26 AS moisturizer_ml
+    UNION ALL SELECT '15%', 250, 5, 1400, 13
+    UNION ALL SELECT '15%', 125, 3, 700, 7
+    UNION ALL SELECT '14%', 500, 10, 3000, 26
+    UNION ALL SELECT '14%', 250, 5, 1500, 13
+    UNION ALL SELECT '14%', 125, 3, 750, 7
+    UNION ALL SELECT '13%', 500, 10, 3300, 26
+    UNION ALL SELECT '13%', 250, 5, 1650, 13
+    UNION ALL SELECT '13%', 125, 3, 825, 7
+) v
+JOIN bulk_formulas f ON f.name = v.name;
+
+INSERT IGNORE INTO bulk_formula_settings (id, bottle_unit, mix_alcohol_parts, mix_water_parts)
+VALUES (1, '85ML', 200, 1000);
+
+INSERT IGNORE INTO bulk_formula_packaging (role, qty_per_bottle) VALUES
+    ('bottle', 1), ('sticker', 1), ('seal', 1);
+
+DELIMITER $$
+
+DROP PROCEDURE IF EXISTS _migrate_bulk_batches_formula_label$$
+
+CREATE PROCEDURE _migrate_bulk_batches_formula_label()
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = DATABASE() AND table_name = 'bulk_batches' AND column_name = 'formula_label'
+    ) THEN
+        ALTER TABLE bulk_batches ADD COLUMN formula_label VARCHAR(60) NULL;
+    END IF;
+END$$
+
+DELIMITER ;
+
+CALL _migrate_bulk_batches_formula_label();
+DROP PROCEDURE _migrate_bulk_batches_formula_label;
+
+-- ----------------------------------------------------------------------------
+-- 50a. Migration — repair databases that ran an earlier version of 50
+--
+--      An earlier draft of migration 50 created batch_formulas /
+--      batch_formula_items and bulk_batches.formula_id, and a role table
+--      without the packaging roles (bottle, sticker, seal). Widen the role
+--      list, drop a blank role row an old seed could leave behind, and drop
+--      the unused draft tables/column. A no-op on a fresh database.
+-- ----------------------------------------------------------------------------
+DELIMITER $$
+
+DROP PROCEDURE IF EXISTS _migrate_formula_materials_roles$$
+
+CREATE PROCEDURE _migrate_formula_materials_roles()
+BEGIN
+    IF EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = DATABASE() AND table_name = 'batch_formula_materials'
+          AND column_name = 'role' AND column_type NOT LIKE '%''seal''%'
+    ) THEN
+        DELETE FROM batch_formula_materials WHERE role = '';
+        ALTER TABLE batch_formula_materials MODIFY COLUMN role
+            ENUM('oil', 'fixative', 'alcohol', 'moisturizer', 'water', 'bottle', 'sticker', 'seal') NOT NULL;
+    END IF;
+
+    IF EXISTS (
+        SELECT 1 FROM information_schema.table_constraints
+        WHERE table_schema = DATABASE() AND table_name = 'bulk_batches'
+          AND constraint_name = 'fk_bulk_batches_formula'
+    ) THEN
+        ALTER TABLE bulk_batches DROP FOREIGN KEY fk_bulk_batches_formula;
+    END IF;
+    IF EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = DATABASE() AND table_name = 'bulk_batches' AND column_name = 'formula_id'
+    ) THEN
+        ALTER TABLE bulk_batches DROP COLUMN formula_id;
+    END IF;
+    DROP TABLE IF EXISTS batch_formula_items;
+    DROP TABLE IF EXISTS batch_formulas;
+END$$
+
+DELIMITER ;
+
+CALL _migrate_formula_materials_roles();
+DROP PROCEDURE _migrate_formula_materials_roles;
+
+-- ----------------------------------------------------------------------------
+-- 51. Seed — suppliers and the constant raw materials the built-in formulas use
+--
+--     From Costing_Calculator_By_Formula.xlsx (Settings sheet rates):
+--
+--       Supplier  BubbleMix Fragrances and Household Goods Store
+--                   Oil Scent    500 ml for PHP 2,000   (PHP 4.00 / ml)
+--                   Fixative     140 g  for PHP 490     (PHP 3.50 / g)
+--                   Moisturizer  1000 ml for PHP 310    (PHP 0.31 / ml)
+--       Supplier  Centralpack
+--                   Perfume Alcohol        1000 ml for PHP 132.09
+--                   Frosted 85 ml Bottle   1 pc    for PHP 15
+--       No supplier
+--                   Distilled Water   10 L for PHP 82   (PHP 8.20 / L)
+--                   Sticker           1 pc  for PHP 3
+--                   Plastic Seal      1 pc  for PHP 1.50
+--
+--     Safe to re-run: every INSERT is INSERT IGNORE (suppliers and materials
+--     are unique by name), so rows that already exist — including ones whose
+--     price, stock or supplier you have since edited — are left untouched.
+--     Stock starts at 0 and the purchase totals start at nothing bought
+--     (package_cost 0; package_qty is 1 only because the column must be
+--     positive): the prices above are the unit prices (cost_per_unit), not
+--     purchases, so supplier totals don't show money you haven't spent.
+--     Restock each material on the Materials page to log what you buy; that
+--     adds to stock and to the totals, and averages the price.
+--
+--     It also links each formula role (see batch_formula_materials above) to
+--     its material.
+-- ----------------------------------------------------------------------------
+INSERT IGNORE INTO suppliers (supplier_name, address) VALUES
+    ('BubbleMix Fragrances and Household Goods Store', '107 E. Rodriguez Sr. Ave., Brgy. Tatalon, Quezon City'),
+    ('Centralpack', '58 F. Bautista St., San Francisco Del Monte, Quezon City');
+
+INSERT IGNORE INTO raw_materials
+    (material_name, unit, purchase_mode, package_qty, package_cost, cost_per_unit, stock_qty, supplier_id)
+VALUES
+    ('Oil Scent', 'Milliliter', 'Package', 1, 0.00, 4.0000, 0,
+        (SELECT supplier_id FROM suppliers WHERE supplier_name = 'BubbleMix Fragrances and Household Goods Store')),
+    ('Fixative', 'Gram', 'Package', 1, 0.00, 3.5000, 0,
+        (SELECT supplier_id FROM suppliers WHERE supplier_name = 'BubbleMix Fragrances and Household Goods Store')),
+    ('Moisturizer', 'Milliliter', 'Package', 1, 0.00, 0.3100, 0,
+        (SELECT supplier_id FROM suppliers WHERE supplier_name = 'BubbleMix Fragrances and Household Goods Store')),
+    ('Perfume Alcohol', 'Milliliter', 'Package', 1, 0.00, 0.1321, 0,
+        (SELECT supplier_id FROM suppliers WHERE supplier_name = 'Centralpack')),
+    ('Frosted 85 ml Bottle', 'Piece', 'Individual', 1, 0.00, 15.0000, 0,
+        (SELECT supplier_id FROM suppliers WHERE supplier_name = 'Centralpack')),
+    ('Distilled Water', 'Liter', 'Package', 1, 0.00, 8.2000, 0, NULL),
+    ('Sticker', 'Piece', 'Individual', 1, 0.00, 3.0000, 0, NULL),
+    ('Plastic Seal', 'Piece', 'Individual', 1, 0.00, 1.5000, 0, NULL);
+
+INSERT IGNORE INTO batch_formula_materials (role, material_id)
+SELECT 'oil', material_id FROM raw_materials WHERE material_name = 'Oil Scent';
+INSERT IGNORE INTO batch_formula_materials (role, material_id)
+SELECT 'fixative', material_id FROM raw_materials WHERE material_name = 'Fixative';
+INSERT IGNORE INTO batch_formula_materials (role, material_id)
+SELECT 'alcohol', material_id FROM raw_materials WHERE material_name = 'Perfume Alcohol';
+INSERT IGNORE INTO batch_formula_materials (role, material_id)
+SELECT 'moisturizer', material_id FROM raw_materials WHERE material_name = 'Moisturizer';
+INSERT IGNORE INTO batch_formula_materials (role, material_id)
+SELECT 'water', material_id FROM raw_materials WHERE material_name = 'Distilled Water';
+INSERT IGNORE INTO batch_formula_materials (role, material_id)
+SELECT 'bottle', material_id FROM raw_materials WHERE material_name = 'Frosted 85 ml Bottle';
+INSERT IGNORE INTO batch_formula_materials (role, material_id)
+SELECT 'sticker', material_id FROM raw_materials WHERE material_name = 'Sticker';
+INSERT IGNORE INTO batch_formula_materials (role, material_id)
+SELECT 'seal', material_id FROM raw_materials WHERE material_name = 'Plastic Seal';
+
+-- ----------------------------------------------------------------------------
+-- 52. Seed — the product catalog (products_20260922_144849.csv)
+--
+--     31 scents, each as an 85ML bottle (PHP 85.00). Bulk is not a product:
+--     it is sold by the mL straight out of the bulk batches (migration 55),
+--     priced on bulk_rate_settings.
+--     The SKU is built the way the app builds it: base code + '-' + unit
+--     (A1 + 85ML -> A1-85ML), and category follows the unit (BULK is
+--     Bulk/Refill, a bottle size is Bottled).
+--
+--     INSERT IGNORE, so re-running never overwrites a price or name you have
+--     since edited. Every product also gets a zero-stock row in every
+--     branch's inventory, as the app does when you add a product by hand.
+-- ----------------------------------------------------------------------------
+INSERT IGNORE INTO products (sku, item_name, variant, category, unit, price) VALUES
+    ('A4-85ML', 'Abercrombie & Fitch', 'Male', 'Bottled', '85ML', 85.00),
+    ('H10-85ML', 'Ariana Grande Cloud', 'Female', 'Bottled', '85ML', 85.00),
+    ('H16-85ML', 'B&B Works Cucumber Melon', 'Female', 'Bottled', '85ML', 85.00),
+    ('H8-85ML', 'B&B Works Gingham', 'Female', 'Bottled', '85ML', 85.00),
+    ('A2-85ML', 'Bvlgari Extreme', 'Male', 'Bottled', '85ML', 85.00),
+    ('H9-85ML', 'Chanel N5', 'Female', 'Bottled', '85ML', 85.00),
+    ('A11-85ML', 'Christian Dior Fahrenheit', 'Male', 'Bottled', '85ML', 85.00),
+    ('A8-85ML', 'Clinique Happy', 'Male', 'Bottled', '85ML', 85.00),
+    ('H4-85ML', 'D''Arpage by Lanvin Eclat', 'Female', 'Bottled', '85ML', 85.00),
+    ('H6-85ML', 'D&G Light Blue', 'Female', 'Bottled', '85ML', 85.00),
+    ('A9-85ML', 'Drakkar Noir', 'Male', 'Bottled', '85ML', 85.00),
+    ('H5-85ML', 'Escada Moonsparkle', 'Female', 'Bottled', '85ML', 85.00),
+    ('A12-85ML', 'Ferrari Black', 'Male', 'Bottled', '85ML', 85.00),
+    ('A5-85ML', 'Giorgio Armani Aqua De Gio', 'Male', 'Bottled', '85ML', 85.00),
+    ('A7-85ML', 'Hugo Boss', 'Male', 'Bottled', '85ML', 85.00),
+    ('H14-85ML', 'Jo Malone English Pear', 'Female', 'Bottled', '85ML', 85.00),
+    ('H15-85ML', 'Jo Malone Nectarine', 'Female', 'Bottled', '85ML', 85.00),
+    ('H2-85ML', 'Katy Perry Meow', 'Female', 'Bottled', '85ML', 85.00),
+    ('A10-85ML', 'Lacoste Black', 'Male', 'Bottled', '85ML', 85.00),
+    ('A14-85ML', 'Lacoste Essential', 'Male', 'Bottled', '85ML', 85.00),
+    ('A1-85ML', 'Lacoste Red', 'Male', 'Bottled', '85ML', 85.00),
+    ('H11-85ML', 'Lacoste Touch of Pink', 'Female', 'Bottled', '85ML', 85.00),
+    ('H12-85ML', 'One Direction Our Moment', 'Female', 'Bottled', '85ML', 85.00),
+    ('A6-85ML', 'Paco Rabbane Invictus', 'Male', 'Bottled', '85ML', 85.00),
+    ('H7-85ML', 'Paris Hilton Heiress', 'Female', 'Bottled', '85ML', 85.00),
+    ('A3-85ML', 'Ralph Lauren Polo Sport', 'Male', 'Bottled', '85ML', 85.00),
+    ('H1-85ML', 'Salvatorre Ferragamo Incanto Shine', 'Female', 'Bottled', '85ML', 85.00),
+    ('A13-85ML', 'Versace Eros', 'Male', 'Bottled', '85ML', 85.00),
+    ('H3-85ML', 'Victoria''s Secret Bombshell', 'Female', 'Bottled', '85ML', 85.00),
+    ('H17-85ML', 'Victoria''s Secret Pure Seduction', 'Female', 'Bottled', '85ML', 85.00),
+    ('H13-85ML', 'Victoria''s Secret Vanilla Lace', 'Female', 'Bottled', '85ML', 85.00);
+
+INSERT IGNORE INTO branch_inventory (branch_id, sku, stock_qty)
+SELECT b.branch_id, p.sku, 0 FROM branches b CROSS JOIN products p;
+
+-- ----------------------------------------------------------------------------
+-- 55. Migration — bulk is sold from the bulk batches, not from BULK products
+--
+--     A bulk batch is already the stock of a scent in mL, so a separate
+--     "A1-BULK" product row (with its own stock count) was a second, parallel
+--     copy of the same thing. This removes it:
+--
+--       - bulk_batches.base_code: the product code the batch is of (A1), so a
+--         sale of "100 mL of A1" knows which batches to draw from. Existing
+--         batches are matched to a code by their scent name.
+--       - sale_batch_usage: which batch(es) each bulk sale or refill took its
+--         mL from, and at what cost per mL. A void puts exactly that back, and
+--         it is where the cost of a bulk sale comes from. Sales take from the
+--         OLDEST batch of the scent that still has mL left.
+--       - sales.sku is no longer a foreign key to products: a bulk sale is
+--         recorded under the key '<code>-BULK' (e.g. A1-BULK), which is just a
+--         label now, not a product.
+--       - sale_catalog: products plus one virtual '<code>-BULK' row per code,
+--         so sales history and every sales report still show a bulk sale's
+--         name, size and variant by joining it where they used to join
+--         products.
+--       - the BULK rows (and their inventory rows) are deleted from products,
+--         and products.unit / products.category no longer allow BULK or
+--         Bulk/Refill.
+--
+--     Safe to re-run: every step checks before it changes anything.
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS sale_batch_usage (
+    usage_id    INT AUTO_INCREMENT PRIMARY KEY,
+    sale_id     INT NOT NULL,
+    batch_id    INT NOT NULL,
+    ml          DECIMAL(12, 3) NOT NULL,
+    cost_per_ml DECIMAL(12, 6) NOT NULL,
+    FOREIGN KEY (sale_id) REFERENCES sales(sale_id) ON DELETE CASCADE,
+    FOREIGN KEY (batch_id) REFERENCES bulk_batches(batch_id) ON DELETE CASCADE,
+    INDEX idx_sale_batch_usage_batch (batch_id),
+    CHECK (ml > 0)
+);
+
+DELIMITER $$
+
+DROP PROCEDURE IF EXISTS _migrate_remove_bulk_products$$
+
+CREATE PROCEDURE _migrate_remove_bulk_products()
+BEGIN
+    DECLARE fk_name VARCHAR(64) DEFAULT NULL;
+
+    -- bulk_batches.base_code ---------------------------------------------------
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = DATABASE() AND table_name = 'bulk_batches' AND column_name = 'base_code'
+    ) THEN
+        ALTER TABLE bulk_batches
+            ADD COLUMN base_code VARCHAR(40) NULL AFTER batch_code,
+            ADD INDEX idx_bulk_batches_base_code (base_code, created_at);
+        UPDATE bulk_batches b
+        JOIN (SELECT DISTINCT LEFT(sku, CHAR_LENGTH(sku) - CHAR_LENGTH(unit) - 1) AS code, item_name
+              FROM products WHERE unit <> 'BULK') x ON x.item_name = b.scent_name
+        SET b.base_code = x.code
+        WHERE b.base_code IS NULL;
+    END IF;
+
+    -- A batch with no product code can't be sold by the mL. Link any such batch
+    -- to the catalog scent of the same name, on every run (a batch made by a
+    -- script or an older version of the app has none).
+    UPDATE bulk_batches b
+    JOIN (SELECT DISTINCT LEFT(sku, CHAR_LENGTH(sku) - CHAR_LENGTH(unit) - 1) AS code, item_name
+          FROM products) x ON x.item_name = b.scent_name
+    SET b.base_code = x.code
+    WHERE b.base_code IS NULL;
+
+    -- sales.sku stops being a foreign key to products --------------------------
+    SELECT constraint_name INTO fk_name
+    FROM information_schema.key_column_usage
+    WHERE table_schema = DATABASE() AND table_name = 'sales'
+          AND column_name = 'sku' AND referenced_table_name = 'products'
+    LIMIT 1;
+    IF fk_name IS NOT NULL THEN
+        SET @drop_fk = CONCAT('ALTER TABLE sales DROP FOREIGN KEY `', fk_name, '`');
+        PREPARE drop_fk_stmt FROM @drop_fk;
+        EXECUTE drop_fk_stmt;
+        DEALLOCATE PREPARE drop_fk_stmt;
+    END IF;
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.statistics
+        WHERE table_schema = DATABASE() AND table_name = 'sales'
+              AND column_name = 'sku' AND seq_in_index = 1
+    ) THEN
+        ALTER TABLE sales ADD INDEX idx_sales_sku (sku);
+    END IF;
+
+    -- the BULK products and their stock rows go -----------------------------------
+    DELETE FROM products WHERE unit = 'BULK' OR category = 'Bulk/Refill';
+
+    -- products can no longer be BULK / Bulk/Refill ---------------------------------
+    IF EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = DATABASE() AND table_name = 'products'
+              AND column_name = 'unit' AND column_type LIKE '%BULK%'
+    ) THEN
+        ALTER TABLE products MODIFY COLUMN unit ENUM('85ML', '50ML', '10ML', '3ML') NOT NULL DEFAULT '50ML';
+    END IF;
+    IF EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = DATABASE() AND table_name = 'products'
+              AND column_name = 'category' AND column_type LIKE '%Bulk/Refill%'
+    ) THEN
+        ALTER TABLE products MODIFY COLUMN category ENUM('Bottled') NOT NULL DEFAULT 'Bottled';
+    END IF;
+END$$
+
+DELIMITER ;
+
+CALL _migrate_remove_bulk_products();
+DROP PROCEDURE _migrate_remove_bulk_products;
+
+-- Products plus one virtual '<code>-BULK' row per product code, for joining
+-- from sales (see the notes above). Never written to.
+CREATE OR REPLACE VIEW sale_catalog AS
+SELECT sku, item_name, variant, category, unit, price, image_path, created_at
+FROM products
+UNION ALL
+SELECT CONCAT(b.code, '-BULK'), b.item_name, b.variant, 'Bulk/Refill', 'BULK', 0.00, NULL, NULL
+FROM (SELECT LEFT(sku, CHAR_LENGTH(sku) - CHAR_LENGTH(unit) - 1) AS code,
+             MIN(item_name) AS item_name, MIN(variant) AS variant
+      FROM products GROUP BY code) b;
+
+-- ----------------------------------------------------------------------------
+-- 56. Migration — one order, several scents
+--
+--     A customer can buy several different scents at once. Each scent is still
+--     its own sales row (so stock, voids, reports and history keep working per
+--     product); sales.order_id ties the rows of one order together. It holds the
+--     sale_id of the order's FIRST row, so a single-product sale has order_id
+--     NULL and is its own order. The receipt prints the whole order, 10 products
+--     to a slip (see receipts.py), and its QR code points at the first row.
+--
+--     Safe to re-run: the column and index are only added when missing.
+-- ----------------------------------------------------------------------------
+DELIMITER $$
+
+DROP PROCEDURE IF EXISTS _migrate_sales_order_id$$
+
+CREATE PROCEDURE _migrate_sales_order_id()
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = DATABASE() AND table_name = 'sales' AND column_name = 'order_id'
+    ) THEN
+        ALTER TABLE sales ADD COLUMN order_id INT NULL, ADD INDEX idx_sales_order (order_id);
+    END IF;
+END$$
+
+DELIMITER ;
+
+CALL _migrate_sales_order_id();
+DROP PROCEDURE _migrate_sales_order_id;
