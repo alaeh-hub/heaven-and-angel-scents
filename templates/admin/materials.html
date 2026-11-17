@@ -363,10 +363,7 @@
     </div>
   </div>
   <div class="pg-foot">
-    <p>Stock on hand is real now: “Restock” adds to it (and rolls the
-      purchase into the running cost-per-unit average), and it’s deducted whenever a
-      <a href="{{ url_for('admin.bulk_batches') }}">bulk batch</a> uses it up. Edit only corrects this record's own
-      fields. It never touches stock on hand.</p>
+    <p>“Restock” adds stock; a <a href="{{ url_for('admin.bulk_batches') }}">bulk batch</a> uses it up.</p>
   </div>
   {% else %}
   {{ empty.state('No materials yet', 'Log what you buy to track cost per unit and how prices move over time.', icon='flask') }}
@@ -464,8 +461,7 @@
   </div>
   <div class="pg-foot">
     <p>
-      Total spend and material count are rolled up from every material package logged against a supplier above.
-      Open “Supply history” on any row to see exactly what’s been bought from them and at what volume.
+      Open “Supply history” on a row to see what was bought from that supplier.
     </p>
   </div>
   {% if suppliers %}
@@ -540,8 +536,7 @@
     </div>
   </div>
   <div class="pg-foot">
-    <p>There’s no delete here. Edit a supplier’s details instead, or just
-      leave it unused. Materials keep their price history even if their supplier is edited or unassigned later.</p>
+    <p>Suppliers can’t be deleted. Edit one or leave it unused.</p>
   </div>
   {% else %}
   {{ empty.state('No suppliers yet', 'Add the shops you buy from to see spend and supply history for each one.', icon='store') }}
@@ -553,7 +548,7 @@
   <div class="card card-pad" style="max-width:640px; width:100%;">
     <h2 class="pg-h">Add a material</h2>
     <p class="text-faint pg-note">
-      Enter it the way you actually buy it, e.g. 140 grams for ₱490, and the cost per unit is worked out for you.
+      Enter it as you buy it, e.g. 140 grams for ₱490.
     </p>
     <form method="POST" id="addMaterialForm">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -568,8 +563,7 @@
             <button type="button" class="rb-mode-opt active" data-value="package">Package (bulk)</button>
             <button type="button" class="rb-mode-opt" data-value="individual">Individual unit</button>
           </div>
-          <div class="help" id="matModeHelp">Package (bulk): one purchase covering several units at once, e.g. 140 grams
-            for ₱490.</div>
+          <div class="help" id="matModeHelp">Package (bulk): several units in one purchase.</div>
         </div>
       </div>
       <div class="form-row" id="packageQtyRow">
@@ -629,8 +623,7 @@
   <div class="card card-pad" style="max-width:640px; width:100%;">
     <h2 class="pg-h">Edit material</h2>
     <p class="text-faint pg-note">
-      The unit is fixed after creation because formulas and inventory history use it. To track this material in a
-      different unit, add it as a separate material.
+      The unit can’t change after creation.
     </p>
     <form method="POST" action="{{ url_for('admin.edit_material') }}" id="editMaterialForm">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -646,8 +639,7 @@
             <button type="button" class="rb-mode-opt" data-value="package">Package (bulk)</button>
             <button type="button" class="rb-mode-opt" data-value="individual">Individual unit</button>
           </div>
-          <div class="help" id="editMatModeHelp">Package (bulk): one purchase covering several units at once, e.g. 140
-            grams for ₱490.</div>
+          <div class="help" id="editMatModeHelp">Package (bulk): several units in one purchase.</div>
         </div>
       </div>
       <div class="form-row" id="editPackageQtyRow">
@@ -732,7 +724,7 @@
   <div class="card card-pad" style="max-width:640px; width:100%;">
     <h2 class="pg-h">Add a supplier</h2>
     <p class="text-faint pg-note">
-      Only the name is required. Fill in what you have and add the rest later from Edit.
+      Only the name is required.
     </p>
     <form method="POST" action="{{ url_for('admin.add_supplier') }}" id="addSupplierForm">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -787,7 +779,7 @@
   <div class="card card-pad" style="max-width:640px; width:100%;">
     <h2 class="pg-h">Edit supplier</h2>
     <p class="text-faint pg-note">
-      Changes apply immediately. Every material already linked to this supplier will show the updated details.
+      Changes apply to every linked material.
     </p>
     <form method="POST" action="{{ url_for('admin.edit_supplier') }}" id="editSupplierForm">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -836,7 +828,7 @@
   <div class="card card-pad" style="max-width:560px; width:100%; max-height:80vh; overflow-y:auto;">
     <h2 class="pg-h">Supply history: <span id="supplyHistorySupplierName"></span></h2>
     <p class="text-faint pg-note">
-      Every material this supplier has provided, rolled up across every purchase logged for it.
+      Every material bought from this supplier.
     </p>
     <table class="sup-history-table table-fixed">
       <colgroup>
@@ -891,6 +883,9 @@
 
     // loading | empty | error | ready: one place decides what the stage shows.
     function setState(state, message) {
+      // A late answer for a page that has since been replaced (soft navigation, a refresh when you
+      // come back to the tab) must not touch the page that is there now.
+      if (!card.isConnected) return;
       card.dataset.state = state;
       var msg = state === 'empty' || state === 'error';
       stateBox.hidden = !msg;
@@ -1074,12 +1069,14 @@
       fetch("{{ url_for('admin.material_price_trends') }}")
         .then(function (r) { if (!r.ok) throw new Error('Request failed: ' + r.status); return r.json(); })
         .then(function (json) {
+          if (!card.isConnected) return;
           data = json.materials || [];
           if (!data.length) { setState('empty', 'No purchases logged yet. Add or restock a material to start the chart.'); renderMovers(); return; }
           var keep = selectedId && find(selectedId) ? selectedId : (find(select.value) ? select.value : data[0].material_id);
           pick(keep);
         })
         .catch(function () {
+          if (!card.isConnected) return;
           setState('error', 'Could not load the price history.');
         });
     }
@@ -1092,9 +1089,26 @@
     });
     setState('loading');
     load();
-    // Prices change when a restock is logged elsewhere; refresh on return.
-    document.addEventListener('visibilitychange', function () { if (!document.hidden) load(); });
-    window.addEventListener('pageshow', function (e) { if (e.persisted) load(); });
+    // Prices change when a restock is logged elsewhere; refresh on return to the tab.
+    // These listeners sit on document/window, so they outlive a soft navigation to another page
+    // (and stack up when this page is revisited). Drop the previous visit's pair first, and drop
+    // this one as soon as its markup is gone, as the Reports pages do.
+    if (window.__materialTrendsCleanup) window.__materialTrendsCleanup();
+    var onVisible = function () {
+      if (!card.isConnected) { window.__materialTrendsCleanup && window.__materialTrendsCleanup(); return; }
+      if (!document.hidden) load();
+    };
+    var onPageShow = function (e) {
+      if (!card.isConnected) { window.__materialTrendsCleanup && window.__materialTrendsCleanup(); return; }
+      if (e.persisted) load();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('pageshow', onPageShow);
+    window.__materialTrendsCleanup = function () {
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('pageshow', onPageShow);
+      window.__materialTrendsCleanup = null;
+    };
   })();
 </script>
 <script nonce="{{ csp_nonce() }}">
@@ -1163,7 +1177,7 @@
         packageQty.placeholder = '140';
         packageCostLabel.textContent = 'Cost for that package (₱)';
         packageCost.placeholder = '490.00';
-        modeHelp.textContent = 'Package (bulk): one purchase covering several units at once, e.g. 140 grams for ₱490.';
+        modeHelp.textContent = 'Package (bulk): several units in one purchase.';
       }
       updateCostPreview();
     }
@@ -1246,7 +1260,7 @@
       } else {
         qtyLabel.textContent = 'Package quantity';
         costLabel.textContent = 'Cost for that package (₱)';
-        modeHelp.textContent = 'Package (bulk): one purchase covering several units at once, e.g. 140 grams for ₱490.';
+        modeHelp.textContent = 'Package (bulk): several units in one purchase.';
       }
       updateEditCostPreview();
     }

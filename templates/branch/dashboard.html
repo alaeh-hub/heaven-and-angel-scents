@@ -204,7 +204,7 @@
       </table>
     </div>
     {% else %}
-    {{ empty.state('No open requests', 'Ask HQ for stock when you start running low.', icon='truck', compact=True, action='New request', href=url_for('branch.request_stock')) }}
+    {{ empty.state('No open requests', 'Ask HQ for stock when you start running low.', icon='truck', compact=True) }}
     {% endif %}
   </div>
 </div>

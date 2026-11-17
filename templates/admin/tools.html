@@ -38,8 +38,7 @@
 
 {% block content %}
 <p class="tl-lead">
-  Everyday calculators: convert units, split the alcohol and water mix, work out bottles and prices, and try a formula
-  with different prices. Nothing here changes any data.
+  Everyday calculators. Nothing here changes any data.
 </p>
 
 <div class="tl-grid">
@@ -68,7 +67,7 @@
 
     <section class="card card-pad tl-card" id="tlPrice" aria-labelledby="tlPriceTitle">
       <h2 id="tlPriceTitle">Price per unit</h2>
-      <p class="tl-sub">What you paid for an amount, worked out per unit. Useful before you log a material.</p>
+      <p class="tl-sub">Cost per unit from what you paid.</p>
       <div class="tl-fields">
         <div class="field">
           <label for="ppQty">Quantity bought</label>
@@ -144,7 +143,7 @@
 
 <section class="card card-pad tl-card mt-24" id="tlFormula" aria-labelledby="tlFormulaTitle">
   <h2 id="tlFormulaTitle">Formula cost calculator</h2>
-  <p class="tl-sub">Pick a scent and a size to see the costing, then change any price to see what it would do.</p>
+  <p class="tl-sub">Pick a scent and size, then try different prices.</p>
   {% if missing_roles %}
   <p class="tl-alert" role="alert">Set up the formula materials first on Bulk Batches (missing: {{ missing_roles|join(', ') }}).</p>
   {% endif %}

@@ -61,11 +61,8 @@
 
 {% block content %}
 <div class="card">
-  <p class="page-note">Every DAMAGE and ADJUSTMENT entry tied to a delivery: units reported damaged in transit, or
-      dispatched but never received or reported damaged (flagged automatically for HQ follow-up). This is
-      the same data each delivery's own receipt shows, just rolled up across every delivery so a pattern
-      is easier to spot. Everyday Production/Sale/Refill activity lives on the
-      <a href="{{ url_for('branch.movement_logs') }}">Inventory Log</a> instead.</p>
+  <p class="page-note">Damaged or missing delivery items; other activity is on the
+      <a href="{{ url_for('branch.movement_logs') }}">Inventory Log</a>.</p>
   {% if rows %}
   <div data-smart-table data-page-size="15">
     <div class="table-toolbar">

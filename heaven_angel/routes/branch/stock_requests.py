@@ -64,7 +64,7 @@ def request_stock():
     if request.method == "POST":
         if not consume_form_token("request_stock"):
             flash(
-                "This delivery request already went through, or the form expired — check your open requests below before resending.", "error")
+                "Already sent, or the form expired: check your open requests before resending.", "error")
             return redirect(url_for("branch.request_stock"))
 
         skus = request.form.getlist("sku[]")
@@ -414,8 +414,8 @@ def receive_stock():
                 room="admin", level="warning",
             )
             flash(
-                f"Shipment #{shipment_id} for {delivery_number} confirmed. {total_shortfall} unit(s) were short and flagged; "
-                "the remaining request quantity stays open for another dispatch.", "warning")
+                f"Shipment #{shipment_id} for {delivery_number} confirmed; {total_shortfall} unit(s) short, flagged for HQ.",
+                "warning")
         else:
             notify_bell(f"{branch_label} received delivery {delivery_number}.",
                         room="admin", level="success")

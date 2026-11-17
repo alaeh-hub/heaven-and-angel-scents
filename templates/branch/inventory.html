@@ -101,8 +101,7 @@
       <button type="button" class="btn btn-ghost btn-sm" data-page-next>Next<svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 6 6 6-6 6"/></svg></button>
     </div>
   </div>
-  <p class="page-note">This is the reference price: the amount actually charged is
-    recorded per sale on the Record Sale page.</p>
+  <p class="page-note">Reference price only; the sale price is set on Record Sale.</p>
   {% else %}
   {{ empty.state('No products assigned yet', 'Products show up here, with their stock levels, once they are assigned to your branch.', icon='box') }}
   {% endif %}

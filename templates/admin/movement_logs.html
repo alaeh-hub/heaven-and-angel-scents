@@ -39,9 +39,8 @@
     <span class="hint">Production, sale and refill</span>
   </div>
   <p class="pg-note">
-    This tracks Production, Sale, and Refill activity. Dispatch, receipt, and damage detail for stock
-    requests now lives on each delivery instead. See <a href="{{ url_for('admin.requests_list') }}">Stock
-    Requests</a>, or that delivery’s own receipt once it’s Fulfilled.
+    Production, Sale and Refill activity. Deliveries are on <a href="{{ url_for('admin.requests_list') }}">Stock
+    Requests</a>.
   </p>
   {% if logs %}
   <div data-smart-table data-page-size="15">

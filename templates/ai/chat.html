@@ -428,7 +428,6 @@
       <h3>Ask Halo</h3>
       <p>
         Ask about {{ 'company-wide' if session.role == 'Admin' else 'branch' }} stock, requests, or sales.
-        It only sees what you can see, and can’t make changes.
       </p>
       <div class="chat-suggestions" id="chatSuggestions">
         {% if session.role == 'Admin' %}

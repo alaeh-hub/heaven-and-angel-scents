@@ -59,7 +59,7 @@
 <div class="rd-lead">
   <div class="rd-lead-top">{{ m.status_badge(req.status) }}</div>
   <p class="rd-next">
-    {% if req.status in ('Pending', 'Partially Fulfilled') %}Dispatch up to each remaining quantity. A partial dispatch leaves the balance open; the branch can receive this shipment before another dispatch is created.{% elif req.status == 'In Transit' %}Dispatched, awaiting the branch to confirm receipt.{% elif req.status == 'Rejected' %}This delivery was rejected.{% endif %}
+    {% if req.status in ('Pending', 'Partially Fulfilled') %}Dispatch up to each remaining quantity.{% elif req.status == 'In Transit' %}Dispatched, awaiting the branch to confirm receipt.{% elif req.status == 'Rejected' %}This delivery was rejected.{% endif %}
   </p>
   <ol class="rd-track" aria-label="Delivery progress">
     {% if req.status == 'Rejected' %}

@@ -220,6 +220,13 @@
         z-index: 900;
     }
 
+    /* On the full chat page (Halo's "open in full page") the chat is the page, so the
+       floating button and its panel are not shown. Follows soft navigation, because it
+       looks at what is on the page rather than at the address. */
+    body:has(.chat-back) .halo-widget {
+        display: none;
+    }
+
     .halo-fab {
         position: relative;
         width: 56px;
@@ -601,7 +608,85 @@
        panel to a fixed size above the bubble (like desktop) would
        either overflow the screen or leave it cramped, sized to the
        viewport instead, same bottom-right anchor. */
+    /* The close button and the "full page" link share the header's right edge. */
+    .halo-panel-actions {
+        display: flex;
+        align-items: center;
+        gap: var(--space-2xs);
+    }
+
+    .halo-panel-close {
+        display: none;
+        align-items: center;
+        justify-content: center;
+        width: 2.75rem;
+        height: 2.75rem;
+        padding: 0;
+        border: 0;
+        border-radius: var(--radius);
+        background: transparent;
+        color: var(--ink-soft);
+        cursor: pointer;
+    }
+
+    .halo-panel-close svg {
+        width: 1.25rem;
+        height: 1.25rem;
+    }
+
+    .halo-panel-close:hover {
+        background: var(--surface);
+        color: var(--ink);
+    }
+
+    .halo-panel-close:focus-visible {
+        outline: 2px solid var(--color-focus);
+        outline-offset: 2px;
+    }
+
     @media (max-width: 680px) {
+        /* On a phone the open panel is the whole screen (it already covered nearly all of it).
+           The floating button is hidden while it is open and a close button sits in the header,
+           so nothing floats over the conversation. */
+        .halo-widget.open .halo-fab {
+            display: none;
+        }
+
+        .halo-panel {
+            inset: 0;
+            width: 100%;
+            height: 100dvh;
+            border: 0;
+            border-radius: 0;
+            box-shadow: none;
+        }
+
+        .halo-panel-header {
+            padding-top: calc(var(--space-sm) + env(safe-area-inset-top, 0px));
+        }
+
+        .halo-form {
+            padding-bottom: calc(var(--space-sm) + env(safe-area-inset-bottom, 0px));
+        }
+
+        .halo-panel-close {
+            display: inline-flex;
+        }
+
+        .halo-panel-expand {
+            display: none;
+        }
+
+        body:has(.halo-widget.open) {
+            overflow: hidden;
+        }
+
+        /* Not on top of the open menu drawer either. */
+        body:has(.sidebar.open) .halo-widget {
+            opacity: 0;
+            pointer-events: none;
+        }
+
         .halo-widget {
             right: 14px;
             bottom: 14px;
@@ -627,10 +712,4 @@
             padding-bottom: calc(var(--space-2xl) + 3.5rem);
         }
 
-        .halo-panel {
-            right: 14px;
-            bottom: 84px;
-            width: calc(100% - var(--space-xl));
-            height: calc(100dvh - 6.5rem);
-        }
     }

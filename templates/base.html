@@ -813,7 +813,7 @@
                 </span>
                 <div class="backup-reminder-text">
                     <strong>{% if backup_reminder.failed %}Your automatic backup is failing{% elif backup_reminder.days_since is none %}You haven't made a backup yet{% else %}Time for a backup{% endif %}</strong>
-                    <span>{% if backup_reminder.failed %}{{ backup_reminder.failed }}{% elif backup_reminder.days_since is none %}Right now your records only exist on this server.{% else %}Your last backup was {{ backup_reminder.days_since }} day{{ 's' if backup_reminder.days_since != 1 }} ago. You asked to be reminded every {{ backup_reminder.days }} days.{% endif %}</span>
+                    <span>{% if backup_reminder.failed %}{{ backup_reminder.failed }}{% elif backup_reminder.days_since is none %}Right now your records only exist on this server.{% else %}Your last backup was {{ backup_reminder.days_since }} day{{ 's' if backup_reminder.days_since != 1 }} ago.{% endif %}</span>
                 </div>
                 <div class="backup-reminder-actions">
                     <button type="button" class="btn btn-accent btn-sm" data-reminder="now">Back up now</button>
@@ -891,7 +891,7 @@
             <div class="settings-head">
                 <div>
                     <h2 id="settingsTitle">Settings</h2>
-                    <p>Account, sidebar, appearance and backups. Look &amp; sidebar choices are saved on this device.</p>
+                    <p>Account, sidebar, appearance and backups.</p>
                 </div>
                 <button type="button" class="settings-close" id="settingsClose" aria-label="Close settings">
                     <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
@@ -965,7 +965,7 @@
                         <p class="settings-note" id="scheduleNote"></p>
                         <p class="settings-status" id="scheduleStatus" role="status" aria-live="polite"></p>
                     </div>
-                    <p class="settings-note">Emails a full copy of the system: the database (restorable), one spreadsheet per table and the product photos, <span id="backupTo">to your HQ inbox</span>.</p>
+                    <p class="settings-note">Emails a full backup <span id="backupTo">to your HQ inbox</span>.</p>
                     <div class="settings-row">
                         <button type="button" class="settings-chip settings-chip-accent" id="backupNow"
                             data-status-url="{{ url_for('admin.backup_status') }}"
@@ -978,9 +978,8 @@
                     <p class="settings-status settings-status-warn" id="backupWarn" role="status" hidden></p>
                     <details class="settings-restore" id="restoreBox">
                         <summary>Restore from a backup</summary>
-                        <p class="settings-note settings-warn"><strong>This replaces the current data</strong> with the backup's
-                            (sales, stock, accounts, everything). A safety copy of what is there now is saved first in the
-                            server's backups folder. You will be signed out when it finishes.</p>
+                        <p class="settings-note settings-warn"><strong>This replaces the current data</strong> with the backup
+                            and signs you out.</p>
                         <form id="restoreForm" autocomplete="off" novalidate>
                         <label class="settings-field">Backup file <span>(the .zip from Email backup)</span>
                             <input type="file" id="restoreFile" accept=".zip,.sql">
@@ -1011,9 +1010,8 @@
                     <form method="POST" action="{{ url_for('admin.clear_data') }}" class="settings-restore settings-clear" id="clearDataForm">
                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                         <input type="hidden" name="next" value="{{ request.path }}">
-                        <p class="settings-note settings-warn"><strong>Permanently deletes</strong> every product, inventory, sales,
-                            delivery, material, partner and log record, plus all uploaded product photos. There is no undo, so
-                            email a backup first. User accounts, branches and pricing settings are kept.</p>
+                        <p class="settings-note settings-warn"><strong>Permanently deletes</strong> all products, stock, sales and logs;
+                            there is no undo.</p>
                         <label class="settings-field">Type <strong>CLEAR ALL DATA</strong> to confirm
                             <input type="text" name="confirm" id="clearDataPhrase" autocomplete="off" spellcheck="false" placeholder="CLEAR ALL DATA">
                         </label>
@@ -1118,21 +1116,26 @@
                         <div class="halo-panel-sub">{{ 'Admin overview' if session.role == 'Admin' else session.branch_name }}</div>
                     </div>
                 </div>
-                <a href="{{ url_for('ai.chat_page') }}" class="halo-panel-expand" title="Open in full page"
-                    aria-label="Open Halo in full page">
-                    <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
-                        stroke-linejoin="round">
-                        <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" />
-                    </svg>
-                </a>
+                <div class="halo-panel-actions">
+                    <a href="{{ url_for('ai.chat_page') }}" class="halo-panel-expand" title="Open in full page"
+                        aria-label="Open Halo in full page">
+                        <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                            stroke-linejoin="round">
+                            <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" />
+                        </svg>
+                    </a>
+                    <button type="button" class="halo-panel-close" id="haloClose" aria-label="Close Halo">
+                        <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                            <path d="M18 6 6 18M6 6l12 12" />
+                        </svg>
+                    </button>
+                </div>
             </div>
             <div class="halo-log" id="haloLog">
                 <div class="halo-empty" id="haloEmpty">
                     <div class="halo-empty-mascot" data-mascot data-mascot-size="88" data-mascot-say="auto"
                         data-mascot-say-name="{{ session.username }}"></div>
-                    <p>Hi, I'm Halo. Ask about {{ 'company-wide' if session.role == 'Admin' else 'your branch' }}
-                        stock, requests, sales, customers or credit{{ ', materials, production costs or partner inquiries' if session.role == 'Admin' }}.
-                        I can also draft a reorder for you to review.</p>
+                    <p>Hi, I'm Halo. Ask me about stock, sales, requests or credit.</p>
                     <div class="halo-suggestions">
                         {% if session.role == 'Admin' %}
                         <button type="button" class="halo-suggestion"

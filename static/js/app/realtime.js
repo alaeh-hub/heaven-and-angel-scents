@@ -192,6 +192,11 @@ function initHaloWidget() {
         if (isOpen()) closePanel(); else openPanel();
     });
 
+    // On a phone the panel is full screen and the floating button is hidden while it is open,
+    // so this header button is how it closes.
+    const closeBtn = document.getElementById('haloClose');
+    if (closeBtn) closeBtn.addEventListener('click', closePanel);
+
     document.addEventListener('keydown', (e) => {
         if (e.key === 'Escape' && isOpen()) closePanel();
     });

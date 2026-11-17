@@ -207,7 +207,7 @@
       </div>
     </div>
     <div class="pg-foot">
-      <p>Bars are relative to your best-stocked SKU. A short bar isn’t necessarily out of stock. Bulk isn’t listed here: it lives in the <a href="{{ url_for('admin.bulk_batches') }}">bulk batches</a> and is sold by the mL from them.</p>
+      <p>Bars are relative to your best-stocked SKU. Bulk is in <a href="{{ url_for('admin.bulk_batches') }}">bulk batches</a>.</p>
     </div>
     {% else %}
     {{ empty.state('No products in the catalog', 'Add products first, then production can stock them.', icon='box', action='Add a product', href=url_for('admin.products')) }}
@@ -360,11 +360,7 @@
     </div>
   </div>
   <div class="pg-foot">
-    <p>Cost of goods for a Bottled size is the flat base price set for it
-      on the <a href="{{ url_for('admin.formulas') }}">Formulas page</a>; the
-      <a href="{{ url_for('admin.bulk_batches') }}">bulk batch</a> it’s filled from only decides how much of that
-      batch’s mL gets used up. The moment it's logged, a
-      run's total is "capital" on the dashboard, kept separate from what's been spent buying raw materials.</p>
+    <p>Cost of goods is the base price set on the <a href="{{ url_for('admin.formulas') }}">Formulas page</a>.</p>
   </div>
   {% else %}
   {{ empty.state('No production runs yet', 'Each run you log is kept here with its quantity and date.', icon='flask') }}

@@ -97,7 +97,7 @@
       </tbody>
     </table>
   </div>
-  <p class="pg-note">Could be a real user mistyping their password repeatedly, or someone guessing at an account’s credentials. Either way, worth checking in with that branch/account if it keeps happening.</p>
+  <p class="pg-note">May be a mistyped password or someone guessing.</p>
 </div>
 {% endif %}
 
@@ -113,9 +113,7 @@
     <span class="hint">300 per page{{ " (page %d)" % page if page > 1 else "" }}</span>
   </div>
   <p class="pg-note">
-    One row per submission of the login form, whether it succeeded or not, separate from the
-    <a href="{{ url_for('admin.audit_log') }}">Admin Log</a>, which only covers changes an already-signed-in
-    admin makes. “Username attempted” is exactly what was typed, even if it never matched a real account.
+    Every login attempt, kept apart from the <a href="{{ url_for('admin.audit_log') }}">Admin Log</a>.
   </p>
   {% if logs %}
   <div data-smart-table data-page-size="15">

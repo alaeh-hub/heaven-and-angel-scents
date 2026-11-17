@@ -115,9 +115,7 @@
     <span class="hint" id="bpBranchesCount">{{ rows|length }} branch{{ 'es' if rows|length != 1 }}</span>
   </div>
   <p class="bp-note">
-    Turnover is an approximation (all-time units sold divided by current stock on hand, not a proper
-    cost-based ratio over a matching period). It is useful for comparing branches against each other, not as an
-    absolute figure. A branch showing “-” currently has zero total stock, so the ratio can’t be computed.
+    Turnover is a rough guide: units sold divided by stock on hand.
   </p>
   {% if rows %}
   <div data-smart-table data-page-size="10" data-count-target="bpBranchesCount" data-count-label="branch">

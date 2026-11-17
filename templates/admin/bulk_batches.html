@@ -406,12 +406,11 @@
   <div class="card-header">
     <h2>Produce a batch from a formula</h2>
   </div>
-  <p class="bb-intro">Pick a scent, then a size. The formula, the amounts and the costs are filled in for you.</p>
+  <p class="bb-intro">Pick a scent, then a size; the rest is filled in.</p>
 
   {% if missing_roles %}
   <p class="fm-alert" role="alert">
-    Set up the materials first: none is chosen yet for {{ missing_roles|join(', ') }}. Use “Materials used by the
-    formulas” below.
+    Pick materials for {{ missing_roles|join(', ') }} below first.
   </p>
   {% endif %}
 
@@ -433,8 +432,7 @@
           <option value="__other">Other scent, choose the formula myself</option>
         </select>
         {% if not scent_choices %}<div class="help">No scents in the catalog yet. <a href="{{ url_for('admin.products') }}">Add products</a> to pick one here, or choose “Other scent”.</div>{% endif %}
-        <div class="help">A batch of one of these scents can also be sold by the mL on Record Sale and used for refills,
-          oldest batch first. An “Other scent” batch can only be bottled.</div>
+        <div class="help">Can also be sold by the mL and used for refills; “Other scent” can only be bottled.</div>
         <p id="fmAutoFormula" class="fm-auto" role="status" style="display:none;"></p>
         <div class="fm-seg" id="fmFormulaPicker" role="group" aria-label="Formula" style="display:none;">
           {% for f, spec in formula_specs.items() %}
@@ -514,7 +512,7 @@
               <input type="text" id="fmNotes" name="notes" maxlength="255">
             </div>
             <button type="submit" class="btn btn-accent fm-submit" id="fmSubmit">Produce batch</button>
-            <p class="fm-hint">Stock is deducted from each material, and the bottle packaging is added to the batch’s cost.</p>
+            <p class="fm-hint">Deducts material stock and adds bottle packaging to cost.</p>
           </div>
         </aside>
       </div>
@@ -525,7 +523,7 @@
     <summary>Materials used by the formulas</summary>
     <form method="POST" action="{{ url_for('admin.save_formula_materials') }}" class="bb-form">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-      <p class="fm-hint">Which raw material is each ingredient. Set once; costs come from the Materials page.</p>
+      <p class="fm-hint">Pick the raw material for each ingredient. Set once.</p>
       {% if not materials %}<p class="fm-hint">No materials yet. <a href="{{ url_for('admin.materials') }}">Add your raw materials</a> first, then pick them here.</p>{% endif %}
       <div class="fm-roles">
         {% for r in formula_roles %}
@@ -617,11 +615,9 @@
     </div>
   </div>
   <div class="pg-foot">
-    <p>Bottling an 85ML/50ML/10ML/3ML SKU on the
-      <a href="{{ url_for('admin.production') }}">Production Log page</a> draws down a batch’s remaining mL. What it
-      actually gets charged, though, is the flat base price set per size on the
-      <a href="{{ url_for('admin.formulas') }}">Formulas page</a>, not this batch’s own cost/mL (shown here purely for
-      reference).</p>
+    <p>Bottling on the
+      <a href="{{ url_for('admin.production') }}">Production Log page</a> is charged the flat price from the
+      <a href="{{ url_for('admin.formulas') }}">Formulas page</a>.</p>
   </div>
   {% else %}
   {{ empty.state('No batches yet', 'A batch turns raw materials into bulk perfume. Produce one from a formula above and it is tracked here from the first mL to the last.', icon='flask') }}
@@ -640,8 +636,7 @@
       <div id="bdPlanResults" class="bb-plan-gap"></div>
     </div>
     <p class="text-faint" id="bdNoPlan" style="font-size:12.5px; margin:0 0 var(--space-md); display:none;">
-      This batch has no target bottle size, so its total cost is liquid ingredients only and packaging
-      isn’t folded in. Batches produced from a formula always include their bottle packaging.
+      No target size, so cost leaves out packaging.
     </p>
 
     <h3 class="bb-h3">Materials used</h3>
@@ -672,8 +667,7 @@
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <h3 class="bb-h3">Write off what's left</h3>
       <p class="text-faint" style="font-size:12.5px; margin:0 0 var(--space-xs);">
-        Sets the remaining mL to 0 and marks the batch Depleted. Its cost and past production are not changed,
-        and no loss is recorded in profit reports; only the audit log keeps the reason.
+        Sets remaining mL to 0 and marks the batch Depleted.
       </p>
       <div class="field">
         <label for="bdWriteOffReason">Reason</label>

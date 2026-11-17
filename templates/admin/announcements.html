@@ -17,9 +17,7 @@
 <div class="card card-pad ann-panel">
   <h2 class="panel-title">Send an announcement</h2>
   <p class="panel-note">
-    Pushed straight to the notification bell of every signed-in tab it targets. Nothing is saved to an
-    inbox, so only branches with the app open right now will see it. A record of who sent what, and to
-    whom, is still kept on the <a href="{{ url_for('admin.audit_log') }}">Admin Log</a>.
+    Shown in the bell of signed-in users it targets; sends are kept on the <a href="{{ url_for('admin.audit_log') }}">Admin Log</a>.
   </p>
   <form method="POST">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">

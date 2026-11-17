@@ -177,7 +177,7 @@
     </div>
   </div>
   <div class="pg-foot">
-    <p>Reference value is what the bundled products would cost at full price. Order price is what a partner actually pays after the discount. This is what shows up when they order.</p>
+    <p>Reference value is the full price; order price is after the discount.</p>
   </div>
   {% else %}
   {{ empty.state('No packages yet', 'A package bundles products for partners and branches. Create one with the form beside this list, then add products to it.', icon='box') }}
@@ -188,7 +188,7 @@
 <div class="card card-pad">
   <h2 class="pg-h">Create a package</h2>
   <p class="text-faint pg-note">
-    Give it a name and a discount now. You’ll add the actual products on the next screen.
+    Name and discount now; add products next.
   </p>
   <form method="POST" action="{{ url_for('admin.packages') }}">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -215,7 +215,7 @@
       <div class="field">
         <label for="discount_percent">Discount off reference price (%)</label>
         <input type="number" id="discount_percent" name="discount_percent" step="0.01" min="0" max="100" placeholder="15.00" required>
-        <div class="help">Applied to the combined price of everything in the bundle. Editable any time from the package’s page.</div>
+        <div class="help">Taken off the bundle’s combined price.</div>
       </div>
     </div>
     <button type="submit" class="btn btn-accent btn-cta">Add package</button>

@@ -134,8 +134,7 @@ def reset_user_password(user_id):
         "username": target["username"], "password": temp_password}
     log_action("reset_password", target=target["username"])
     flash(
-        f"Password for '{target['username']}' has been reset. "
-        "They'll be asked to set a new password the next time they sign in.",
+        f"Password for '{target['username']}' reset. They'll choose a new one at next sign-in.",
         "success",
     )
     return redirect(url_for("admin.users"))

@@ -236,7 +236,10 @@ Together they make it possible to answer both operational and administrative "wh
 - Light and dark mode work in every interface style. The sidebar wordmark is deepened to bronze on light surfaces, placeholder text and disabled buttons are kept readable, and chart and sparkline colours follow the theme live (no reload) and are kept at least 3:1 against what they are drawn on (`static/js/app/charts.js`).
 - The top bar sheds its extras as the room narrows (clock, shortcut hint, trend, "Today", full amount) so the bell, sound and theme buttons stay reachable on a tablet or with the sidebar pinned; on a phone the sales chip shows the compact amount.
 - The New sale dialog fits the screen without scrolling; the list of scents scrolls inside itself after about five rows.
-- On a phone the floating assistant button tucks away while the page scrolls down.
+- On a phone the floating assistant button tucks away while the page scrolls down, hides while the menu is open, and the Halo panel opens full screen with its own close button. On Halo's full chat page there is no floating button.
+- Empty states are centred (icon on top, text and action under it) at every width.
+- Touch screens get larger tap targets for report chips, tabs and mode switches, and the top-bar sales chip fits phones from 320px up (compact amount, count without the word "sales" on small phones).
+- Helper text is kept to one short sentence per note (`tests/test_ui_copy_and_mobile.py` fails if a template carries a paragraph over 130 characters).
 
 ### 10. Backups and restore
 

@@ -61,7 +61,7 @@ def record_sale():
     if request.method == "POST":
         if not consume_form_token("branch_record_sale"):
             flash(
-                "This sale already went through, or the form expired — check Sales History before recording it again.", "error")
+                "Already saved, or the form expired: check Sales History before retrying.", "error")
             return redirect(url_for("branch.record_sale"))
 
         try:

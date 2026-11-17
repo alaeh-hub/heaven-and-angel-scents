@@ -7,8 +7,7 @@
   <div class="card card-pad void-modal">
     <h2 class="void-title">Void this sale?</h2>
     <p class="void-note">
-      <strong id="voidSaleLabel"></strong> will be removed from sales and revenue, and its stock returned.
-      This can’t be undone. Record it again if it was voided by mistake.
+      <strong id="voidSaleLabel"></strong> will be removed from sales and its stock returned.
     </p>
     <form method="POST" id="voidSaleForm">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">

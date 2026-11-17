@@ -485,8 +485,7 @@ def _plan_bulk_batch(form):
         target_bottle_qty = int(total_volume_ml // bottle_size_ml(target_unit))
         if target_bottle_qty < 1:
             raise ValidationError(
-                f"This batch isn't big enough to fill even one {target_unit} bottle — "
-                "leave the target size blank, or enter a bigger batch.")
+                f"Too small to fill one {target_unit} bottle: enlarge the batch or clear the size.")
     return _BatchPlan(scent_name, batch_code, input_qty, input_unit, notes, target_unit,
                       target_bottle_qty, total_volume_ml, items, base_code=base_code)
 

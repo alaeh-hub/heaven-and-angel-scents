@@ -68,10 +68,7 @@
     <span class="hint" id="customersCount">{{ rows|length }} customer{{ 's' if rows|length != 1 }}</span>
   </div>
   <p class="cust-note">
-    Built from the customer name recorded on each sale. There’s no separate customer accounts system, so this
-    groups by exact name text the same way each branch’s own Customers page does. A customer who has bought from
-    more than one branch appears once here, with every branch they’ve shopped at listed. Address shown is from
-    their earliest sale on file, fleet-wide; walk-ins with no name recorded aren’t included.
+    Customers grouped by exact name on sales, across all branches.
   </p>
   {% if rows %}
   <div data-smart-table data-page-size="15" data-count-target="customersCount" data-count-label="customer">

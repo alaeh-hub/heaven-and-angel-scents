@@ -87,8 +87,7 @@
 
 {% block content %}
 <div class="card">
-  <p class="page-note">This tracks Production, Sale, and Refill activity at your branch. Dispatch, receipt, and damage
-      detail for stock requests now lives on each delivery instead, so see
+  <p class="page-note">Production, sale and refill only; deliveries are on
       <a href="{{ url_for('branch.request_stock') }}">Request Stock</a> or
       <a href="{{ url_for('branch.receive_stock') }}">Receive Shipment</a>.</p>
   {% if logs %}

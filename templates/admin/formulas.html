@@ -290,10 +290,7 @@
     <span class="hint">{{ units|length }} packaging size{{ 's' if units|length != 1 }}</span>
   </div>
   <p class="pg-lead">
-    A flat, hand-typed cost of goods for each Bottled packaging size, e.g. “85ML costs ₱95”. This is what a
-    Production Log run for that size gets charged, regardless of which
-    <a href="{{ url_for('admin.bulk_batches') }}">bulk batch</a> it’s actually filled from (a batch’s own real
-    materials cost is already accounted for when the batch itself is made, so it isn't re-derived per bottle here).
+    Flat cost per bottled size, whatever <a href="{{ url_for('admin.bulk_batches') }}">bulk batch</a> it is filled from.
   </p>
   <div class="table-wrap table-airy">
     <table class="table-fixed cogs-table">
@@ -350,9 +347,7 @@
     <span class="hint">current: ₱{{ '%.4f'|format(bulk_rate) }}/mL</span>
   </div>
   <p class="pg-lead">
-    The one shared rate bulk is sold at by the mL (Record Sale multiplies this by the mL amount
-    typed in). Bulk comes straight out of the bulk batches, oldest first, and each sale is costed at
-    the batch it came from, so this rate is only the selling price.
+    One selling rate per mL for bulk sales.
   </p>
   <form method="POST" action="{{ url_for('admin.save_bulk_rate') }}" class="fm-rate-form">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">

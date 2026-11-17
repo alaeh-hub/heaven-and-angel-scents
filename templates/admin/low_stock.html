@@ -158,7 +158,7 @@
       <button type="button" class="btn btn-ghost btn-sm" data-page-next>Next</button>
     </div>
   </div>
-  <p class="ls-note">Sorted most-critical first: furthest below its own reorder level, regardless of location. A branch can dispatch a request for these from its own Request Stock page; HQ dispatches once that request comes in on <a href="{{ url_for('admin.requests_list') }}">Stock Requests</a>. HQ’s own low stock is restocked through <a href="{{ url_for('admin.production') }}">Production</a>.</p>
+  <p class="ls-note">Most critical first, by how far below reorder level.</p>
   {% else %}
   {{ empty.state('Nothing running low', 'All HQ and branch inventory is above its reorder threshold.' if branch_filter == 'all' else 'This location is above its reorder threshold for every SKU.', icon='check', tone='clear') }}
   {% endif %}

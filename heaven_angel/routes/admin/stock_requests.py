@@ -276,8 +276,7 @@ def reject_request(request_id):
     )
     if rowcount == 0:
         flash(
-            f"{req['delivery_number']} could not be rejected — it's no longer Pending "
-            "(someone may have just dispatched or rejected it).", "error",
+            f"{req['delivery_number']} can't be rejected: it's no longer Pending.", "error",
         )
         return redirect(url_for("admin.requests_list"))
 

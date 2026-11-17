@@ -286,10 +286,7 @@
 {% block content %}
 <div class="card card-pad">
   <p class="scan-intro">
-    Point a camera at the QR code on a printed sale receipt, upload a photo or screenshot of one, or type its
-    code by hand. This confirms it’s genuinely on file
-    {{ 'for ' ~ session.branch_name if session.role != 'Admin' else '' }}
-    and shows exactly what was recorded, straight from the database.
+    Scan, upload or type a receipt code to check it’s on file{{ ' for ' ~ session.branch_name if session.role != 'Admin' else '' }}.
   </p>
 </div>
 
@@ -329,7 +326,7 @@
         <input type="text" id="scanManualInput" class="mono" placeholder="HAS-000128-XXXXXXXXXX" aria-label="Receipt code" autocomplete="off">
         <button type="button" class="btn btn-ghost" id="scanManualBtn">Verify</button>
       </div>
-      <div class="scan-help">Printed under the QR code on every receipt, useful if a camera or clear photo isn’t handy.</div>
+      <div class="scan-help">Printed under the QR code on every receipt.</div>
     </section>
   </div>
 

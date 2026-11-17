@@ -418,7 +418,7 @@
           <input type="checkbox" id="freebieCheckbox">
           This is a freebie / giveaway (₱0, no charge)
         </label>
-        <div class="help">Still deducts stock like a normal sale, just charges nothing, and hides payment method below.</div>
+        <div class="help">Deducts stock but charges nothing.</div>
       </div>
     </div>
 
@@ -479,7 +479,7 @@
         <label for="buyer_name">Name (Credit)</label>
         <input type="text" id="buyer_name" name="buyer_name" placeholder="Type the employee's or customer's name…" autocomplete="off"
           maxlength="120">
-        <div class="help">Free text: type whoever this credit sale is owed by, employee or customer. Not tied to a login account.
+        <div class="help">Type who owes this credit sale.
         </div>
       </div>
     </div>
@@ -510,8 +510,7 @@
             placeholder="Fills in automatically for a repeat customer">
         </div>
       </div>
-      <div class="rs-fine rs-pull">Picking a name already on file fills in
-        their address from the first sale it was recorded on. Edit it if it’s changed.</div>
+      <div class="rs-fine rs-pull">Picking a saved name fills in their address.</div>
     </div>
 
     {% include "_order_basket_list.html" %}
@@ -529,9 +528,7 @@
     <button type="button" class="btn btn-ghost btn-sm rs-close" id="importSalesCloseBtn" aria-label="Close"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
   </div>
   <p class="rs-lede">
-    Got a backlog of sales to log? Download the template, fill in one row per sale, then upload it here.
-    Every row is inserted at once instead of typing each one in by hand. To put several scents on one receipt,
-    give those rows the same text in the Receipt column (A, B, 1, 2...); leave it blank for a receipt of its own.
+    Fill in the template, one row per sale, then upload it.
   </p>
   <a href="{{ url_for('branch.sales_import_template') }}" class="btn btn-ghost rs-wide-btn" data-generate-file>
     Download import template (.xlsx)
@@ -542,7 +539,8 @@
     <div class="field">
       <label for="import_file">Filled-in template</label>
       <input type="file" id="import_file" name="import_file" accept=".xlsx" required>
-      <div class="help">Only SKUs already stocked at this branch can be imported; see the “Products (reference)” sheet in the template.</div>
+      <div class="help">Only SKUs stocked at this branch can be imported.</div>
+      <div class="help">Rows with the same Receipt text share one receipt.</div>
     </div>
     <button type="submit" class="btn btn-accent rs-submit">Upload sales</button>
   </form>
@@ -638,7 +636,7 @@
     </div>
   </div>
   {% else %}
-  {{ empty.state('No sales recorded yet', 'Record your first sale and it shows up here with its payment and receipt.', icon='receipt', action='New sale', trigger='openNewSaleBtn') }}
+  {{ empty.state('No sales recorded yet', 'Use New sale above to record the first one.', icon='receipt') }}
   {% endif %}
 </div>
 {% endblock %}

@@ -40,8 +40,7 @@
     <span class="hint">accounts, products &amp; branches, 300 per page{{ " (page %d)" % page if page > 1 else "" }}</span>
   </div>
   <p class="pg-note">
-    This is a history of account, product, and branch changes made by admins, separate from the
-    <a href="{{ url_for('admin.movement_logs') }}">Inventory Log</a>, which tracks stock quantity changes only.
+    Admin changes to accounts, products and branches; stock changes are in the <a href="{{ url_for('admin.movement_logs') }}">Inventory Log</a>.
   </p>
   {% if logs %}
   <div data-smart-table data-page-size="15">

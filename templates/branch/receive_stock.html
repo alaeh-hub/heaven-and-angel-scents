@@ -222,8 +222,7 @@
     <h2>Shipments in transit</h2><span class="hint">confirm what actually arrived, per shipment</span>
   </div>
   {% if in_transit %}
-  <p class="rv-note">Received + damaged should add up to what was dispatched for each
-    item. Anything short is flagged automatically in the ledger for Main Branch follow-up.</p>
+  <p class="rv-note">Received plus damaged should equal what was dispatched.</p>
   <div data-smart-list data-list-item-selector=".delivery-block" data-page-size="3">
     <div class="rv-list">
       {% for d in in_transit %}

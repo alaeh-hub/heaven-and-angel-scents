@@ -16,7 +16,7 @@
   <div class="rbx-head">
     <div>
       <h2 class="rbx-title" id="rbxTitle">Generate a report</h2>
-      <p class="rbx-lede">Choose a report, narrow it down if you want, then download it as PDF or Excel{% if not rb_admin %} for {{ session.branch_name }}{% endif %}.</p>
+      <p class="rbx-lede">Pick a report, then download it as PDF or Excel{% if not rb_admin %} for {{ session.branch_name }}{% endif %}.</p>
     </div>
   </div>
 
@@ -255,6 +255,6 @@
         <button type="submit" name="format" value="xlsx" class="btn btn-ghost" formtarget="_blank" id="rbxXlsx">Download Excel</button>
       </div>
     </div>
-    <p class="rbx-foot">Reports are capped at 1,000 rows. Narrow the date range or add a search to focus on what you need.</p>
+    <p class="rbx-foot">Reports are capped at 1,000 rows.</p>
   </form>
 </section>

@@ -52,9 +52,7 @@
   <div class="ptn-portal-text">
     <h2>Partner Portal link</h2>
     <p>
-      Share this privately with a distributor or reseller. It&rsquo;s the only way to reach the portal
-      (it isn&rsquo;t linked from the sign-in page or anywhere else). They&rsquo;ll browse packages, open one, and
-      send an inquiry straight from there.
+      Share this privately; it&rsquo;s the only way into the portal.
     </p>
   </div>
   <div class="ptn-portal-link">
@@ -153,7 +151,7 @@
     </div>
   </div>
   {% if totals.total_all %}
-  <p class="ptn-note">Package sales counts only inquiries an admin has marked Closed, see <a href="{{ url_for('admin.partner_inquiries') }}">Partner Inquiries</a>. A New or Contacted lead hasn&rsquo;t converted into a sale yet, so it isn&rsquo;t counted here.</p>
+  <p class="ptn-note">Only Closed inquiries count as sales, see <a href="{{ url_for('admin.partner_inquiries') }}">Partner Inquiries</a>.</p>
   {% endif %}
   {% else %}
   {{ empty.state('No ' ~ ('distributors' if type_filter == 'Distributor' else ('resellers' if type_filter == 'Reseller' else 'partners')) ~ ' yet', 'Add the first one below. Partners can then send inquiries from the private portal.', icon='users') }}
@@ -163,7 +161,7 @@
 <div class="card card-pad ptn-add">
   <h2>Add a partner</h2>
   <p class="ptn-add-lead">
-    Distributors resell further down a chain of their own; resellers sell directly to end customers. Either way, they&rsquo;re a bulk buyer outside the branch network.
+    Distributors resell to other sellers; resellers sell to customers.
   </p>
   <form method="POST" action="{{ url_for('admin.partners') }}">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">

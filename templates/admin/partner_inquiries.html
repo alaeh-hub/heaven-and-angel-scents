@@ -135,14 +135,7 @@
     <span class="hint pi-hint"><span>from the public partner portal</span><span>last 300</span></span>
   </div>
   <p class="pi-intro">
-    Every inquiry submitted through <a href="{{ portal_link }}" target="_blank" rel="noopener">the private
-      partner portal</a> lands here and is automatically added to <a href="{{ url_for('admin.partners') }}">Partners</a>.
-    An admin can only change its Status (New, Contacted, Follow-up/On Hold, then Closed/Declined)
-    and internal Remarks; everything else stays a permanent record of what the partner actually submitted.
-    Closed means the order is confirmed (it counts as a sale); <strong>Fulfill</strong> then ships it, taking the
-    package&rsquo;s items out of HQ stock. Produce any shortfall on
-    <a href="{{ url_for('admin.production') }}">Production Log</a> first. Moving a fulfilled order off Closed
-    returns its items to HQ stock.
+    Inquiries from <a href="{{ portal_link }}" target="_blank" rel="noopener">the partner portal</a> land here; Closed counts as a sale.
   </p>
   {% if inquiries %}
   <div data-smart-table data-page-size="15">
@@ -337,8 +330,7 @@
   <div class="card card-pad pi-modal pi-modal-fulfill">
     <h2>Fulfill order</h2>
     <p class="pi-modal-lead">
-      Ships <strong id="fulfillCompanyLabel"></strong>&rsquo;s package: these items come out of HQ stock and are logged in
-      the Inventory Log.
+      Ships <strong id="fulfillCompanyLabel"></strong>&rsquo;s package from HQ stock.
     </p>
     <div id="fulfillBody"></div>
     <p class="pi-fulfill-blocked" id="fulfillBlocked">
@@ -356,8 +348,7 @@
   <div class="card card-pad pi-modal pi-modal-remarks">
     <h2>Remarks</h2>
     <p class="pi-modal-lead">
-      Internal note for <strong id="remarksCompanyLabel"></strong>&rsquo;s inquiry: visible to admins only, never
-      shown to the partner. Independent of status; leave it blank to clear it.
+      Internal note for <strong id="remarksCompanyLabel"></strong>&rsquo;s inquiry, hidden from the partner.
     </p>
     <form method="POST" id="remarksForm">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">

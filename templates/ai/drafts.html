@@ -168,11 +168,9 @@
 {% block content %}
 <div class="card card-pad">
   <p class="dr-intro">
-    Halo can draft a stock request when you ask it to, or when it spots low stock,
-    but nothing here is real until you approve it. Approving turns a draft into a normal
-    Pending delivery on the <a
+    Approving a draft makes it a Pending delivery on the <a
       href="{{ url_for('admin.requests_list') if session.role == 'Admin' else url_for('branch.request_stock') }}">Stock
-      Requests</a> page, exactly as if it had been requested by hand.
+      Requests</a> page.
   </p>
 </div>
 

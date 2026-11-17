@@ -20,9 +20,7 @@
 <div class="card card-pad danger-panel">
   <h2 class="panel-title">Wipe all business data</h2>
   <p class="panel-note">
-    For development only. This permanently deletes every record below (products, inventory, sales, deliveries,
-    materials, partners, logs) and all uploaded product photos. There is no undo, so back up first if you might
-    need any of it (see docs/BACKUP.md).
+    Development only: permanently deletes all business data and photos, so back up first.
   </p>
   <p class="panel-note">
     <strong>Kept:</strong> {{ kept_tables|join(', ') }}, so every account can still sign in.

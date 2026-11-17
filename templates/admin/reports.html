@@ -285,8 +285,7 @@
         </tbody>
       </table>
     </div>
-    <p class="pg-note">Only inquiries marked Closed count as an order here: a New or
-      Contacted lead hasn’t converted yet.</p>
+    <p class="pg-note">Only Closed inquiries count as orders.</p>
     {% else %}
     {{ empty.state('No closed package orders yet', 'An order counts here once its inquiry is marked Closed.', icon='box', compact=True) }}
     {% endif %}
