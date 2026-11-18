@@ -20,6 +20,7 @@ from heaven_angel.utils import (
 
 from heaven_angel.routes.admin.batch_formulas import (
     ROLES, calc_to_json, formula_for_scent, load_catalog, load_formula_config, load_scent_choices,
+    prepare_scent_oils,
 )
 from heaven_angel.routes.admin._common import HQ_BRANCH_ID, bp
 
@@ -30,6 +31,7 @@ class _ProductionRun:
     batch_code: str | None
     qty: int
     bulk_batch_id: int
+    unit: str                   # the bottle size, e.g. 85ML
     bottle_ml: object           # mL of bulk one bottle takes
     cogs_per_unit: decimal.Decimal
     total_cogs: decimal.Decimal
@@ -71,12 +73,61 @@ def _plan_production_run(form):
         cogs_setting["base_cost_per_unit"] if cogs_setting else decimal.Decimal("0")
     ).quantize(decimal.Decimal("0.0001"))
     total_cogs = (cogs_per_unit * qty).quantize(decimal.Decimal("0.01"))
-    return _ProductionRun(sku, batch_code, qty, bulk_batch_id, bottle_ml, cogs_per_unit, total_cogs)
+    return _ProductionRun(sku, batch_code, qty, bulk_batch_id, product["unit"], bottle_ml, cogs_per_unit, total_cogs)
+
+
+def _deduct_packaging(cur, run):
+    """Take the bottles' packaging (bottle, sticker, seal...) out of stock.
+
+    A batch made through the formula flow already had its packaging deducted
+    when it was created, so only a batch with no packaging on record (e.g. an
+    opening balance) is handled here. What goes in one bottle is the size's own
+    packaging list (unit_formula_items) if it has one, otherwise the bulk
+    formulas' packaging when the size is the formulas' bottle size. The cost of
+    goods stays the flat cost per size, which already includes packaging.
+    Returns the number of packaging materials deducted; raises TransactionAborted.
+    """
+    cur.execute("SELECT 1 FROM bulk_batch_materials WHERE batch_id = %s AND is_packaging = TRUE LIMIT 1",
+                (run.bulk_batch_id,))
+    if cur.fetchone():
+        return 0
+    cur.execute("SELECT material_id, qty_per_unit AS per_bottle FROM unit_formula_items WHERE unit = %s",
+                (run.unit,))
+    items = cur.fetchall()
+    if not items:
+        cur.execute("SELECT bottle_unit FROM bulk_formula_settings WHERE id = 1")
+        settings = cur.fetchone()
+        if settings and settings["bottle_unit"] == run.unit:
+            cur.execute(
+                """SELECT bfm.material_id, bfp.qty_per_bottle AS per_bottle
+                   FROM bulk_formula_packaging bfp
+                   JOIN batch_formula_materials bfm ON bfm.role = bfp.role""")
+            items = cur.fetchall()
+    items = [i for i in items if i["per_bottle"] > 0]
+    if not items:
+        return 0
+    cur.execute(
+        f"""SELECT material_id, material_name, unit, stock_qty FROM raw_materials
+            WHERE material_id IN ({','.join(['%s'] * len(items))}) FOR UPDATE""",
+        tuple(i["material_id"] for i in items))
+    stock = {m["material_id"]: m for m in cur.fetchall()}
+    for item in items:
+        material = stock[item["material_id"]]
+        needed = item["per_bottle"] * run.qty
+        if material["stock_qty"] < needed:
+            raise TransactionAborted(
+                f"Not enough {material['material_name']} in stock to package {run.qty} bottle(s): "
+                f"{material['stock_qty']:g} {material['unit'].lower()} left, {needed:g} needed.")
+    for item in items:
+        cur.execute("UPDATE raw_materials SET stock_qty = stock_qty - %s WHERE material_id = %s",
+                    (item["per_bottle"] * run.qty, item["material_id"]))
+    return len(items)
 
 
 def _record_production_run(run, user_id):
-    """Write the run in one transaction: deduct the bulk batch (Bottled), log
-    the run, add HQ warehouse stock, and log the movement and cost of goods.
+    """Write the run in one transaction: deduct the bulk batch (Bottled), take
+    the packaging out of stock (see _deduct_packaging), log the run, add HQ
+    warehouse stock, and log the movement and cost of goods.
     Raises TransactionAborted with a message to flash."""
     with transaction() as conn:
         cur = conn.cursor(dictionary=True)
@@ -101,6 +152,7 @@ def _record_production_run(run, user_id):
             "UPDATE bulk_batches SET remaining_ml = remaining_ml - %s WHERE batch_id = %s",
             (needed_ml, run.bulk_batch_id),
         )
+        packaged = _deduct_packaging(cur, run)
 
         cur.execute(
             "INSERT INTO production_logs (sku, batch_code, qty_produced) VALUES (%s, %s, %s)",
@@ -137,6 +189,7 @@ def _record_production_run(run, user_id):
             (run.sku, log_id, run.bulk_batch_id, run.qty, run.cogs_per_unit, run.total_cogs, user_id),
         )
         cur.close()
+    return packaged
 
 
 def _production_page_data():
@@ -227,12 +280,13 @@ def production():
             return redirect(url_for("admin.production"))
 
         try:
-            _record_production_run(run, session.get("user_id"))
+            packaged = _record_production_run(run, session.get("user_id"))
             notify_admin(["production", "inventory", "movement_logs"])
             notify_all(["materials"])
             unit_label = "units"
             flash(
-                f"Logged {run.qty} {unit_label} produced — ₱{run.total_cogs:,.2f} in cost of goods — and added to HQ warehouse stock.",
+                f"Logged {run.qty} {unit_label} produced — ₱{run.total_cogs:,.2f} in cost of goods — and added to HQ warehouse stock."
+                + (" Packaging stock deducted." if packaged else ""),
                 "success",
             )
         except TransactionAborted as err:
@@ -372,6 +426,7 @@ def bulk_batches():
 
     config = load_formula_config()
     resolved, catalog, missing_roles = load_catalog(materials_list, config)
+    scent_oils = prepare_scent_oils(materials_list, config)
     return render_template(
         "admin/bulk_batches.html",
         materials=materials_list,
@@ -385,6 +440,8 @@ def bulk_batches():
             for f, sizes in catalog.items()
         },
         scent_choices=load_scent_choices(config),
+        scent_oils_json={code: {"rate": float(r["cost_per_unit"]), "stock": float(r["stock_qty"])}
+                         for code, r in scent_oils.items()},
         formula_roles=[
             {"role": role, "label": label,
              "material_id": resolved[role]["material_id"] if role in resolved else None}
@@ -424,6 +481,7 @@ class _BatchPlan:
     formula_label: str | None = None   # set when produced from a built-in formula
     packaging_items: list | None = None  # (material_id, qty per bottle); None = the target size's unit_formula_items
     base_code: str | None = None        # the product code (A1) the batch is of; a batch without one can be bottled but not sold by the mL
+    scent_oil: tuple | None = None      # (base_code, oil material id): take that material's oil from the scent's own stock and price
 
 
 def _valid_base_code(raw):
@@ -490,9 +548,11 @@ def _plan_bulk_batch(form):
                       target_bottle_qty, total_volume_ml, items, base_code=base_code)
 
 
-def _price_liquid_lines(cur, items):
+def _price_liquid_lines(cur, items, scent_oil=None):
     """Lock and stock-check each liquid ingredient. Returns
-    (materials_by_id, line_rows, liquid_subtotal); raises TransactionAborted."""
+    (materials_by_id, line_rows, liquid_subtotal); raises TransactionAborted.
+    Each line row ends with the scent code whose own oil stock it comes out
+    of (None for an ordinary material)."""
     placeholders = ",".join(["%s"] * len(items))
     cur.execute(
         f"""SELECT material_id, material_name, unit, cost_per_unit, stock_qty
@@ -500,6 +560,18 @@ def _price_liquid_lines(cur, items):
         tuple(i[0] for i in items),
     )
     materials_by_id = {row["material_id"]: row for row in cur.fetchall()}
+
+    # A scent's own oil replaces the pooled Oil Scent's price and stock.
+    oil_code = None
+    if scent_oil and scent_oil[1] in materials_by_id:
+        cur.execute("SELECT cost_per_unit, stock_qty FROM scent_oils WHERE base_code = %s FOR UPDATE",
+                    (scent_oil[0],))
+        own = cur.fetchone()
+        if own:
+            oil_code = scent_oil[0]
+            materials_by_id[scent_oil[1]] = {
+                **materials_by_id[scent_oil[1]],
+                "cost_per_unit": own["cost_per_unit"], "stock_qty": own["stock_qty"]}
 
     liquid_subtotal = decimal.Decimal("0")
     line_rows = []
@@ -522,15 +594,17 @@ def _price_liquid_lines(cur, items):
             decimal.Decimal("1"), qty_unit, material["unit"])
         native_qty_used = convert_material_qty(qty_used, qty_unit, material["unit"])
         if material["stock_qty"] < native_qty_used:
+            label = material["material_name"] + (f" for {oil_code}" if oil_code and material_id == scent_oil[1] else "")
             raise TransactionAborted(
-                f"Not enough {material['material_name']} in stock — "
+                f"Not enough {label} in stock — "
                 f"{material['stock_qty']:g} {material['unit'].lower()} left, "
                 f"{qty_used:g} {qty_unit.lower()} needed."
             )
         line_cost = (qty_used * cost_per_qty_unit).quantize(decimal.Decimal("0.0001"))
         liquid_subtotal += line_cost
         line_rows.append(
-            (material_id, qty_used, qty_unit, cost_per_qty_unit, line_cost, native_qty_used, False))
+            (material_id, qty_used, qty_unit, cost_per_qty_unit, line_cost, native_qty_used, False,
+             oil_code if oil_code and material_id == scent_oil[1] else None))
     return materials_by_id, line_rows, liquid_subtotal
 
 
@@ -588,7 +662,7 @@ def _price_packaging_lines(cur, plan, materials_by_id):
         packaging_subtotal += line_cost
         line_rows.append(
             (material["material_id"], qty_used, material["unit"],
-             material["cost_per_unit"], line_cost, qty_used, True))
+             material["cost_per_unit"], line_cost, qty_used, True, None))
     return line_rows, packaging_subtotal
 
 
@@ -598,7 +672,7 @@ def _create_bulk_batch_records(plan, user_id):
     raises TransactionAborted."""
     with transaction() as conn:
         cur = conn.cursor(dictionary=True)
-        materials_by_id, line_rows, liquid_subtotal = _price_liquid_lines(cur, plan.items)
+        materials_by_id, line_rows, liquid_subtotal = _price_liquid_lines(cur, plan.items, plan.scent_oil)
         packaging_rows, packaging_subtotal = _price_packaging_lines(cur, plan, materials_by_id)
         line_rows += packaging_rows
 
@@ -624,7 +698,7 @@ def _create_bulk_batch_records(plan, user_id):
         batch_id = cur.lastrowid
 
         for (material_id, qty_used, qty_unit, cost_per_unit_snapshot, line_cost,
-             native_qty_used, is_packaging) in line_rows:
+             native_qty_used, is_packaging, from_scent_oil) in line_rows:
             cur.execute(
                 """INSERT INTO bulk_batch_materials
                    (batch_id, material_id, qty_used, qty_used_unit, cost_per_unit_snapshot,
@@ -633,10 +707,16 @@ def _create_bulk_batch_records(plan, user_id):
                 (batch_id, material_id, qty_used, qty_unit,
                  cost_per_unit_snapshot, line_cost, is_packaging),
             )
-            cur.execute(
-                "UPDATE raw_materials SET stock_qty = stock_qty - %s WHERE material_id = %s",
-                (native_qty_used, material_id),
-            )
+            if from_scent_oil:
+                cur.execute(
+                    "UPDATE scent_oils SET stock_qty = stock_qty - %s WHERE base_code = %s",
+                    (native_qty_used, from_scent_oil),
+                )
+            else:
+                cur.execute(
+                    "UPDATE raw_materials SET stock_qty = stock_qty - %s WHERE material_id = %s",
+                    (native_qty_used, material_id),
+                )
         cur.close()
     return total_cost, cost_per_ml
 
@@ -749,7 +829,9 @@ def produce_batch_formula():
 
     materials_list = query(
         "SELECT material_id, material_name, unit, stock_qty, cost_per_unit FROM raw_materials")
-    _resolved, catalog, missing_roles = load_catalog(materials_list, config)
+    # A catalog scent is costed at its own oil's price and takes its own oil stock.
+    own_oil = prepare_scent_oils(materials_list, config).get(base_code) if base_code else None
+    resolved, catalog, missing_roles = load_catalog(materials_list, config, oil=own_oil)
     calc = catalog[formula][size]
     if calc is None:
         flash("Set up the formula materials first (still missing: " + ", ".join(missing_roles) + ").", "error")
@@ -768,7 +850,8 @@ def produce_batch_formula():
         [(ln["material_id"], ln["qty"], ln["qty_unit"]) for ln in calc["lines"]],
         calc["label"],
         [(p["material_id"], p["per_bottle"]) for p in calc["packaging"]],
-        base_code)
+        base_code,
+        (base_code, resolved["oil"]["material_id"]) if own_oil else None)
     return _save_batch(plan)
 
 

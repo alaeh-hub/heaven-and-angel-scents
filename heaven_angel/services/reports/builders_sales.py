@@ -499,6 +499,9 @@ def report_financial_summary(filters, branch_scope):
                UNION ALL
                SELECT purchased_at, cost AS package_cost
                FROM material_restock_events
+               UNION ALL
+               SELECT purchased_at, cost AS package_cost
+               FROM scent_oil_restocks
            ) material_purchases WHERE 1=1""", "purchased_at"))
     revenue = sales + packages
     rows = [

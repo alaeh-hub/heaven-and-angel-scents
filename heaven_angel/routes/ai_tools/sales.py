@@ -359,8 +359,12 @@ def get_financials(args, ctx):
         fetchone=True,
     )["v"]
     cogs = cogs_sold(period_sql(period, "s.sold_at"), period_sql(period, PACKAGE_DATE_SQL))
+    # Materials bought, including the oil bought per scent (scent_oil_restocks).
     materials = query(
-        "SELECT COALESCE(SUM(package_cost), 0) AS v FROM raw_materials WHERE " + period_sql(period, "created_at"),
+        "SELECT COALESCE(SUM(amt), 0) AS v FROM ("
+        "SELECT created_at AS d, package_cost AS amt FROM raw_materials "
+        "UNION ALL SELECT purchased_at, cost FROM scent_oil_restocks) purchases WHERE "
+        + period_sql(period, "d"),
         fetchone=True,
     )["v"]
     top_packages = query(

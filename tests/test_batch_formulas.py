@@ -55,6 +55,14 @@ def _make_role_materials(sql):
     }
 
 
+def _set_scent_oil(sql, code, price, stock):
+    cur = sql.cursor()
+    cur.execute("UPDATE scent_oils SET cost_per_unit = %s, stock_qty = %s WHERE base_code = %s",
+                (price, stock, code))
+    sql.commit()
+    cur.close()
+
+
 def _save_materials(client, m):
     resp = client.post(MATERIALS_URL, data={role: str(m[role]) for role in ROLES})
     assert resp.status_code == 302
@@ -190,6 +198,8 @@ def test_schema_seeds_the_constant_suppliers_and_materials(sql):
         sql, "SELECT supplier_name, address FROM suppliers")}
     assert suppliers["BubbleMix Fragrances and Household Goods Store"].startswith("107 E. Rodriguez Sr. Ave.")
     assert suppliers["Centralpack"].startswith("58 F. Bautista St.")
+    assert suppliers["Alfamart - Lipa"] == "Lipa City, Batangas"
+    assert suppliers["Shopee"] is None
 
     by_name = {r["material_name"]: r for r in _rows(
         sql, """SELECT rm.material_name, rm.unit, rm.cost_per_unit, s.supplier_name
@@ -199,8 +209,9 @@ def test_schema_seeds_the_constant_suppliers_and_materials(sql):
         assert by_name[name]["supplier_name"] == bubblemix
     for name in ("Perfume Alcohol", "Frosted 85 ml Bottle"):
         assert by_name[name]["supplier_name"] == "Centralpack"
-    for name in ("Distilled Water", "Sticker", "Plastic Seal"):
-        assert by_name[name]["supplier_name"] is None
+    assert by_name["Distilled Water"]["supplier_name"] == "Alfamart - Lipa"
+    for name in ("Sticker", "Plastic Seal"):
+        assert by_name[name]["supplier_name"] == "Shopee"
     assert by_name["Oil Scent"]["cost_per_unit"] == Decimal("4.0000")
     assert by_name["Distilled Water"]["unit"] == "Liter"
 
@@ -296,6 +307,10 @@ def test_producing_checks_the_scent_matches_its_formula(client, sql):
     m = _make_role_materials(sql)
     _save_materials(client, m)
 
+    # Each scent has its own oil row (made when the page opens); give A9 some.
+    client.get(BULK_BATCHES_URL)
+    _set_scent_oil(sql, "A9", price="4", stock="1000")
+
     # A9 uses Formula 14%, so posting it with 15% is refused and nothing is made.
     token = get_form_token(client, BULK_BATCHES_URL)
     resp = client.post(PRODUCE_URL, data={
@@ -348,3 +363,66 @@ def test_tools_has_its_own_sidebar_category_not_the_production_tabs(client, sql)
     # Attribute order and whitespace are not the point: the Tools link carries the "active" class.
     import re
     assert re.search(r'<a class="nav-link active"[^>]*href="/admin/tools"', tools)
+
+
+def test_a_batch_uses_its_own_scents_oil_price_and_stock(client, sql):
+    _signed_in_admin(client, sql)
+    m = _make_role_materials(sql)
+    _save_materials(client, m)
+    client.get(BULK_BATCHES_URL)                      # creates a row per scent
+    _set_scent_oil(sql, "A1", price="10", stock="600")
+    _set_scent_oil(sql, "H1", price="2", stock="600")
+    pooled_before = get_raw_material(sql, m["oil"])["stock_qty"]
+
+    token = get_form_token(client, BULK_BATCHES_URL)
+    client.post(PRODUCE_URL, data={
+        "form_token": token, "formula": "15%", "size": "500", "scent_code": "A1", "scent_name": "Pricey"})
+    batch = _rows(sql, "SELECT * FROM bulk_batches WHERE scent_name = 'Pricey'")[0]
+    oil_line = _rows(sql, "SELECT * FROM bulk_batch_materials WHERE batch_id = %s AND material_id = %s",
+                     (batch["batch_id"], m["oil"]))[0]
+    assert oil_line["cost_per_unit_snapshot"] == Decimal("10")      # A1's price, not the pooled 4
+    assert oil_line["line_cost"] == Decimal("5000")
+    stock = {r["base_code"]: r["stock_qty"] for r in _rows(sql, "SELECT base_code, stock_qty FROM scent_oils")}
+    assert stock["A1"] == Decimal("100")              # 600 - 500
+    assert stock["H1"] == Decimal("600")              # another scent's oil is untouched
+    assert get_raw_material(sql, m["oil"])["stock_qty"] == pooled_before
+
+    # A1 now has too little oil for another 500 ml, although H1 has plenty.
+    token = get_form_token(client, BULK_BATCHES_URL)
+    resp = client.post(PRODUCE_URL, data={
+        "form_token": token, "formula": "15%", "size": "500", "scent_code": "A1", "scent_name": "Again"},
+        follow_redirects=True)
+    assert b"Not enough materials" in resp.data
+    assert not _rows(sql, "SELECT 1 FROM bulk_batches WHERE scent_name = 'Again'")
+
+
+def test_scent_oil_restock_averages_the_price_and_import_checks_every_row(client, sql):
+    _signed_in_admin(client, sql)
+    m = _make_role_materials(sql)
+    _save_materials(client, m)
+    client.get("/admin/materials")
+    _set_scent_oil(sql, "A1", price="4", stock="100")
+
+    resp = client.post("/admin/materials/scent-oils/restock", data={
+        "base_code": "A1", "qty": "100", "cost": "600"})   # 100 ml at 4 + 100 ml at 6
+    assert resp.status_code == 302
+    row = _rows(sql, "SELECT * FROM scent_oils WHERE base_code = 'A1'")[0]
+    assert row["stock_qty"] == Decimal("200") and row["cost_per_unit"] == Decimal("5")
+    assert _rows(sql, "SELECT qty FROM scent_oil_restocks WHERE base_code = 'A1'")[0]["qty"] == Decimal("100")
+
+    import io
+    bad = io.BytesIO("\n".join(["code,price_per_unit,stock", "A1,7,50", "NOPE,1,1"]).encode())
+    client.post("/admin/materials/scent-oils/import", data={"file": (bad, "x.csv")},
+                content_type="multipart/form-data")
+    assert _rows(sql, "SELECT cost_per_unit FROM scent_oils WHERE base_code = 'A1'")[0]["cost_per_unit"] == Decimal("5")
+
+    good = io.BytesIO("\n".join(["code,price_per_unit,stock", "A1,7,", "H1,3,40"]).encode())
+    client.post("/admin/materials/scent-oils/import", data={"file": (good, "x.csv")},
+                content_type="multipart/form-data")
+    a1 = _rows(sql, "SELECT * FROM scent_oils WHERE base_code = 'A1'")[0]
+    h1 = _rows(sql, "SELECT * FROM scent_oils WHERE base_code = 'H1'")[0]
+    assert a1["cost_per_unit"] == Decimal("7") and a1["stock_qty"] == Decimal("200")   # blank stock kept
+    assert h1["cost_per_unit"] == Decimal("3") and h1["stock_qty"] == Decimal("40")
+
+    page = client.get("/admin/materials").get_data(as_text=True)
+    assert "Scent oils" in page and "scentOilEditOverlay" in page

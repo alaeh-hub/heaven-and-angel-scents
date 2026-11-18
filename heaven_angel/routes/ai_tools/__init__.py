@@ -14,9 +14,11 @@ dumping a full data snapshot into the prompt on every turn. Each tool is:
     A human still has to approve it (see the /ai/drafts routes in ai.py)
     before it becomes a real delivery HQ can dispatch: the agent can
     *draft*, never *commit*.
-  - Bulk/Refill products (products.unit = 'BULK') keep qty_sold,
-    stock_qty and qty_produced in mL, never bottles — every tool keeps
-    them apart (bulk_ml / stock_unit) instead of adding them to bottles.
+  - Bulk and refill sales (SKU '<code>-BULK', see sale_catalog; there are no
+    BULK products any more) are in mL, never bottles, and bulk stock is the
+    mL left in bulk_batches — every tool keeps them apart (bulk_ml /
+    stock_unit) instead of adding them to bottles.
+  - Oil is stocked per scent (scent_oils); get_scent_oils reports it.
 
 Layout: stock.py (stock, deliveries, discrepancies, the draft proposal),
 sales.py (sales, credit, customers, financials), catalog.py (HQ catalog,

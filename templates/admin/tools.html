@@ -192,6 +192,7 @@
     var FACTORS = {{ unit_factors | tojson }};
     var BOTTLES = {{ bottle_sizes | tojson }};
     var CATALOG = {{ formula_catalog_json | tojson }};
+    var SCENT_OILS = {{ scent_oils_json | tojson }};
     var UNIT = { Milliliter: 'mL', Gram: 'g', Liter: 'L', Gallon: 'gal', Piece: 'pcs' };
 
     function $(id) { return document.getElementById(id); }
@@ -313,6 +314,11 @@
     function fcLoad() {
       var f = fcFormulaName();
       current = f && fcSize.value && CATALOG[f] ? CATALOG[f][fcSize.value] : null;
+      // Oil is priced per scent: start from this scent's own oil price (still editable below).
+      if (current && fcScent.value && fcScent.value !== '__other' && SCENT_OILS[fcScent.value]) {
+        current = JSON.parse(JSON.stringify(current));
+        current.lines[0].rate = SCENT_OILS[fcScent.value].rate;
+      }
       var fcEmpty = $('fcEmpty');
       if (!current) {
         fcOut.style.display = 'none';

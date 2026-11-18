@@ -12,7 +12,9 @@ from heaven_angel.db import execute, query
 from heaven_angel.decorators import admin_required
 from heaven_angel.services.audit import log_action
 from heaven_angel.services import backup_jobs
-from heaven_angel.services.backup import RestoreError, prepare_restore, restore_uploads, run_restore, save_safety_backup
+from heaven_angel.services.backup import (
+    RestoreError, empty_tables_missing_from_backup, prepare_restore, restore_uploads, run_restore, save_safety_backup,
+)
 from heaven_angel.services.backup_jobs import ALLOWED_DAYS
 from heaven_angel.services.backup_jobs import backup_lock as _backup_lock
 from heaven_angel.services.backup_jobs import backup_state as _backup_state
@@ -196,6 +198,7 @@ def _restore_job(app, path, actor_id, actor_name):
             safety = save_safety_backup()
             _restore_state["phase"] = "Restoring the database"
             run_restore(statements)
+            emptied = empty_tables_missing_from_backup(tables)
             photos = 0
             try:
                 _restore_state["phase"] = "Restoring product photos"
@@ -204,6 +207,8 @@ def _restore_job(app, path, actor_id, actor_name):
                 app.logger.exception("Photos could not be restored")
             action = "RESTORE_OK"
             details = f"{len(tables)} tables restored, {photos} photos; previous data saved as {os.path.basename(safety)}"
+            if emptied:
+                details += "; this backup predates " + ", ".join(emptied) + ", so those were emptied"
             _restore_state["summary"] = details
         except RestoreError as exc:
             details = str(exc)

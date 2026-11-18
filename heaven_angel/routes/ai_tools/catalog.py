@@ -35,11 +35,57 @@ def get_raw_materials(args, ctx):
             "last_purchase": h["points"][-1]["date"] if h else None,
             "price_change_since_first_pct": None if not h or h["change_pct"] is None or h["purchase_count"] < 2 else round(h["change_pct"], 1),
         })
-    return {
+    oil = query("SELECT COUNT(*) AS scents, COALESCE(SUM(stock_qty), 0) AS stock FROM scent_oils", fetchone=True)
+    out = {
         "results": results,
         "note": ("Sorted lowest stock first. cost_per_unit is the blended average across every purchase; "
                  "latest_price_paid_per_unit is what the most recent purchase cost. "
-                 "Use get_material_price_history for the full price story."),
+                 "Use get_material_price_history for the full price story. "
+                 "Oil Scent is stocked and priced per scent: its stock_qty here is only the shared pool, used "
+                 "for a batch of a scent that is not in the catalog. Each scent's own oil is in get_scent_oils."),
+    }
+    if oil and oil["scents"]:
+        out["scent_oils"] = {"scents": oil["scents"], "total_stock": float(oil["stock"])}
+    return out
+
+
+def get_scent_oils(args, ctx):
+    """The oil stocked for each scent (scent_oils): stock, price per unit and what was bought. A bulk batch
+    of a catalog scent is costed at that scent's price and takes its oil from that scent's stock."""
+    name = (args.get("name") or "").strip()
+    only_in_stock = bool(args.get("only_in_stock"))
+    where, params = "1=1", []
+    if name:
+        where += " AND (so.scent_name LIKE %s OR so.base_code LIKE %s)"
+        params += [f"%{name}%", f"%{name}%"]
+    if only_in_stock:
+        where += " AND so.stock_qty > 0"
+    rows = query(
+        "SELECT so.base_code, so.scent_name, so.cost_per_unit, so.stock_qty, "
+        "COALESCE(SUM(r.qty), 0) AS bought_qty, COALESCE(SUM(r.cost), 0) AS bought_cost, "
+        "MAX(r.purchased_at) AS last_purchase "
+        "FROM scent_oils so LEFT JOIN scent_oil_restocks r ON r.base_code = so.base_code "
+        "WHERE " + where + " GROUP BY so.base_code, so.scent_name, so.cost_per_unit, so.stock_qty "
+        "ORDER BY so.stock_qty ASC, so.scent_name LIMIT %s",
+        tuple(params) + (MAX_ROWS,),
+    )
+    totals = query(
+        "SELECT COUNT(*) AS scents, COALESCE(SUM(stock_qty), 0) AS stock, "
+        "COALESCE(SUM(stock_qty * cost_per_unit), 0) AS value, COALESCE(SUM(stock_qty <= 0), 0) AS out_of_stock "
+        "FROM scent_oils", fetchone=True)
+    return {
+        "results": [
+            {"code": r["base_code"], "scent": r["scent_name"], "stock_qty": float(r["stock_qty"]),
+             "price_per_unit": float(r["cost_per_unit"]),
+             "stock_value": round(float(r["stock_qty"]) * float(r["cost_per_unit"]), 2),
+             "bought_qty": float(r["bought_qty"]), "bought_cost": float(r["bought_cost"]),
+             "last_purchase": r["last_purchase"].isoformat() if r["last_purchase"] else None}
+            for r in rows
+        ],
+        "all_scents": {"scents": totals["scents"], "total_stock": float(totals["stock"]),
+                       "stock_value": round(float(totals["value"]), 2), "out_of_stock": int(totals["out_of_stock"])},
+        "note": ("Sorted lowest stock first. Oil is in mL. A scent at 0 stock cannot be used for a new bulk batch "
+                 "until its oil is restocked (Materials page, Scent oils)."),
     }
 
 
@@ -96,18 +142,24 @@ def get_formulas(args, ctx):
 def get_bulk_batches(args, ctx):
     active_only = args.get("active_only", True)
     sql = (
-        "SELECT batch_code, scent_name, total_volume_ml, remaining_ml, cost_per_ml, total_cost, created_at "
-        "FROM bulk_batches"
+        "SELECT bb.batch_code, bb.base_code, bb.scent_name, bb.total_volume_ml, bb.remaining_ml, bb.cost_per_ml, "
+        "bb.total_cost, bb.created_at, bb.formula_label, bb.notes, "
+        "EXISTS(SELECT 1 FROM bulk_batch_materials m WHERE m.batch_id = bb.batch_id AND m.is_packaging) AS has_packaging "
+        "FROM bulk_batches bb"
     )
     if active_only:
-        sql += " WHERE remaining_ml > 0"
-    sql += " ORDER BY created_at DESC LIMIT %s"
+        sql += " WHERE bb.remaining_ml > 0"
+    sql += " ORDER BY bb.created_at DESC LIMIT %s"
     rows = query(sql, (MAX_ROWS,))
     results = []
     for r in rows:
         remaining = float(r["remaining_ml"] or 0)
         results.append({
-            "batch_code": r["batch_code"], "scent": r["scent_name"],
+            "batch_code": r["batch_code"], "scent_code": r["base_code"], "scent": r["scent_name"],
+            "formula": r["formula_label"], "notes": r["notes"],
+            # A batch with its packaging recorded had the bottles, stickers and seals taken out of stock when it was
+            # made; for any other batch they come out of stock as bottles are produced from it.
+            "packaging_recorded": bool(r["has_packaging"]),
             "total_volume_ml": float(r["total_volume_ml"] or 0), "remaining_ml": remaining,
             "cost_per_ml": float(r["cost_per_ml"] or 0), "total_cost": float(r["total_cost"] or 0),
             # Same yield figure the Bulk Batches page shows: how many full
@@ -115,22 +167,27 @@ def get_bulk_batches(args, ctx):
             "bottles_possible": {u: int(remaining // float(bottle_size_ml(u))) for u in BOTTLE_UNITS},
             "created_at": r["created_at"].isoformat(),
         })
-    return {"results": results}
+    return {
+        "results": results,
+        "note": ("bottles_possible counts liquid only. Making bottles from a batch whose packaging is not recorded "
+                 "(packaging_recorded false, e.g. an opening balance) also takes one bottle, sticker and seal per "
+                 "bottle out of materials stock."),
+    }
 
 
 def get_production_costs(args, ctx):
-    """COGS logged by production runs. A bulk product's qty_produced is mL
-    and its cost is per mL (see admin.production()), so bottles and bulk
-    mL are totalled apart and each product reports the matching rate."""
+    """COGS logged for bottles produced (cogs_logs). Bulk is not produced as a product any more (it is sold by the
+    mL from bulk batches), so every row here is bottles. Opening-balance records, made when existing stock was loaded
+    into the system, have no production run behind them and are totalled apart."""
     period = (args.get("period") or "this_month").strip()
     if period not in PERIOD_TMPL:
         return {"error": f"period must be one of {PERIOD_NAMES}."}
     where = period_sql(period, "c.created_at")
     totals = query(
-        "SELECT COALESCE(SUM(CASE WHEN p.unit <> 'BULK' THEN c.qty_produced ELSE 0 END),0) AS units, "
-        "COALESCE(SUM(CASE WHEN p.unit = 'BULK' THEN c.qty_produced ELSE 0 END),0) AS bulk_ml, "
-        "COALESCE(SUM(c.total_cogs),0) AS cogs "
-        "FROM cogs_logs c JOIN products p ON c.sku = p.sku WHERE " + where, fetchone=True,
+        "SELECT COALESCE(SUM(c.qty_produced), 0) AS units, COALESCE(SUM(c.total_cogs), 0) AS cogs, "
+        "COALESCE(SUM(CASE WHEN c.production_log_id IS NULL THEN c.total_cogs ELSE 0 END), 0) AS opening_cogs, "
+        "COALESCE(SUM(CASE WHEN c.production_log_id IS NULL THEN c.qty_produced ELSE 0 END), 0) AS opening_units "
+        "FROM cogs_logs c WHERE " + where, fetchone=True,
     )
     rows = query(
         "SELECT p.item_name, p.unit, SUM(c.qty_produced) AS qty, SUM(c.total_cogs) AS cogs "
@@ -142,19 +199,15 @@ def get_production_costs(args, ctx):
     for r in rows:
         qty = float(r["qty"] or 0)
         cogs = float(r["cogs"] or 0)
-        rate = round(cogs / qty, 4 if r["unit"] == "BULK" else 2) if qty else None
-        entry = {"item_name": r["item_name"], "unit": r["unit"], "cogs": cogs}
-        if r["unit"] == "BULK":
-            entry.update({"bulk_ml": qty, "cogs_per_ml": rate})
-        else:
-            entry.update({"units": qty, "cogs_per_unit": rate})
-        by_product.append(entry)
+        by_product.append({"item_name": r["item_name"], "unit": r["unit"], "units": qty, "cogs": cogs,
+                           "cogs_per_unit": round(cogs / qty, 2) if qty else None})
     return {
         "period": period,
         "units_produced": float(totals["units"]),
-        "bulk_ml_produced": float(totals["bulk_ml"]),
         "total_cogs": float(totals["cogs"]),
+        "of_which_opening_balance": {"units": float(totals["opening_units"]), "cogs": float(totals["opening_cogs"])},
         "by_product": by_product,
+        "note": "The cost of goods produced is shown as capital. Opening balance is stock that already existed when it was loaded.",
     }
 
 

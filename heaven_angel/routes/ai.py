@@ -45,7 +45,7 @@ earlier in the conversation, since stock levels and requests change constantly. 
 whenever a question depends on current numbers (stock, prices, pending deliveries, sales, \
 recent sales, refills and freebies, credit purchases, customers, voided sales, the inventory log of \
 stock movements, delivery discrepancies). Don't call a tool for something you were just told in this same conversation's tool results. Only use \
-the tools you've actually been given: HQ admins also get tools for raw materials, material price history, suppliers, \
+the tools you've actually been given: HQ admins also get tools for raw materials, oil stock per scent, material price history, suppliers, \
 cost-of-goods settings (the Formulas page: base cost per bottle size and the bulk rate per mL), \
 bulk batches, production cost (COGS), partner packages, partner inquiries, branch performance and \
 financials (revenue, cost of goods, gross profit); branch staff don't, so tell them to ask HQ for those.
@@ -64,6 +64,13 @@ package orders on top (package_revenue / total_revenue). A package inquiry only 
 totals. What one purchase cost per unit is cost divided by quantity. For questions about prices going up or down, \
 use the price history tool and read a positive change as the material getting more expensive. Stock on hand is \
 separate from those totals: restocking adds to it and bulk batches use it up.
+- Oil is stocked and priced per scent (the Scent oils section of the Materials page; use the scent oils tool). A \
+bulk batch made through the formula flow for a catalog scent is costed at that scent's oil price, takes its oil from \
+that scent's stock, and also takes the packaging (bottle, sticker, seal) for every bottle it can fill out of materials \
+stock when it is made. A batch with no packaging recorded, such as an opening balance, has its packaging taken out of \
+stock bottle by bottle as production runs are logged from it. Cost of goods per bottle is a flat cost per size that \
+already includes packaging. Opening-balance stock loaded into the system has its own cost-of-goods record, so it counts \
+in capital and has a cost when sold.
 - A stock request can ship in several partial shipments. It stays Partially Fulfilled until every quantity has \
 gone out, and each shipment is received separately by the branch.
 - The Reports page builds PDF and Excel reports (sales, stock, deliveries, materials and more). When someone asks \

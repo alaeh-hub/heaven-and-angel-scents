@@ -14,7 +14,7 @@ from heaven_angel.utils import BOTTLE_UNITS, ML_PER_BATCH_UNIT, bottle_size_ml
 
 from heaven_angel.routes.admin._common import bp
 from heaven_angel.routes.admin.batch_formulas import (
-    calc_to_json, load_catalog, load_formula_config, load_scent_choices,
+    calc_to_json, load_catalog, load_formula_config, load_scent_choices, prepare_scent_oils,
 )
 
 # How many of the base unit (mL for volume, g for weight) one of each unit is.
@@ -42,8 +42,11 @@ def tools():
         "SELECT material_id, material_name, unit, stock_qty, cost_per_unit FROM raw_materials")
     config = load_formula_config()
     _resolved, catalog, missing_roles = load_catalog(materials, config)
+    scent_oils = prepare_scent_oils(materials, config)
     return render_template(
         "admin/tools.html",
+        # Each scent's own oil price, so the calculator starts from the price that scent really costs.
+        scent_oils_json={code: {"rate": float(r["cost_per_unit"])} for code, r in scent_oils.items()},
         unit_factors=UNIT_FACTORS,
         bottle_sizes={u: float(bottle_size_ml(u)) for u in BOTTLE_UNITS},
         mix={

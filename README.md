@@ -17,7 +17,8 @@ This repository is an active operational application. The system currently inclu
 - Receipt generation and QR-code scan verification for branch sales, plus a plain printed goods-received receipt for deliveries
 - Several scents on one receipt: Record Sale and the Excel import can put up to 60 products on one order, printed 10 to a slip (a bigger order continues on the next slip)
 - Raw-material price tracking with a price-trend chart, and built-in bulk batch formulas (15%, 14%, 13%) with a cost calculator under Tools
-- A report builder with 26 report types (PDF and Excel), a live row count before you download, and plain printed-document styling
+- Oil stocked and priced per scent (a Scent oils section on the Materials page, with restocks and a CSV import), used automatically when a bulk batch is made for that scent
+- A report builder with 27 report types (PDF and Excel), a live row count before you download, and plain printed-document styling
 - Products catalogue export (Excel or CSV) that can be edited and imported again
 - Helpful empty states on every table, chart and list, and forms whose live notes never make the layout jump
 - Bulk sales import/export via Excel, with the same stock and validation rules as manual entry, and an optional Receipt column to group rows into one receipt
@@ -154,9 +155,20 @@ HQ logs production batches that convert raw materials into finished (bottled) an
 
 Bulk batches are made from the built-in formulas (15%, 14%, 13%, each in 500, 250 and 125 mL timpla sizes), so nobody picks materials one by one. Each ingredient role is tied once to a raw material, and the batch cost comes from that material's current price. When logging a production run, a short one-line note shows the cost per unit and the mL drawn from the chosen batch.
 
+How stock and cost move (so a batch's bottles are never counted twice):
+
+- **Oil is per scent.** A batch made for a catalog scent is costed at that scent's own oil price and takes its oil from that scent's stock (`scent_oils`). A batch of a scent that is not in the catalog uses the shared Oil Scent material instead.
+- **Packaging is taken once.** A batch made through the formula flow takes the bottles, stickers and seals for every bottle it can fill out of materials stock when it is created, and is refused if any is short. A batch with no packaging recorded (an opening balance, for example) has its packaging taken out of stock when production runs are logged from it, one bottle, sticker and seal per bottle made, and the run is refused if any is short. A production run never deducts packaging a batch already took.
+- **Cost of goods per bottle** is a flat cost per bottle size (`unit_cogs_settings`) that already includes packaging. The cost of goods logged is shown as capital on the Reports page and is what a bottle costs when it is sold.
+- **Opening balances.** Stock that already existed when the system went live is loaded with one opening record per item (an "Opening balance" in the stock history, an opening batch for mixed liquid, a cost-of-goods record for bottles) and never deducts materials or counts as a production run. This was done with one-time scripts (a dry run first, refusing to run twice) kept out of git because they hold real stock figures; see `docs/OPENING_DATA_IMPORT.md` (a local note).
+
 ### 3a. Materials and price trends
 
 The Materials page tracks raw materials, suppliers and restocks. Every restock that changes a price is kept as history, and the page charts it on a real time axis with a summary of the biggest movers. Admins can also ask the AI assistant about price history. Branch accounts cannot see material prices.
+
+Oil is the exception to "one row per material". Each scent has its own oil, bought at its own price and kept in its own stock, so the Oil Scent row in the table is a summary (price range, total stock, how many scents are out), and the scents live in a collapsed, searchable **Scent oils** section below it. Each scent can be edited (price and stock), restocked (adds stock and averages the price with what is on hand, recorded with its purchase date), or set in bulk from a CSV (download the template, fill in `price_per_unit` and `stock`, import; every row is checked first and a blank cell keeps the current value). Scents start at 0 stock. Oil restocks count in the "raw materials purchased" figures and appear in the Materials report; the Oil Scent material's own stock is only the shared pool used by scents that are not in the catalog.
+
+Default suppliers are seeded with the materials: BubbleMix (oil, fixative, moisturizer), Centralpack (alcohol, bottles), Alfamart - Lipa (distilled water) and Shopee (stickers, plastic seals, no address). Contact details are filled in on the page.
 
 ### 3b. Tools
 
@@ -177,7 +189,7 @@ Branches (and HQ) record sales through `heaven_angel/services/sale_stock.py`'s s
 
 ### 4a. Reports and documents
 
-Admin and Branch each get a report builder: report cards in group tabs with search, choice chips for options, date presets, a plain-words summary of what will be produced, and a live row count before you download. There are 26 report types (including material prices and shipments), each as PDF or Excel.
+Admin and Branch each get a report builder: report cards in group tabs with search, choice chips for options, date presets, a plain-words summary of what will be produced, and a live row count before you download. There are 27 report types (including material prices, scent oils and shipments), each as PDF or Excel. The Materials report lists scent oil purchases too, the Scent Oils report shows oil stock, price, value and purchases per scent, and every "raw materials purchased" figure (dashboard, Reports page, Financial Summary and the AI assistant) includes oil bought per scent.
 
 All printed documents follow one plain style: sentence-case headings, hairline rules, no outer boxes and a restrained accent. This covers the report PDFs, the Excel reports, the sale receipt and the goods-received (delivery) receipt. The Products export keeps its header in row 1 and data from row 2 so a downloaded file can be edited and imported again.
 
@@ -207,7 +219,7 @@ Every sale receipt PDF carries a short, HMAC-signed code (not the sale's actual 
 
 ### 8. AI assistant
 
-The AI assistant is intentionally read-only and scoped to the signed-in user's role and branch. It builds a server-side snapshot of live business data (via `heaven_angel/routes/ai_tools/`) and sends it to Gemini with strict rules:
+The AI assistant is intentionally read-only and scoped to the signed-in user's role and branch. It looks up live business data with tools (`heaven_angel/routes/ai_tools/`, chosen by Gemini per question) and answers with strict rules:
 
 - use only the data it was given
 - never invent inventory, prices, or history
@@ -215,7 +227,7 @@ The AI assistant is intentionally read-only and scoped to the signed-in user's r
 - answer only in plain text
 - point the user to the relevant operational page when they ask for an action
 
-This keeps the assistant genuinely useful for business questions without allowing it to operate the system unsupervised. Chat usage is rate-limited per user to control API cost.
+HQ admins also get tools for materials, oil stock per scent, bulk batches (including whether a batch's packaging is recorded), production cost of goods (with opening-balance stock shown apart) and financials. Branch accounts never see those. This keeps the assistant genuinely useful for business questions without allowing it to operate the system unsupervised. Chat usage is rate-limited per user to control API cost.
 
 ### 9. Audit and movement tracking
 
@@ -247,7 +259,7 @@ Admins can create and restore database backups from **Settings → Backup**. A b
 contains a consistent database snapshot, spreadsheet-friendly CSVs, and uploaded
 product photos when the email attachment limit allows. Restore validates the
 archive before replacing database tables, keeps a safety copy of the current data,
-and records the attempt in the Admin Log. Admins can also enable reminders and
+and records the attempt in the Admin Log. Every table is included automatically, new ones too. Restoring a backup that predates the per-scent oil tables empties them rather than leaving today's oil stock beside older data. Admins can also enable reminders and
 opt-in scheduled email backups. These archives contain customer data and password
 hashes; they are not encrypted, so handle the destination mailbox carefully.
 In Docker Compose deployments, the pre-restore safety copy is stored in the
@@ -367,7 +379,7 @@ For production-style WSGI serving, the repo also includes `wsgi.py` and the requ
 
 ### Running tests
 
-The test suite (`tests/`) covers RBAC, branch isolation, session and Socket.IO authorization, CSP nonce enforcement, sales/voids, stock requests, bulk batches and batch formulas, material price trends, multi-scent orders and their receipts (slip count, layout, scan and void), Excel import grouping, the demo-data script's tables, reports, AI tool alignment, partner portal API, dashboard trends, and more. Integration tests use a disposable MySQL database:
+The test suite (`tests/`) covers RBAC, branch isolation, session and Socket.IO authorization, CSP nonce enforcement, sales/voids, stock requests, bulk batches and batch formulas, scent oils and production packaging, material price trends, multi-scent orders and their receipts (slip count, layout, scan and void), Excel import grouping, the demo-data script's tables, reports, AI tool alignment, partner portal API, dashboard trends, and more. Integration tests use a disposable MySQL database:
 
 ```bash
 pip install -r requirements-dev.txt   # pytest + ruff (not in the production image)
@@ -446,7 +458,8 @@ This is a serious internal operations platform with real business workflows, acc
 
 ## Known open items
 
-- Per-scent oil cost and stock is not built yet. The options are written up in a local note and waiting on a business decision, so oil scent is still tracked as a raw material, not per scent.
+- Per-scent oil price and stock is built (Materials page, "Scent oils" section; table `scent_oils`). Scent oil price history and a per-scent price trends chart are not built; restocks are recorded in `scent_oil_restocks` and appear in the Materials and Scent Oils reports. Oil bought per scent counts toward the Oil Scent material's supplier in the supplier spend totals.
+- Opening stock is loaded for materials, scent oils (13 scents), mixed bulk (29 scents, costed at an estimated 0.82 per mL from the old computation) and finished 85 mL bottles at HQ only. Balayan's bottle stock is still 0 and needs its own opening count. Cost of goods is set for 85 mL only; the other sizes and the Bulk/Refill selling rate per mL are still 0 until set on the Formulas page.
 - Report documents are checked structurally and by rendering; Excel files and the printed QR have not been checked by eye or by camera.
 - Sale receipts, including the long multi-slip ones, have been checked as PDFs on screen but not yet on a real thermal printer.
 - The AI assistant's tools are tested directly; the live Gemini model has not been tested end to end after the latest tool changes.

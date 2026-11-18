@@ -6,7 +6,7 @@
 Start from a clean database, then run this:
 
     1. drop the database and apply schema.sql again (it seeds the 8 materials,
-       the 2 suppliers, the 31 products and HQ + Balayan Branch);
+       the 4 suppliers, the 31 products and HQ + Balayan Branch);
     2. python scripts/demo_data.py
 
 The script refuses to run when business records already exist, and when
@@ -20,8 +20,9 @@ What it creates (all back-dated over about 80 days):
   - Logins (admin + branch accounts, one inactive), two more branches.
   - Supplier details, the purchase history of every material (restocks at rising,
     falling and flat prices, with receipt numbers), unit costs and formulas, bulk rate.
-  - Bulk batches for most scents (15% / 14% / 13% formulas, 500 and 250 mL), bottled
-    production runs, and three scents deliberately left with no stock.
+  - Oil stocked per scent (its own price and stock, with a dated purchase), then bulk
+    batches for most scents (15% / 14% / 13% formulas, 500 and 250 mL) that use it,
+    bottled production runs, and three scents deliberately left with no oil or stock.
   - Deliveries HQ -> branches: Fulfilled (incl. one with 28 lines, one with damage and
     a missing unit finished by a second shipment), Partially Fulfilled, In Transit,
     Pending and Rejected, so every receipt and status shows up.
@@ -51,7 +52,7 @@ from werkzeug.security import generate_password_hash  # noqa: E402
 from heaven_angel.app import create_app  # noqa: E402
 from heaven_angel.db import TransactionAborted, get_db, query, transaction  # noqa: E402
 from heaven_angel.routes.admin.batch_formulas import (  # noqa: E402
-    formula_for_scent, load_catalog, load_formula_config,
+    formula_for_scent, load_catalog, load_formula_config, prepare_scent_oils,
 )
 from heaven_angel.routes.admin.production import (  # noqa: E402
     _BatchPlan, _ProductionRun, _create_bulk_batch_records, _record_production_run,
@@ -268,7 +269,25 @@ def buy_materials(plan, catalog):
               f"blended ₱{total_cost / total_qty:,.4f}/{m['unit'].lower()}")
 
 
-def make_batches(plan, catalog, config):
+def stock_scent_oils(plan, config):
+    """Each scent that gets a batch has its own oil: its own price and enough stock for the batch,
+    bought a few days before it. The three scents with no batch stay at 0."""
+    section("Oil per scent")
+    prepare_scent_oils(_materials(), config)
+    oil = next(m for m in _materials() if m["material_name"] == "Oil Scent")
+    for b in plan:
+        code = b["scent"]["code"]
+        price = (oil["cost_per_unit"] * D(str(round(rnd.uniform(0.92, 1.18), 3)))).quantize(D("0.0001"))
+        qty = D(math.ceil(D(b["size"]) * D("1.15") / 5) * 5)
+        cost = (qty * price).quantize(D("0.01"))
+        run("UPDATE scent_oils SET cost_per_unit = %s, stock_qty = %s WHERE base_code = %s", (price, qty, code))
+        run("""INSERT INTO scent_oil_restocks (base_code, qty, cost, purchased_at, created_by_user_id)
+               VALUES (%s, %s, %s, %s, %s)""", (code, qty, cost, ago(b["days"] + 6, 10).date(), ADMIN_ID["admin"]))
+        audit(ago(b["days"] + 6, 10), "admin", "restock_scent_oil", b["scent"]["name"], f"+{qty:g} for {cost:,.2f}")
+    print(f"  {len(plan)} scents stocked with their own oil")
+
+
+def make_batches(plan, catalog, config, oil_material_id):
     section("Bulk batches")
     for b in plan:
         calc = catalog[b["formula"]][b["size"]]
@@ -277,7 +296,8 @@ def make_batches(plan, catalog, config):
         bp = _BatchPlan(
             scent["name"], b["code"], total_ml, "Milliliter", None, config["bottle_unit"], calc["bottles"], total_ml,
             [(ln["material_id"], ln["qty"], ln["qty_unit"]) for ln in calc["lines"]], calc["label"],
-            [(p["material_id"], p["per_bottle"]) for p in calc["packaging"]], scent["code"])
+            [(p["material_id"], p["per_bottle"]) for p in calc["packaging"]], scent["code"],
+            (scent["code"], oil_material_id))      # costed at this scent's own oil, taken from its own stock
         total_cost, _ = _create_bulk_batch_records(bp, ADMIN_ID["admin"])
         when = ago(b["days"], 9)
         run("UPDATE bulk_batches SET created_at = %s WHERE batch_code = %s", (when, b["code"]))
@@ -294,7 +314,7 @@ def produce_bottles(plan):
         qty = int(b["bottles"] * (0.85 if b["size"] == 500 else 0.8))
         sku = b["scent"]["sku"]
         cogs = query("SELECT base_cost_per_unit FROM unit_cogs_settings WHERE unit = '85ML'", fetchone=True)["base_cost_per_unit"]
-        run_ = _ProductionRun(sku, b["code"], qty, b["batch_id"], bottle_size_ml("85ML"), cogs,
+        run_ = _ProductionRun(sku, b["code"], qty, b["batch_id"], "85ML", bottle_size_ml("85ML"), cogs,
                               (cogs * qty).quantize(D("0.01")))
         before = max_id("stock_movement_logs", "log_id")
         _record_production_run(run_, ADMIN_ID["admin"])
@@ -819,7 +839,8 @@ def ai_drafts(branches, plan):
 # ---------------------------------------------------------------------------
 def summary():
     section("What is in the database now")
-    tables = ["users", "branches", "suppliers", "raw_materials", "material_restock_events", "products", "bulk_batches",
+    tables = ["users", "branches", "suppliers", "raw_materials", "material_restock_events", "scent_oils",
+              "scent_oil_restocks", "products", "bulk_batches",
               "production_logs", "cogs_logs", "stock_requests", "stock_request_shipments", "stock_movement_logs",
               "sales", "sale_voids", "partners", "partner_investments", "packages", "partner_inquiries",
               "ai_stock_drafts", "login_activity", "admin_actions"]
@@ -851,11 +872,12 @@ def main():
             add_suppliers_and_settings()
             config = load_formula_config()
             _scents, plan = plan_batches(config)
-            _resolved, catalog, missing = load_catalog(_materials(), config)
+            resolved, catalog, missing = load_catalog(_materials(), config)
             if missing:
                 sys.exit("Formula materials aren't set up: " + ", ".join(missing))
             buy_materials(plan, catalog)
-            make_batches(plan, catalog, config)
+            stock_scent_oils(plan, config)
+            make_batches(plan, catalog, config, resolved["oil"]["material_id"])
             produce_bottles(plan)
             deliveries(branches, plan)
             partners_and_packages(plan)

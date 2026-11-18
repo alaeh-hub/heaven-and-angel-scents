@@ -2841,8 +2841,9 @@ DROP PROCEDURE _migrate_formula_materials_roles;
 --       Supplier  Centralpack
 --                   Perfume Alcohol        1000 ml for PHP 132.09
 --                   Frosted 85 ml Bottle   1 pc    for PHP 15
---       No supplier
+--       Supplier  Alfamart - Lipa (Lipa City, Batangas)
 --                   Distilled Water   10 L for PHP 82   (PHP 8.20 / L)
+--       Supplier  Shopee (online, no address)
 --                   Sticker           1 pc  for PHP 3
 --                   Plastic Seal      1 pc  for PHP 1.50
 --
@@ -2861,7 +2862,9 @@ DROP PROCEDURE _migrate_formula_materials_roles;
 -- ----------------------------------------------------------------------------
 INSERT IGNORE INTO suppliers (supplier_name, address) VALUES
     ('BubbleMix Fragrances and Household Goods Store', '107 E. Rodriguez Sr. Ave., Brgy. Tatalon, Quezon City'),
-    ('Centralpack', '58 F. Bautista St., San Francisco Del Monte, Quezon City');
+    ('Centralpack', '58 F. Bautista St., San Francisco Del Monte, Quezon City'),
+    ('Alfamart - Lipa', 'Lipa City, Batangas'),
+    ('Shopee', NULL);
 
 INSERT IGNORE INTO raw_materials
     (material_name, unit, purchase_mode, package_qty, package_cost, cost_per_unit, stock_qty, supplier_id)
@@ -2876,9 +2879,20 @@ VALUES
         (SELECT supplier_id FROM suppliers WHERE supplier_name = 'Centralpack')),
     ('Frosted 85 ml Bottle', 'Piece', 'Individual', 1, 0.00, 15.0000, 0,
         (SELECT supplier_id FROM suppliers WHERE supplier_name = 'Centralpack')),
-    ('Distilled Water', 'Liter', 'Package', 1, 0.00, 8.2000, 0, NULL),
-    ('Sticker', 'Piece', 'Individual', 1, 0.00, 3.0000, 0, NULL),
-    ('Plastic Seal', 'Piece', 'Individual', 1, 0.00, 1.5000, 0, NULL);
+    ('Distilled Water', 'Liter', 'Package', 1, 0.00, 8.2000, 0,
+        (SELECT supplier_id FROM suppliers WHERE supplier_name = 'Alfamart - Lipa')),
+    ('Sticker', 'Piece', 'Individual', 1, 0.00, 3.0000, 0,
+        (SELECT supplier_id FROM suppliers WHERE supplier_name = 'Shopee')),
+    ('Plastic Seal', 'Piece', 'Individual', 1, 0.00, 1.5000, 0,
+        (SELECT supplier_id FROM suppliers WHERE supplier_name = 'Shopee'));
+
+-- A database seeded before these suppliers existed has the three materials
+-- with no supplier: assign them now. Only where none is set, so a supplier
+-- chosen on the Materials page is never overwritten.
+UPDATE raw_materials SET supplier_id = (SELECT supplier_id FROM suppliers WHERE supplier_name = 'Alfamart - Lipa')
+WHERE material_name = 'Distilled Water' AND supplier_id IS NULL;
+UPDATE raw_materials SET supplier_id = (SELECT supplier_id FROM suppliers WHERE supplier_name = 'Shopee')
+WHERE material_name IN ('Sticker', 'Plastic Seal') AND supplier_id IS NULL;
 
 INSERT IGNORE INTO batch_formula_materials (role, material_id)
 SELECT 'oil', material_id FROM raw_materials WHERE material_name = 'Oil Scent';
@@ -3104,3 +3118,45 @@ DELIMITER ;
 
 CALL _migrate_sales_order_id();
 DROP PROCEDURE _migrate_sales_order_id;
+
+-- ----------------------------------------------------------------------------
+-- 57. Migration — oil scent price and stock per scent
+--
+--     Every scent has its own oil, bought at its own price and kept in its own
+--     stock. scent_oils holds one row per scent (the product base code, e.g.
+--     'A1'): that oil's price per unit and stock on hand. The single "Oil Scent"
+--     raw material stays as the summary row on the Materials page; when a bulk
+--     batch is made for a scent that has a row here, the batch is costed at
+--     that scent's price and its oil comes out of that scent's stock.
+--
+--     Rows are created by the app (services/scent_oils.py), one per scent in
+--     the catalog, priced like the Oil Scent material and starting at 0 stock
+--     (the owner enters each scent's real stock). The Oil Scent material's own
+--     stock is left alone: batches of an "other" scent still use it.
+--
+--       scent_oils          one row per scent: price per unit, stock on hand
+--       scent_oil_restocks  each purchase of a scent's oil, for price history
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS scent_oils (
+    base_code     VARCHAR(40) PRIMARY KEY,
+    scent_name    VARCHAR(150) NOT NULL,
+    cost_per_unit DECIMAL(12, 6) NOT NULL DEFAULT 0,
+    stock_qty     DECIMAL(14, 3) NOT NULL DEFAULT 0,
+    updated_at    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    CHECK (cost_per_unit >= 0),
+    CHECK (stock_qty >= 0)
+);
+
+CREATE TABLE IF NOT EXISTS scent_oil_restocks (
+    restock_id         INT AUTO_INCREMENT PRIMARY KEY,
+    base_code          VARCHAR(40) NOT NULL,
+    qty                DECIMAL(14, 3) NOT NULL,
+    cost               DECIMAL(12, 2) NOT NULL,
+    purchased_at       DATE NOT NULL,
+    created_by_user_id INT NULL,
+    created_at         TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (base_code) REFERENCES scent_oils(base_code) ON DELETE CASCADE,
+    INDEX idx_scent_oil_restocks (base_code, purchased_at),
+    CHECK (qty > 0),
+    CHECK (cost >= 0)
+);

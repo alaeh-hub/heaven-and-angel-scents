@@ -360,7 +360,8 @@
     </div>
   </div>
   <div class="pg-foot">
-    <p>Cost of goods is the base price set on the <a href="{{ url_for('admin.formulas') }}">Formulas page</a>.</p>
+    <p>Cost of goods is the base price on the <a href="{{ url_for('admin.formulas') }}">Formulas page</a>, packaging included.</p>
+    <p>A batch with no packaging recorded also uses up each bottle's bottle, sticker and seal.</p>
   </div>
   {% else %}
   {{ empty.state('No production runs yet', 'Each run you log is kept here with its quantity and date.', icon='flask') }}

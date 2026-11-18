@@ -269,7 +269,7 @@
   <div class="card stat-tile">
     <div class="stat-label">Spend with known suppliers</div>
     <div class="stat-value accent">{{ supplier_totals.total_supplied_spend|peso }}</div>
-    <div class="stat-foot">sum of every material package logged with a supplier</div>
+    <div class="stat-foot">every material package and every scent oil purchase logged with a supplier</div>
   </div>
   <div class="card stat-tile">
     <div class="stat-label">Materials with no supplier</div>
@@ -333,6 +333,21 @@
               {% endif %}
             </td>
             <td class="text-soft" data-label="Supplier">{{ mat.supplier_name or 'None' }}</td>
+            {% if oil_summary and mat.material_id == oil_material_id %}
+            <td class="num mono" data-label="Cost per unit">
+              {% if oil_summary.low == oil_summary.high %}₱{{ '%.4f'|format(oil_summary.low) }}{% else %}₱{{ '%.2f'|format(oil_summary.low) }} to ₱{{ '%.2f'|format(oil_summary.high) }}{% endif %} / {{ mat.unit.lower() }}
+              <div class="item-sub">{{ oil_summary.count }} scents</div>
+            </td>
+            <td class="num mono {{ 'danger' if oil_summary.stock <= 0 }}" data-label="Stock on hand">{{
+              oil_summary.stock|round(3)|string|replace('.000','') }} {{ mat.unit.lower() }}
+              <div class="item-sub">{{ oil_summary.empty }} out of stock{% if mat.stock_qty > 0 %} · {{ mat.stock_qty|round(3)|string|replace('.000','') }} {{ mat.unit.lower() }} shared{% endif %}</div>
+            </td>
+            <td data-label="" class="mat-col-actions mobile-inline-action">
+              <div class="inline-form">
+                <button type="button" class="btn btn-ghost btn-sm" data-call="openScentOils">Scents</button>
+              </div>
+            </td>
+            {% else %}
             <td class="num mono" data-label="Cost per unit">₱{{ '%.4f'|format(mat.cost_per_unit) }} / {{
               mat.unit.lower() }}</td>
             <td class="num mono {{ 'danger' if mat.stock_qty <= 0 }}" data-label="Stock on hand">{{
@@ -350,6 +365,7 @@
                   data-supplier-id="{{ mat.supplier_id or '' }}">Edit</button>
               </div>
             </td>
+            {% endif %}
           </tr>
           {% endfor %}
         </tbody>
@@ -369,6 +385,74 @@
   {{ empty.state('No materials yet', 'Log what you buy to track cost per unit and how prices move over time.', icon='flask') }}
   {% endif %}
 </div>
+
+{% if scent_oils %}
+{% set ou = oil_unit.lower() %}
+<details class="card mt-24" id="scentOils">
+  <summary class="card-header" style="cursor:pointer;">
+    <h2>Scent oils</h2>
+    <span class="hint" id="scentOilsCount">{{ scent_oils|length }} scents</span>
+  </summary>
+  <div data-smart-table data-page-size="10" data-count-target="scentOilsCount" data-count-label="scent">
+    <div class="table-toolbar">
+      <div class="table-search">
+        <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+          <circle cx="11" cy="11" r="7" />
+          <path d="m21 21-4.3-4.3" />
+        </svg>
+        <input type="text" class="smart-search-input" placeholder="Search by scent or code…" autocomplete="off">
+      </div>
+      <div class="pg-head-tools">
+        <a class="btn btn-ghost btn-sm" href="{{ url_for('admin.scent_oil_template') }}">Download CSV</a>
+        <button type="button" class="btn btn-ghost btn-sm" id="openScentOilImportBtn">Import CSV</button>
+      </div>
+    </div>
+    <div class="table-wrap table-airy">
+      <table class="smart-table table-fixed mat-table">
+        <colgroup>
+          <col style="width:34%"><col style="width:22%"><col style="width:22%"><col style="width:22%">
+        </colgroup>
+        <thead>
+          <tr>
+            <th>Scent</th>
+            <th class="num">Price per {{ ou }}</th>
+            <th class="num">Stock on hand</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for so in scent_oils %}
+          <tr data-search="{{ (so.scent_name ~ ' ' ~ so.base_code)|lower }}">
+            <td class="item-name" data-label="Scent">{{ so.scent_name }}<div class="item-sub mono">{{ so.base_code }}</div></td>
+            <td class="num mono" data-label="Price">₱{{ '%.4f'|format(so.cost_per_unit) }}</td>
+            <td class="num mono {{ 'danger' if so.stock_qty <= 0 }}" data-label="Stock">{{
+              so.stock_qty|round(3)|string|replace('.000','') }} {{ ou }}</td>
+            <td data-label="" class="mat-col-actions mobile-inline-action">
+              <div class="inline-form">
+                <button type="button" class="btn btn-ghost btn-sm" data-call="openScentOilRestock"
+                  data-code="{{ so.base_code }}" data-name="{{ so.scent_name }}" data-stock="{{ so.stock_qty }}">Restock</button>
+                <button type="button" class="btn btn-ghost btn-sm" data-call="openScentOilEdit"
+                  data-code="{{ so.base_code }}" data-name="{{ so.scent_name }}"
+                  data-price="{{ so.cost_per_unit }}" data-stock="{{ so.stock_qty }}">Edit</button>
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {{ empty.no_match('scents') }}
+    </div>
+    <div class="smart-pagination" style="display:none;">
+      <button type="button" class="btn btn-ghost btn-sm" data-page-prev>Previous</button>
+      <span class="smart-page-info"></span>
+      <button type="button" class="btn btn-ghost btn-sm" data-page-next>Next</button>
+    </div>
+  </div>
+  <div class="pg-foot">
+    <p>A <a href="{{ url_for('admin.bulk_batches') }}">bulk batch</a> uses its scent's own oil price and stock.</p>
+  </div>
+</details>
+{% endif %}
 
 {% if not materials %}
 <div class="card insight-card mt-24">
@@ -718,6 +802,77 @@
   </div>
 </div>
 
+{% if scent_oils %}
+<!-- Scent oil: edit, restock, import -->
+<div id="scentOilEditOverlay" class="pg-overlay">
+  <div class="card card-pad" style="max-width:400px; width:100%;">
+    <h2 class="pg-h">Edit <span id="scentOilEditName"></span> oil</h2>
+    <p class="text-faint pg-note">Set the price and the stock count. To record a purchase, use Restock.</p>
+    <form method="POST" action="{{ url_for('admin.edit_scent_oil') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="base_code" id="scentOilEditCode">
+      <div class="field">
+        <label for="scentOilEditPrice">Price per {{ ou }} (₱)</label>
+        <input type="number" id="scentOilEditPrice" name="cost_per_unit" step="0.0001" min="0" required>
+      </div>
+      <div class="field">
+        <label for="scentOilEditStock">Stock on hand ({{ ou }})</label>
+        <input type="number" id="scentOilEditStock" name="stock_qty" step="0.001" min="0" required>
+      </div>
+      <div class="pg-actions">
+        <button type="button" class="btn btn-ghost" data-close-overlay>Cancel</button>
+        <button type="submit" class="btn btn-accent">Save</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div id="scentOilRestockOverlay" class="pg-overlay">
+  <div class="card card-pad" style="max-width:400px; width:100%;">
+    <h2 class="pg-h">Restock <span id="scentOilRestockName"></span> oil</h2>
+    <p class="text-faint pg-note" id="scentOilRestockStock"></p>
+    <form method="POST" action="{{ url_for('admin.restock_scent_oil') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="base_code" id="scentOilRestockCode">
+      <div class="field">
+        <label for="scentOilRestockQty">Quantity added ({{ ou }})</label>
+        <input type="number" id="scentOilRestockQty" name="qty" step="0.001" min="0.001" required>
+      </div>
+      <div class="field">
+        <label for="scentOilRestockCost">Cost for that purchase (₱)</label>
+        <input type="number" id="scentOilRestockCost" name="cost" step="0.01" min="0" required>
+      </div>
+      <div class="field">
+        <label for="scentOilRestockDate">Purchase date</label>
+        <input type="date" id="scentOilRestockDate" name="purchased_at" value="{{ today }}" max="{{ today }}" required>
+      </div>
+      <div class="pg-actions">
+        <button type="button" class="btn btn-ghost" data-close-overlay>Cancel</button>
+        <button type="submit" class="btn btn-accent">Restock</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div id="scentOilImportOverlay" class="pg-overlay">
+  <div class="card card-pad" style="max-width:440px; width:100%;">
+    <h2 class="pg-h">Import scent oils</h2>
+    <p class="text-faint pg-note">Download the CSV, fill in price_per_unit and stock for each scent, then upload it. A blank cell keeps the current value.</p>
+    <form method="POST" action="{{ url_for('admin.import_scent_oils') }}" enctype="multipart/form-data">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div class="field">
+        <label for="scentOilImportFile">CSV file</label>
+        <input type="file" id="scentOilImportFile" name="file" accept=".csv,text/csv" required>
+      </div>
+      <div class="pg-actions">
+        <button type="button" class="btn btn-ghost" data-close-overlay>Cancel</button>
+        <button type="submit" class="btn btn-accent">Import</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endif %}
+
 <!-- Add supplier -->
 <div id="addSupplierOverlay"
   class="pg-overlay">
@@ -854,6 +1009,54 @@
 {% block scripts %}
 <script src="{{ url_for('static', filename='js/chart.umd.min.js') }}"></script>
 <script nonce="{{ csp_nonce() }}">
+  // Scent oils: the per-scent oil list, its edit / restock / import dialogs.
+  (function () {
+    var section = document.getElementById('scentOils');
+    if (!section) return;
+    var unit = {{ oil_unit.lower() | tojson }};
+    function byId(id) { return document.getElementById(id); }
+    function show(id) { openOverlay(byId(id)); }
+    var reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    // Open the section, glide to it, and fade its contents in once it is on screen.
+    window.openScentOils = function () {
+      var wasOpen = section.open;
+      section.open = true;
+      section.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'start' });
+      if (reduceMotion || wasOpen) return;
+      Array.prototype.forEach.call(section.children, function (child) {
+        if (child.tagName === 'SUMMARY') return;
+        child.animate(
+          [{ opacity: 0, transform: 'translateY(-8px)' }, { opacity: 1, transform: 'none' }],
+          { duration: 320, easing: 'cubic-bezier(0.22, 1, 0.36, 1)' });
+      });
+    };
+    window.openScentOilEdit = function (btn) {
+      byId('scentOilEditCode').value = btn.dataset.code;
+      byId('scentOilEditName').textContent = btn.dataset.name;
+      byId('scentOilEditPrice').value = btn.dataset.price;
+      byId('scentOilEditStock').value = btn.dataset.stock;
+      show('scentOilEditOverlay');
+    };
+    window.openScentOilRestock = function (btn) {
+      byId('scentOilRestockCode').value = btn.dataset.code;
+      byId('scentOilRestockName').textContent = btn.dataset.name;
+      byId('scentOilRestockStock').textContent = 'Currently ' + btn.dataset.stock + ' ' + unit + ' in stock.';
+      byId('scentOilRestockQty').value = '';
+      byId('scentOilRestockCost').value = '';
+      show('scentOilRestockOverlay');
+    };
+    byId('openScentOilImportBtn').addEventListener('click', function () { show('scentOilImportOverlay'); });
+    ['scentOilEditOverlay', 'scentOilRestockOverlay', 'scentOilImportOverlay'].forEach(function (id) {
+      var overlay = byId(id);
+      overlay.addEventListener('click', function (e) {
+        if (e.target === overlay || (e.target.closest && e.target.closest('[data-close-overlay]'))) closeOverlay(overlay);
+      });
+      document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape' && overlay.style.display !== 'none') closeOverlay(overlay);
+      });
+    });
+  })();
+
   // Material price trends: price paid per purchase vs. blended cost per unit.
   (function () {
     var card = document.getElementById('priceTrends');

@@ -333,6 +333,35 @@ def _is_preserved(stmt):
     return bool(m) and m.group(1) in PRESERVE_ON_RESTORE
 
 
+# Tables whose rows only make sense next to the rest of the data they were taken with
+# (the oil on hand per scent goes with the materials, batches and costs). A backup made
+# before they existed has no copy of them, and a restore would leave today's oil stock
+# beside the older data. Those are emptied instead; the app creates a row per scent at
+# 0 stock again, and the oil is entered again. Children come before parents.
+EMPTY_IF_MISSING = ("scent_oil_restocks", "scent_oils")
+
+
+def empty_tables_missing_from_backup(tables):
+    """Empty each EMPTY_IF_MISSING table that exists here but not in the restored backup.
+    Returns the names emptied."""
+    conn = get_db()
+    cur = conn.cursor()
+    emptied = []
+    try:
+        for name in EMPTY_IF_MISSING:
+            if name in tables:
+                continue
+            cur.execute("SELECT 1 FROM information_schema.tables WHERE table_schema = DATABASE() "
+                        "AND table_name = %s", (name,))
+            if cur.fetchone():
+                cur.execute("DELETE FROM `%s`" % name)
+                emptied.append(name)
+        conn.commit()
+    finally:
+        cur.close()
+    return emptied
+
+
 def run_restore(statements):
     """Execute pre-validated statements on one connection."""
     # Drop every table before creating any. Dumps are alphabetical, so a child

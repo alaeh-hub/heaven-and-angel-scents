@@ -10,12 +10,18 @@ strategy; `mysqldump` and `mysql` (below) are the tools.
 
 | What | Where | Backed up by |
 |---|---|---|
-| All application data (branches, users, products, stock, sales, requests, partners, audit logs, ...) | MySQL, `MYSQL_DB` | `mysqldump` |
+| All application data (branches, users, products, stock, materials, oil stock per scent, bulk batches, sales, requests, partners, audit logs, ...) | MySQL, `MYSQL_DB` | `mysqldump` |
 | Uploaded product photos | `static/uploads/` | `tar` |
 | Secrets (`SECRET_KEY`, DB/mail credentials, `PARTNER_PORTAL_SLUG`, ...) | `.env` | **Not** part of the routine backup below — see "Secrets" |
 
 `schema.sql` and the application code itself are already backed up implicitly:
 they're in git.
+
+Every table is included, because the in-app backup lists the database's tables
+itself and `mysqldump` takes them all. A table added later (the per-scent oil
+tables, `scent_oils` and `scent_oil_restocks`, for example) is backed up with no
+change here. Take a backup before loading opening stock or any one-time import;
+the scripts in `scripts/` ask for one first.
 
 ## Taking a backup
 
@@ -162,7 +168,12 @@ the backup is dropped and recreated with the backup's data, and the product
 photos are copied back. Everyone is held on a "restore in progress" page
 while it runs, and you are signed out at the end (your account is whatever
 the backup says it was). Tables that exist now but not in the backup are
-left alone. Backups made with `mysqldump` (`.sql.gz`) are
+left alone, with one exception: the oil stock per scent (`scent_oils` and
+`scent_oil_restocks`) only makes sense next to the materials, batches and costs
+it was taken with, so a backup made before those tables existed empties them
+instead of leaving today's oil beside older data. The scents then start again at
+0 stock and the oil is entered again (Materials, Scent oils). The Admin Log says
+when that happened. Backups made with `mysqldump` (`.sql.gz`) are
 not accepted here - restore those with `gunzip -c file.sql.gz | mysql ...` as shown above.
 
 ### Reminders and automatic backups (Settings -> Backup)

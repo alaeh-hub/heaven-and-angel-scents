@@ -5,6 +5,7 @@ from heaven_angel.services.reports.filters import describe_window, time_window
 
 from heaven_angel.db import query
 from heaven_angel.services.material_prices import load_material_price_history
+from heaven_angel.services.scent_oils import OIL_PURCHASES_SQL
 from heaven_angel.utils import (
     BOTTLE_UNITS, bottle_size_ml,
 )
@@ -91,8 +92,9 @@ def report_production_log(filters, branch_scope):
 
 
 def report_materials(filters, branch_scope):
-    """Dated initial/baseline purchases and individual restocks. Older
-    restocks made before event tracking remain combined into the baseline
+    """Dated initial/baseline purchases and individual restocks, including the
+    oil bought for each scent (scent_oil_restocks, named "Oil Scent - <scent>").
+    Older restocks made before event tracking remain combined into the baseline
     row because their individual dates and amounts were never stored.
     branch_scope is unused (materials aren't branch-scoped) but every
     builder is called with it.
@@ -133,6 +135,16 @@ def report_materials(filters, branch_scope):
                 FROM material_restock_events mre
                 LEFT JOIN suppliers s ON mre.supplier_id = s.supplier_id
                 LEFT JOIN raw_materials rm ON rm.material_id = mre.material_id
+                UNION ALL
+                SELECT sor.purchased_at, CONCAT(oil.material_name, ' - ', so.scent_name),
+                        s.supplier_name, oil.unit, 'Restock', sor.qty, sor.cost,
+                        CASE WHEN sor.qty > 0 THEN sor.cost / sor.qty ELSE 0 END,
+                        NULL, so.stock_qty
+                FROM scent_oil_restocks sor
+                JOIN scent_oils so ON so.base_code = sor.base_code
+                LEFT JOIN batch_formula_materials bfm ON bfm.role = 'oil'
+                LEFT JOIN raw_materials oil ON oil.material_id = bfm.material_id
+                LEFT JOIN suppliers s ON s.supplier_id = oil.supplier_id
             ) purchases
             WHERE 1=1 {where} {order} LIMIT {limit_n}""",
         tuple(params),
@@ -176,15 +188,17 @@ def report_suppliers(filters, branch_scope):
     rows = query(
         f"""SELECT s.supplier_name, s.contact_person, s.phone, s.email, s.created_at,
                    COUNT(DISTINCT rm.material_id) AS material_count,
-                   COALESCE(SUM(rm.package_cost), 0) AS total_spent,
-                   MAX(CASE WHEN re.last_restock_at > rm.created_at
-                            THEN re.last_restock_at ELSE rm.created_at END) AS last_purchase_at
+                   COALESCE(SUM(rm.package_cost + COALESCE(os.cost, 0)), 0) AS total_spent,
+                   MAX(GREATEST(rm.created_at,
+                                COALESCE(CAST(re.last_restock_at AS DATETIME), rm.created_at),
+                                COALESCE(CAST(os.last_at AS DATETIME), rm.created_at))) AS last_purchase_at
             FROM suppliers s
             LEFT JOIN raw_materials rm ON rm.supplier_id = s.supplier_id
             LEFT JOIN (
                 SELECT material_id, MAX(purchased_at) AS last_restock_at
                 FROM material_restock_events GROUP BY material_id
             ) re ON re.material_id = rm.material_id
+            LEFT JOIN {OIL_PURCHASES_SQL} os ON os.material_id = rm.material_id
             WHERE 1=1 {where}
             GROUP BY s.supplier_id, s.supplier_name, s.contact_person, s.phone, s.email, s.created_at
             ORDER BY total_spent DESC, s.supplier_name LIMIT {MAX_ROWS}""",
@@ -643,6 +657,43 @@ def report_low_stock(filters, branch_scope):
         ("shortfall", "Below Reorder By", "int"),
     ]
     return columns, rows, len(rows) == MAX_ROWS, "Snapshot as of now, at or below reorder level"
+
+
+def report_scent_oils(filters, branch_scope):
+    """One row per scent: the oil on hand, its price per unit, what that stock is
+    worth, and what has been bought for it (scent_oils, scent_oil_restocks).
+    The Materials page's Scent oils section as a table. A snapshot, not windowed."""
+    where, params = "", []
+    if filters["search"]:
+        where += " AND (so.scent_name LIKE %s OR so.base_code LIKE %s)"
+        like = f"%{filters['search']}%"
+        params += [like, like]
+    rows = query(
+        f"""SELECT so.base_code, so.scent_name, so.cost_per_unit, so.stock_qty,
+                   so.stock_qty * so.cost_per_unit AS stock_value,
+                   COALESCE(SUM(r.qty), 0) AS bought_qty, COALESCE(SUM(r.cost), 0) AS bought_cost,
+                   MAX(r.purchased_at) AS last_purchase
+            FROM scent_oils so
+            LEFT JOIN scent_oil_restocks r ON r.base_code = so.base_code
+            WHERE 1=1 {where}
+            GROUP BY so.base_code, so.scent_name, so.cost_per_unit, so.stock_qty
+            ORDER BY so.scent_name LIMIT {MAX_ROWS}""",
+        tuple(params),
+    )
+    for r in rows:
+        for k in ("cost_per_unit", "stock_qty", "stock_value", "bought_qty", "bought_cost"):
+            r[k] = float(r[k])
+        r["last_purchase"] = r["last_purchase"].isoformat() if r["last_purchase"] else "—"
+    columns = [
+        ("base_code", "Code", "str"), ("scent_name", "Scent", "str"),
+        ("stock_qty", "Stock on Hand", "num"),
+        ("cost_per_unit", "Price / Unit", "price"),
+        ("stock_value", "Stock Value", "money"),
+        ("bought_qty", "Bought (Total)", "num"),
+        ("bought_cost", "Spent (Total)", "money"),
+        ("last_purchase", "Last Purchase", "str"),
+    ]
+    return columns, rows, len(rows) == MAX_ROWS, "Snapshot as of now, oil stocked per scent"
 
 
 def report_material_prices(filters, branch_scope):

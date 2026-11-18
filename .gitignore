@@ -88,6 +88,8 @@ promo-video/
 
 # Opening data import notes (local only)
 docs/OPENING_DATA_IMPORT.md
+stocks.txt
+scripts/import_opening_*.py
 
 # Open design questions and working notes (local only)
 docs/OPEN_QUESTION_*.md
@@ -111,3 +113,19 @@ _test_schema_*.sql
 desktop.ini
 Thumbs.db
 .DS_Store
+
+# Backup archives and database dumps wherever they land (schema.sql is the only .sql that belongs in git)
+*.sql.gz
+*.tar.gz
+heaven-angel-backup-*.zip
+before-restore-*.zip
+before_*_import_*.sql
+
+# Certificates and private working folders, spelled out
+certs/
+docs/private/
+
+# Editor and temp leftovers
+*.bak
+*.tmp
+*.swp

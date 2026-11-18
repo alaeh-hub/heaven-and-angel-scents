@@ -148,9 +148,17 @@ _NEWER_DECLARATIONS = [
 _ADMIN_DECLARATIONS = [
     {
         "name": "get_raw_materials",
-        "description": "HQ raw materials (oils, alcohol, bottles and so on): stock on hand, unit, cost per unit, supplier. Lowest stock first.",
+        "description": "HQ raw materials (alcohol, fixative, bottles, stickers and so on): stock on hand, unit, cost per unit, supplier. Lowest stock first. Oil is stocked per scent, so use get_scent_oils for oil.",
         "parameters": {"type": "object", "properties": {
             "name": {"type": "string", "description": "Partial material name to search for."},
+        }},
+    },
+    {
+        "name": "get_scent_oils",
+        "description": "The oil stocked for each scent: stock in mL, price per mL, stock value, and what was bought. Use it for questions about how much oil a scent has, which scents are out of oil, or what an oil cost. Lowest stock first.",
+        "parameters": {"type": "object", "properties": {
+            "name": {"type": "string", "description": "Partial scent name or code (e.g. A1) to look at one scent. Omit for all."},
+            "only_in_stock": {"type": "boolean", "description": "Only scents that have oil on hand."},
         }},
     },
     {
@@ -176,14 +184,14 @@ _ADMIN_DECLARATIONS = [
     },
     {
         "name": "get_bulk_batches",
-        "description": "Bulk scent batches (the stock refills and bottles are filled from): remaining mL, total volume, cost per mL, and how many bottles of each size the remaining mL could still fill.",
+        "description": "Bulk scent batches (the stock refills and bottles are filled from): remaining mL, total volume, cost per mL, the formula or opening-balance note, whether its packaging is recorded, and how many bottles of each size the remaining mL could still fill.",
         "parameters": {"type": "object", "properties": {
             "active_only": {"type": "boolean", "description": "Defaults to true: only batches with mL remaining."},
         }},
     },
     {
         "name": "get_production_costs",
-        "description": "Cost of goods produced (COGS) for a period: bottles produced, bulk mL produced (kept separate), total cost, and per product with cost per bottle (or cost per mL for bulk).",
+        "description": "Cost of goods produced (COGS, shown as capital) for a period: bottles produced, total cost, how much of it is opening-balance stock, and per product with cost per bottle.",
         "parameters": {"type": "object", "properties": {
             "period": {"type": "string", "description": "One of " + PERIOD_NAMES + ". Defaults to this_month."},
         }},

@@ -40,6 +40,7 @@ READ_TOOLS = {
 }
 ADMIN_TOOLS = {
     "get_raw_materials": {},
+    "get_scent_oils": {},
     "get_suppliers": {},
     "get_formulas": {},
     "get_bulk_batches": {"active_only": False},
@@ -103,3 +104,24 @@ def test_admin_can_name_hq_for_sales(app, sql):
     with app.test_request_context():
         out = ai_tools.dispatch("get_sales_summary", {"period": "all_time", "branch_name": "HQ"}, _admin_ctx())
     assert "error" not in out, out
+
+
+def test_scent_oil_tool_lists_each_scents_oil_and_flags_the_shared_pool(app, sql):
+    code = "ZZ" + unique_suffix().upper()
+    cur = sql.cursor()
+    cur.execute("INSERT INTO scent_oils (base_code, scent_name, cost_per_unit, stock_qty) VALUES (%s, 'AI Oil', 3.8, 250)",
+                (code,))
+    cur.execute("INSERT INTO scent_oil_restocks (base_code, qty, cost, purchased_at) VALUES (%s, 250, 950, '2026-11-04')",
+                (code,))
+    sql.commit()
+    cur.close()
+    with app.test_request_context():
+        out = ai_tools.dispatch("get_scent_oils", {"name": code}, _admin_ctx())
+        materials = ai_tools.dispatch("get_raw_materials", {}, _admin_ctx())
+        costs = ai_tools.dispatch("get_production_costs", {"period": "all_time"}, _admin_ctx())
+    row = out["results"][0]
+    assert (row["scent"], row["stock_qty"], row["price_per_unit"], row["stock_value"]) == ("AI Oil", 250.0, 3.8, 950.0)
+    assert (row["bought_qty"], row["bought_cost"]) == (250.0, 950.0)
+    assert out["all_scents"]["scents"] >= 1
+    assert "get_scent_oils" in materials["note"] and materials["scent_oils"]["scents"] >= 1
+    assert "bulk_ml_produced" not in costs and "of_which_opening_balance" in costs

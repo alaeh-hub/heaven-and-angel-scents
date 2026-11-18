@@ -103,8 +103,10 @@ def dashboard():
     total_cogs = query(
         "SELECT COALESCE(SUM(total_cogs), 0) AS v FROM cogs_logs", fetchone=True
     )["v"]
+    # Oil bought per scent (scent_oil_restocks) is raw material spend too.
     raw_materials_purchased = query(
-        "SELECT COALESCE(SUM(package_cost), 0) AS v FROM raw_materials", fetchone=True
+        """SELECT (SELECT COALESCE(SUM(package_cost), 0) FROM raw_materials)
+                + (SELECT COALESCE(SUM(cost), 0) FROM scent_oil_restocks) AS v""", fetchone=True
     )["v"]
     branch_sales_revenue = query(
         "SELECT COALESCE(SUM(qty_sold * unit_price), 0) AS v FROM sales", fetchone=True
@@ -183,8 +185,12 @@ def dashboard():
         cogs_by_day[r["day"]] = cogs_by_day.get(r["day"], 0.0) + float(r["amount"] or 0)
     raw_by_day = {
         r["day"]: float(r["amount"] or 0) for r in query(
-            """SELECT DATE(created_at) AS day, SUM(package_cost) AS amount FROM raw_materials
-               WHERE created_at >= CURDATE() - INTERVAL 14 DAY GROUP BY DATE(created_at)""")
+            """SELECT DATE(d) AS day, SUM(amt) AS amount FROM (
+                   SELECT created_at AS d, package_cost AS amt FROM raw_materials
+                   UNION ALL
+                   SELECT purchased_at, cost FROM scent_oil_restocks
+               ) purchases
+               WHERE d >= CURDATE() - INTERVAL 14 DAY GROUP BY DATE(d)""")
     }
     spark_cost = [production_by_day.get(d, 0.0) for d in spark_days]
     spark_raw = [raw_by_day.get(d, 0.0) for d in spark_days]

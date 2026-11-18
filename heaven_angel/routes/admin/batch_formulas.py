@@ -23,6 +23,7 @@ from flask import flash, redirect, request, url_for
 from heaven_angel.db import query, transaction
 from heaven_angel.decorators import admin_required
 from heaven_angel.services.audit import log_action
+from heaven_angel.services.scent_oils import ensure_scent_oils, load_scent_oils
 from heaven_angel.sockets import notify_admin
 from heaven_angel.utils import (
     ML_PER_BATCH_UNIT, ValidationError, base_code_from_sku, bottle_size_ml, compatible_material_units,
@@ -291,19 +292,35 @@ def calc_to_json(c):
     }
 
 
-def load_catalog(materials, config=None):
+def load_catalog(materials, config=None, oil=None):
     """Every formula x size, computed. Returns (resolved materials,
-    {formula: {size: calc or None}}, missing role labels)."""
+    {formula: {size: calc or None}}, missing role labels).
+
+    `oil` is one scent's own oil (a scent_oils row): it replaces the pooled
+    Oil Scent material's price and stock in the costing."""
     config = config or load_formula_config()
     resolved = resolve_materials(materials)
     missing = [ROLES[r][0] for r in ROLES if r not in resolved]
     stock_by_id = {m["material_id"]: m["stock_qty"] for m in materials}
+    if oil is not None and "oil" in resolved:
+        resolved = dict(resolved)
+        resolved["oil"] = {**resolved["oil"], "cost_per_unit": oil["cost_per_unit"]}
+        stock_by_id[resolved["oil"]["material_id"]] = oil["stock_qty"]
     catalog = {
         formula: {size: compute_formula(formula, size, resolved, config, stock_by_id)
                   for size in spec["sizes"]}
         for formula, spec in config["formulas"].items()
     }
     return resolved, catalog, missing
+
+
+def prepare_scent_oils(materials, config):
+    """Make sure every catalog scent has its own oil row, then return them as
+    {base_code: row}."""
+    resolved = resolve_materials(materials)
+    if "oil" in resolved and config["bottle_unit"]:
+        ensure_scent_oils(resolved["oil"], [(c["code"], c["name"]) for c in load_scent_choices(config)])
+    return {r["base_code"]: r for r in load_scent_oils()}
 
 
 @bp.route("/bulk-batches/formula-materials", methods=["POST"])

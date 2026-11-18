@@ -1,6 +1,7 @@
+import decimal
 
 from flask import (
-    current_app, flash, jsonify, redirect, render_template,
+    Response, current_app, flash, jsonify, redirect, render_template,
     request, session, url_for,
 )
 
@@ -8,6 +9,9 @@ from heaven_angel.db import TransactionAborted, execute, query, transaction
 from heaven_angel.decorators import admin_required
 from heaven_angel.services.audit import log_action
 from heaven_angel.services.material_prices import build_material_price_history, load_material_price_history  # noqa: F401
+from heaven_angel.services.scent_oils import (
+    OIL_PURCHASES_SQL, load_scent_oils, oil_summary, parse_scent_oil_csv, scent_oil_template_csv,
+)
 from heaven_angel.sockets import notify_all
 from heaven_angel.utils import (
     MATERIAL_UNITS, ValidationError,
@@ -16,6 +20,7 @@ from heaven_angel.utils import (
 )
 
 from heaven_angel.routes.admin._common import bp
+from heaven_angel.routes.admin.batch_formulas import load_formula_config, prepare_scent_oils, resolve_materials
 
 
 # ---------------------------------------------------------------- materials
@@ -101,18 +106,20 @@ def materials():
     # purely rolled up from raw_materials rows entered above). `suppliers`
     # doubles as the Add/Edit material modals' supplier <select> options.
     suppliers_list = query(
-        """SELECT s.supplier_id, s.supplier_name, s.contact_person, s.phone, s.email,
+        f"""SELECT s.supplier_id, s.supplier_name, s.contact_person, s.phone, s.email,
                   s.address, s.notes, s.created_at,
                   COUNT(DISTINCT rm.material_id) AS material_count,
-                  COALESCE(SUM(rm.package_cost), 0) AS total_spent,
-                  MAX(CASE WHEN COALESCE(re.last_restock_at, rm.created_at) > rm.created_at
-                           THEN re.last_restock_at ELSE rm.created_at END) AS last_purchase_at
+                  COALESCE(SUM(rm.package_cost + COALESCE(os.cost, 0)), 0) AS total_spent,
+                  MAX(GREATEST(rm.created_at,
+                               COALESCE(CAST(re.last_restock_at AS DATETIME), rm.created_at),
+                               COALESCE(CAST(os.last_at AS DATETIME), rm.created_at))) AS last_purchase_at
            FROM suppliers s
            LEFT JOIN raw_materials rm ON rm.supplier_id = s.supplier_id
            LEFT JOIN (
                SELECT material_id, MAX(purchased_at) AS last_restock_at
                FROM material_restock_events GROUP BY material_id
            ) re ON re.material_id = rm.material_id
+           LEFT JOIN {OIL_PURCHASES_SQL} os ON os.material_id = rm.material_id
            GROUP BY s.supplier_id, s.supplier_name, s.contact_person, s.phone, s.email,
                     s.address, s.notes, s.created_at
            ORDER BY total_spent DESC, s.supplier_name"""
@@ -120,15 +127,16 @@ def materials():
     # One row per supplier/material. Lifetime quantity and cost remain on
     # raw_materials; dated restock events add accurate purchase counts.
     material_rows = query(
-        """SELECT rm.supplier_id, rm.material_name, rm.unit,
-                  1 + COALESCE(re.restock_count, 0) AS purchase_count,
-                  rm.package_qty AS total_qty,
-                  rm.package_cost AS total_cost
+        f"""SELECT rm.supplier_id, rm.material_name, rm.unit,
+                  1 + COALESCE(re.restock_count, 0) + COALESCE(os.n, 0) AS purchase_count,
+                  rm.package_qty + COALESCE(os.qty, 0) AS total_qty,
+                  rm.package_cost + COALESCE(os.cost, 0) AS total_cost
            FROM raw_materials rm
            LEFT JOIN (
                SELECT material_id, COUNT(*) AS restock_count
                FROM material_restock_events GROUP BY material_id
            ) re ON re.material_id = rm.material_id
+           LEFT JOIN {OIL_PURCHASES_SQL} os ON os.material_id = rm.material_id
            WHERE rm.supplier_id IS NOT NULL
            ORDER BY rm.material_name"""
     )
@@ -146,16 +154,37 @@ def materials():
             s["supplier_id"], [])
 
     supplier_totals = query(
-        """SELECT (SELECT COUNT(*) FROM suppliers) AS supplier_count,
-                  COALESCE(SUM(rm.package_cost), 0) AS total_supplied_spend,
+        f"""SELECT (SELECT COUNT(*) FROM suppliers) AS supplier_count,
+                  COALESCE(SUM(rm.package_cost + COALESCE(os.cost, 0)), 0) AS total_supplied_spend,
                   (SELECT COUNT(*) FROM raw_materials WHERE supplier_id IS NULL) AS unassigned_material_count
-           FROM raw_materials rm WHERE rm.supplier_id IS NOT NULL""",
+           FROM raw_materials rm
+           LEFT JOIN {OIL_PURCHASES_SQL} os ON os.material_id = rm.material_id
+           WHERE rm.supplier_id IS NOT NULL""",
         fetchone=True,
     )
+
+    # Oil scent is priced and stocked per scent: the table shows one summary
+    # row, and the scents are listed in their own section below it.
+    scent_oils = []
+    oil_material = resolve_materials(materials_list).get("oil")
+    if oil_material:
+        prepare_scent_oils(materials_list, load_formula_config())
+        scent_oils = load_scent_oils()
+        if scent_oils:
+            # A pooled stock count is shared out the first time, so re-read it.
+            materials_list = query(
+                """SELECT rm.*, s.supplier_name
+                   FROM raw_materials rm
+                   LEFT JOIN suppliers s ON rm.supplier_id = s.supplier_id
+                   ORDER BY rm.material_name""")
 
     return render_template(
         "admin/materials.html",
         materials=materials_list,
+        scent_oils=scent_oils,
+        oil_summary=oil_summary(scent_oils),
+        oil_material_id=oil_material["material_id"] if oil_material else None,
+        oil_unit=oil_material["unit"] if oil_material else "Milliliter",
         suppliers=suppliers_list,
         supplier_totals=supplier_totals,
         unit_choices=MATERIAL_UNITS,
@@ -320,6 +349,131 @@ def restock_material():
     flash(
         f"{existing['material_name']} restocked — +{qty:g} in stock.", "success")
     return redirect(url_for("admin.materials"))
+
+
+# ------------------------------------------------------------- scent oils
+D = decimal.Decimal
+SCENT_OILS_URL = "admin.materials"
+
+
+def _scent_oil_or_none(code):
+    return query("SELECT base_code, scent_name, cost_per_unit, stock_qty FROM scent_oils WHERE base_code = %s",
+                 (code,), fetchone=True)
+
+
+@bp.route("/materials/scent-oils/edit", methods=["POST"])
+@admin_required
+def edit_scent_oil():
+    """Correct one scent's oil price and stock (a count or a fix, not a purchase)."""
+    code = request.form.get("base_code", "")
+    row = _scent_oil_or_none(code)
+    if not row:
+        flash("That scent no longer exists.", "error")
+        return redirect(url_for(SCENT_OILS_URL))
+    try:
+        price = parse_non_negative_decimal(request.form.get("cost_per_unit"), "Price")
+        stock = parse_non_negative_decimal(request.form.get("stock_qty"), "Stock")
+    except ValidationError as err:
+        flash(str(err), "error")
+        return redirect(url_for(SCENT_OILS_URL))
+    execute("UPDATE scent_oils SET cost_per_unit = %s, stock_qty = %s WHERE base_code = %s",
+            (price, stock, code))
+    notify_all(["materials"])
+    log_action("edit_scent_oil", target=row["scent_name"],
+               details=f"₱{price:,.4f}/unit, {stock:g} in stock (was ₱{row['cost_per_unit']:,.4f}, {row['stock_qty']:g})")
+    flash(f"{row['scent_name']} oil updated.", "success")
+    return redirect(url_for(SCENT_OILS_URL))
+
+
+@bp.route("/materials/scent-oils/restock", methods=["POST"])
+@admin_required
+def restock_scent_oil():
+    """Record buying more oil for one scent: adds stock and averages the price
+    with what is on hand."""
+    code = request.form.get("base_code", "")
+    try:
+        qty = parse_positive_decimal(request.form.get("qty"), "Quantity")
+        cost = parse_non_negative_decimal(request.form.get("cost"), "Cost")
+        purchased_at = parse_past_date(request.form.get("purchased_at"), "Purchase date")
+    except ValidationError as err:
+        flash(str(err), "error")
+        return redirect(url_for(SCENT_OILS_URL))
+    try:
+        with transaction() as conn:
+            cur = conn.cursor(dictionary=True)
+            cur.execute("SELECT scent_name, cost_per_unit, stock_qty FROM scent_oils "
+                        "WHERE base_code = %s FOR UPDATE", (code,))
+            row = cur.fetchone()
+            if not row:
+                raise TransactionAborted("That scent no longer exists.")
+            new_stock = row["stock_qty"] + qty
+            new_price = ((row["stock_qty"] * row["cost_per_unit"] + cost) / new_stock).quantize(D("0.000001"))
+            cur.execute("UPDATE scent_oils SET cost_per_unit = %s, stock_qty = %s WHERE base_code = %s",
+                        (new_price, new_stock, code))
+            cur.execute(
+                """INSERT INTO scent_oil_restocks (base_code, qty, cost, purchased_at, created_by_user_id)
+                   VALUES (%s, %s, %s, %s, %s)""",
+                (code, qty, cost, purchased_at, session.get("user_id")))
+            cur.close()
+    except TransactionAborted as err:
+        flash(str(err), "error")
+        return redirect(url_for(SCENT_OILS_URL))
+    except Exception:
+        current_app.logger.exception("scent oil restock failed for %s", code)
+        flash("Couldn't record this restock. Please try again.", "error")
+        return redirect(url_for(SCENT_OILS_URL))
+    notify_all(["materials"])
+    log_action("restock_scent_oil", target=row["scent_name"],
+               details=f"+{qty:g} for ₱{cost:,.2f} — now ₱{new_price:,.4f}/unit avg")
+    flash(f"{row['scent_name']} oil restocked, +{qty:g} in stock.", "success")
+    return redirect(url_for(SCENT_OILS_URL))
+
+
+@bp.route("/materials/scent-oils/template.csv")
+@admin_required
+def scent_oil_template():
+    csv_text = scent_oil_template_csv(load_scent_oils())
+    return Response(csv_text, mimetype="text/csv",
+                    headers={"Content-Disposition": "attachment; filename=scent_oils.csv"})
+
+
+@bp.route("/materials/scent-oils/import", methods=["POST"])
+@admin_required
+def import_scent_oils():
+    """Set many scents' price and/or stock from the CSV template. All rows are
+    checked first; nothing is changed if any row is bad. A blank cell keeps
+    that value as it is."""
+    upload = request.files.get("file")
+    if not upload or not upload.filename:
+        flash("Choose the CSV file to import.", "error")
+        return redirect(url_for(SCENT_OILS_URL))
+    raw = upload.read(1_000_001)
+    if len(raw) > 1_000_000:
+        flash("That file is too large.", "error")
+        return redirect(url_for(SCENT_OILS_URL))
+    try:
+        text = raw.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        flash("The file must be a UTF-8 CSV (save as CSV from Excel).", "error")
+        return redirect(url_for(SCENT_OILS_URL))
+    known = {r["base_code"] for r in load_scent_oils()}
+    try:
+        rows = parse_scent_oil_csv(text, known)
+    except ValidationError as err:
+        flash(str(err), "error")
+        return redirect(url_for(SCENT_OILS_URL))
+    with transaction() as conn:
+        cur = conn.cursor()
+        for code, price, stock in rows:
+            if price is not None:
+                cur.execute("UPDATE scent_oils SET cost_per_unit = %s WHERE base_code = %s", (price, code))
+            if stock is not None:
+                cur.execute("UPDATE scent_oils SET stock_qty = %s WHERE base_code = %s", (stock, code))
+        cur.close()
+    notify_all(["materials"])
+    log_action("import_scent_oils", target="Scent oils", details=f"{len(rows)} scents")
+    flash(f"Updated the oil for {len(rows)} scent{'s' if len(rows) != 1 else ''}.", "success")
+    return redirect(url_for(SCENT_OILS_URL))
 
 
 # ---------------------------------------------------------------- suppliers

@@ -143,8 +143,10 @@ def windowed_financials(trend_bucket):
     capital_total = query(
         "SELECT COALESCE(SUM(total_cogs), 0) AS v FROM cogs_logs", fetchone=True
     )["v"]
+    # Oil bought per scent (scent_oil_restocks) is raw material spend too.
     raw_materials_purchased = query(
-        "SELECT COALESCE(SUM(package_cost), 0) AS v FROM raw_materials", fetchone=True
+        """SELECT (SELECT COALESCE(SUM(package_cost), 0) FROM raw_materials)
+                + (SELECT COALESCE(SUM(cost), 0) FROM scent_oil_restocks) AS v""", fetchone=True
     )["v"]
     windowed_branch_revenue = query(
         f"SELECT COALESCE(SUM(qty_sold * unit_price), 0) AS v FROM sales WHERE sold_at >= NOW() - {window_sql}",
@@ -220,9 +222,12 @@ def kpi_tiles(granularity, trend_bucket, windowed_revenue, windowed_materials_co
             GROUP BY {_bucket('created_at')}"""))
 
     raw_series = _series(query(
-        f"""SELECT {_bucket('created_at')} AS day, COALESCE(SUM(package_cost), 0) AS raw
-            FROM raw_materials WHERE created_at >= NOW() - {window_sql}
-            GROUP BY {_bucket('created_at')}"""))
+        f"""SELECT {_bucket('d')} AS day, COALESCE(SUM(amt), 0) AS raw
+            FROM (SELECT created_at AS d, package_cost AS amt FROM raw_materials
+                  UNION ALL
+                  SELECT purchased_at, cost FROM scent_oil_restocks) purchases
+            WHERE d >= NOW() - {window_sql}
+            GROUP BY {_bucket('d')}"""))
 
     bucket_days = {d.isoformat() for d in trend_bucket_dates(granularity, business_today())}
     bucket_days |= (set(sales_series) | set(package_series) | set(cost_series) | set(package_cost_series)

@@ -693,6 +693,7 @@
 <script nonce="{{ csp_nonce() }}">
   (function () {
     var CATALOG = {{ formula_catalog_json | tojson }};
+    var SCENT_OILS = {{ scent_oils_json | tojson }};
     var form = document.getElementById('fmProduceForm');
     if (!form) return;
     var formulaInput = document.getElementById('fmFormula');
@@ -750,6 +751,28 @@
       });
     }
 
+    // A scent has its own oil price and stock: re-cost the oil line (and what
+    // follows from it) for the chosen scent. The server does the same when producing.
+    function withScentOil(c, code) {
+      var own = c && code ? SCENT_OILS[code] : null;
+      if (!own) return c;
+      var out = JSON.parse(JSON.stringify(c));
+      var oil = out.lines[0];
+      var cost = Math.round(oil.qty * own.rate * 10000) / 10000;
+      var delta = cost - oil.line_cost;
+      oil.rate = own.rate; oil.line_cost = cost; oil.stock = own.stock;
+      oil.short_by = Math.max(0, oil.qty - own.stock);
+      out.liquid_cost += delta; out.total_cost += delta;
+      if (out.bottles) {
+        out.cost_per_new_bottle = out.total_cost / out.bottles;
+        out.cost_per_refill_bottle = out.liquid_cost / out.bottles;
+      }
+      out.shortages = out.shortages.filter(function (x) { return x.name !== oil.material; });
+      if (oil.short_by > 0) out.shortages.unshift({ name: oil.material, short_by: oil.short_by, unit: oil.unit });
+      out.enough_stock = out.shortages.length === 0;
+      return out;
+    }
+
     function render() {
       var f = formulaInput.value, s = sizeInput.value;
       // Show only the chosen formula's sizes; drop a size that formula doesn't have.
@@ -764,7 +787,7 @@
       if (!haveSize) { s = ''; sizeInput.value = ''; }
       setPressed(formulaBtns, 'formula', f);
       setPressed(sizeBtns, 'size', s);
-      var c = f && s && CATALOG[f] ? CATALOG[f][s] : null;
+      var c = f && s && CATALOG[f] ? withScentOil(CATALOG[f][s], scentCodeInput.value) : null;
       if (!f || !s) { summary.style.display = 'none'; return; }
       summary.style.display = '';
       var stockEl = document.getElementById('fmStock');

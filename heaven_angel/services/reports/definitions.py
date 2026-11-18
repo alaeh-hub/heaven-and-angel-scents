@@ -67,6 +67,9 @@ REPORT_TYPES = {
     # the blended cost now (the Materials page's price trends, as a table).
     # A snapshot, like Suppliers/Formulas.
     "material_prices": {"label": "Material Price Changes", "admin": True, "branch": False, "windowed": False},
+    # Scent Oils — the oil stocked per scent: stock, price per unit and what was bought.
+    # A snapshot, like Suppliers/Material Price Changes.
+    "scent_oils":      {"label": "Scent Oils",       "admin": True, "branch": False, "windowed": False},
     # Shipments — one row per delivery shipment (a partial dispatch makes several
     # for one Stock Request). Dated by when HQ dispatched it.
     "shipments":       {"label": "Shipments",        "admin": True, "branch": True,  "windowed": True},
@@ -102,8 +105,9 @@ _PRESENTATION = {
     "discrepancies":      ("Stock and deliveries", "Damaged or short units found on deliveries."),
     "products":           ("Materials and production", "The product catalog with prices and total stock."),
     "production_log":     ("Materials and production", "Production runs: what was made, how many, which batch."),
-    "materials":          ("Materials and production", "Every material purchase and restock, with cost per unit."),
+    "materials":          ("Materials and production", "Every material and scent oil purchase and restock, with cost per unit."),
     "material_prices":    ("Materials and production", "How each material's price moved, biggest changes first."),
+    "scent_oils":         ("Materials and production", "Oil stock and price for each scent, and what was bought."),
     "suppliers":          ("Materials and production", "Suppliers with what they supply and what was spent."),
     "bulk_batches":       ("Materials and production", "Bulk batches: volume, cost, what is left and what went in."),
     "cogs_logs":          ("Materials and production", "Cost of goods logged for each production run."),
