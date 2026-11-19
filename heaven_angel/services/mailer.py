@@ -422,6 +422,21 @@ def backup_email_configured(cfg):
     return bool(cfg.get("MAIL_SERVER") and cfg.get("MAIL_DEFAULT_SENDER") and backup_recipient(cfg))
 
 
+def mask_email(address):
+    """a***@gmail.com: enough to recognise the mailbox without printing the whole address."""
+    name, _, domain = (address or "").partition("@")
+    if not domain:
+        return ""
+    return f"{name[:1]}{'*' * max(2, len(name) - 1)}@{domain}"
+
+
+def size_text(num_bytes):
+    """A size a person can read: KB below one MB, so a small backup is not shown as "0.0 MB"."""
+    if num_bytes < 1024 * 1024:
+        return f"{max(1, round(num_bytes / 1024))} KB"
+    return f"{num_bytes / 1024 / 1024:.1f} MB"
+
+
 BACKUP_PASSWORD_HELP = ("BACKUP_ZIP_PASSWORD isn't set (12+ characters), so no backup is emailed: the backup holds "
                         "password hashes and customer data and is only sent encrypted. Add it to .env and restart.")
 
@@ -468,7 +483,10 @@ def send_backup_email(*, zip_bytes, filename, subject, body):
                         smtp.starttls(context=ssl.create_default_context())
                     if cfg.get("MAIL_USERNAME") and cfg.get("MAIL_PASSWORD"):
                         smtp.login(cfg["MAIL_USERNAME"], cfg["MAIL_PASSWORD"])
-                    smtp.send_message(msg)
+                    refused = smtp.send_message(msg)       # {} when the server took every recipient
+                if refused:
+                    return False, "The mail server refused the recipient address: " + ", ".join(
+                        mask_email(a) or str(a) for a in refused)
                 return True, None
             except (smtplib.SMTPServerDisconnected, smtplib.SMTPConnectError,
                     smtplib.SMTPHeloError, ConnectionError, TimeoutError, OSError) as exc:

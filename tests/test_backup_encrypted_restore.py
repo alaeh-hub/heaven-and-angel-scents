@@ -135,3 +135,34 @@ def test_the_email_backup_button_explains_a_missing_password(app, client, sql, m
     resp = client.post("/admin/backup/email")
     assert resp.status_code == 400
     assert "BACKUP_ZIP_PASSWORD" in resp.get_json()["error"]
+
+
+# ---------------------------------------------------------------- what the backup log says
+
+def test_a_small_backup_is_shown_in_kb_not_as_zero_mb():
+    from heaven_angel.services.mailer import mask_email, size_text
+    assert size_text(41_000) == "40 KB" and size_text(900) == "1 KB" and size_text(2_600_000) == "2.5 MB"
+    assert mask_email("owner@gmail.com") == "o****@gmail.com" and mask_email("") == ""
+
+
+def test_a_refused_recipient_is_not_reported_as_sent(app, monkeypatch):
+    import smtplib
+
+    from heaven_angel.services import mailer
+
+    class FakeSMTP:
+        def __init__(self, *a, **k): pass
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+        def starttls(self, **k): pass
+        def login(self, *a): pass
+        def send_message(self, msg): return {"owner@example.test": (550, b"no such user")}
+
+    monkeypatch.setattr(smtplib, "SMTP", FakeSMTP)
+    monkeypatch.setitem(app.config, "MAIL_SERVER", "smtp.example.test")
+    monkeypatch.setitem(app.config, "MAIL_DEFAULT_SENDER", "from@example.test")
+    monkeypatch.setitem(app.config, "BACKUP_NOTIFY_EMAIL", "owner@example.test")
+    monkeypatch.setitem(app.config, "BACKUP_ZIP_PASSWORD", PASSWORD)
+    with app.app_context():
+        ok, err = mailer.send_backup_email(zip_bytes=b"PK", filename="b.zip", subject="s", body="b")
+    assert not ok and "refused the recipient" in err

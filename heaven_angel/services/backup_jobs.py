@@ -25,7 +25,8 @@ from heaven_angel.services import appsettings
 from heaven_angel.services.backup import TooLargeError, build_backup_zip
 from heaven_angel.db import execute, get_db, query
 from heaven_angel.services.mailer import (
-    BACKUP_PASSWORD_HELP, backup_email_configured, backup_password_ok, send_backup_email,
+    BACKUP_PASSWORD_HELP, backup_email_configured, backup_password_ok, backup_recipient, mask_email,
+    send_backup_email, size_text,
 )
 from heaven_angel.utils import business_now
 
@@ -67,11 +68,11 @@ def run_backup_job(app, actor_id, actor_name):
             backup_state["phase"] = "Packing up your data"
             data, filename, summary = build_backup_zip(max_bytes)
             backup_state["phase"] = "Sending the email"
-            size_mb = summary["bytes"] / 1024 / 1024
+            size = size_text(summary["bytes"])
             included = "database + CSVs" + (" + photos" if summary["uploads"] else "")
             body = f"""Attached is a full backup of the Heaven & Angel Scents system{' (made automatically on schedule)' if automatic else ''}.
 
-File: {filename} ({size_mb:.1f} MB)
+File: {filename} ({size})
 Contains: {included} - {summary['tables']} tables, {summary['rows']:,} rows.
 
 This file is ENCRYPTED (AES-256), so it ends in .enc and cannot be opened like a normal zip.
@@ -95,7 +96,8 @@ Save it somewhere safe, then delete this email from shared or forwarded mailboxe
             )
             if ok:
                 action = "BACKUP_EMAIL"
-                details = (f"{size_mb:.1f} MB, {summary['tables']} tables, {summary['rows']:,} rows"
+                details = (f"{size}, {summary['tables']} tables, {summary['rows']:,} rows"
+                           f", sent to {mask_email(backup_recipient(app.config))}"
                            + ("" if summary["uploads"] else ", photos not included")
                            + ("" if summary["csv"] else ", CSVs not included"))
             else:
