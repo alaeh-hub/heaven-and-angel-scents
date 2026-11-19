@@ -17,8 +17,10 @@ Docker deployment:
 
     docker compose exec web python scripts/gallon_stock_correction.py
 
-Apply it ONCE. If the alcohol was restocked since, those purchases are kept (only
-the opening 9 gallons are corrected). Pass --gallons if the opening purchase was a
+The app and schema.sql already make this exact correction by themselves when the
+alcohol record still matches the original import (34,068.706 mL for 4,500 pesos), so
+this script is for a record that has changed since (a restock, an edit): it takes
+only the opening overstatement off. Apply it ONCE. Restocked purchases are kept. Pass --gallons if the opening purchase was a
 different number of gallons.
 """
 import argparse

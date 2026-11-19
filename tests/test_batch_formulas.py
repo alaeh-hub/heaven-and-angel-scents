@@ -443,3 +443,26 @@ def test_the_old_mix_ratio_is_corrected_when_the_formulas_load(app, sql):
     # And a producing run now takes more alcohol than water.
     alcohol_ml, water_ml = split_mix(Decimal("2800"), config["alcohol_parts"], config["water_parts"])
     assert alcohol_ml > water_ml
+
+
+def test_the_opening_alcohol_is_corrected_to_a_3200_ml_gallon(app, sql):
+    """9 gallons were stocked as 9 x 3,785.411784 mL; a gallon here is 3,200 mL, so it is 28,800 mL."""
+    import heaven_angel.routes.admin.batch_formulas as bf
+    cur = sql.cursor()
+    cur.execute("UPDATE raw_materials SET unit = 'Milliliter', package_qty = 34068.706, package_cost = 4500, "
+                "cost_per_unit = 0.1321, stock_qty = 34000 WHERE material_name = 'Perfume Alcohol'")
+    sql.commit()
+    cur.close()
+    bf._opening_alcohol_checked = False
+    with app.app_context():
+        load_formula_config()
+    row = _rows(sql, "SELECT package_qty, cost_per_unit, stock_qty FROM raw_materials "
+                     "WHERE material_name = 'Perfume Alcohol'")[0]
+    assert row["package_qty"] == Decimal("28800.000")
+    assert row["cost_per_unit"] == Decimal("0.1563")            # 4500 / 28800
+    assert row["stock_qty"] == Decimal("34000") - Decimal("5268.706")
+    # A second load changes nothing (the quantity no longer matches the original import).
+    with app.app_context():
+        load_formula_config()
+    again = _rows(sql, "SELECT stock_qty FROM raw_materials WHERE material_name = 'Perfume Alcohol'")[0]
+    assert again["stock_qty"] == row["stock_qty"]

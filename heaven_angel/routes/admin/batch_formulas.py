@@ -51,6 +51,39 @@ ROLES = {
 PACKAGING_ROLES = ("bottle", "sticker", "seal")
 
 
+# The opening Perfume Alcohol was imported as 9 gallons worked out with the US gallon
+# (34,068.706 mL for 4,500 pesos). A gallon here is 3,200 mL, so those 9 gallons are
+# 28,800 mL: the quantity and stock were 5,268.706 mL too high and the cost per mL too low.
+_opening_alcohol_checked = False
+
+
+def _heal_opening_alcohol():
+    """Correct the opening Perfume Alcohol to 9 gallons x 3,200 mL, once per process.
+
+    Only a row that still matches the original import exactly (unit mL, quantity
+    34,068.706, package cost 4,500) is touched, so it runs once and never overwrites an
+    alcohol record that has since changed (scripts/gallon_stock_correction.py handles
+    those). Stock is lowered by the same overstatement and never below zero. The same
+    correction is in schema.sql (section 58)."""
+    global _opening_alcohol_checked
+    if _opening_alcohol_checked:
+        return
+    _opening_alcohol_checked = True
+    try:
+        _, changed = execute(
+            """UPDATE raw_materials
+               SET stock_qty = GREATEST(0, stock_qty - 5268.706),
+                   package_qty = 28800.000,
+                   cost_per_unit = ROUND(package_cost / 28800, 4)
+               WHERE material_name = 'Perfume Alcohol' AND unit = 'Milliliter'
+                 AND package_qty = 34068.706 AND package_cost = 4500.00""")
+        if changed:
+            current_app.logger.warning(
+                "Corrected the opening Perfume Alcohol to 9 gallons x 3,200 mL = 28,800 mL.")
+    except Exception:
+        current_app.logger.exception("Could not correct the opening Perfume Alcohol")
+
+
 def load_formula_config():
     """The formulas and their shared settings, read from the database."""
     settings = query("SELECT bottle_unit, mix_alcohol_parts, mix_water_parts FROM bulk_formula_settings "
@@ -71,6 +104,7 @@ def load_formula_config():
         except Exception:
             current_app.logger.exception("Could not correct the alcohol : water mix ratio")
         settings["mix_alcohol_parts"], settings["mix_water_parts"] = D(1000), D(200)
+    _heal_opening_alcohol()
     packaging = {r["role"]: r["qty_per_bottle"]
                  for r in query("SELECT role, qty_per_bottle FROM bulk_formula_packaging")}
     # Formulas in the order they were seeded; sizes largest first.

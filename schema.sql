@@ -2887,7 +2887,7 @@ VALUES
         (SELECT supplier_id FROM suppliers WHERE supplier_name = 'BubbleMix Fragrances and Household Goods Store')),
     ('Moisturizer', 'Milliliter', 'Package', 1, 0.00, 0.3100, 0,
         (SELECT supplier_id FROM suppliers WHERE supplier_name = 'BubbleMix Fragrances and Household Goods Store')),
-    ('Perfume Alcohol', 'Milliliter', 'Package', 1, 0.00, 0.1321, 0,
+    ('Perfume Alcohol', 'Milliliter', 'Package', 1, 0.00, 0.1563, 0,
         (SELECT supplier_id FROM suppliers WHERE supplier_name = 'Centralpack')),
     ('Frosted 85 ml Bottle', 'Piece', 'Individual', 1, 0.00, 15.0000, 0,
         (SELECT supplier_id FROM suppliers WHERE supplier_name = 'Centralpack')),
@@ -3239,3 +3239,16 @@ SET remaining_ml = GREATEST(0, remaining_ml + (input_qty * 3200 - total_volume_m
     cost_per_ml  = ROUND(cost_per_ml * total_volume_ml / (input_qty * 3200), 6),
     total_volume_ml = input_qty * 3200
 WHERE input_unit = 'Gallon' AND total_volume_ml <> input_qty * 3200;
+
+-- The opening Perfume Alcohol was imported as 9 gallons worked out with the US
+-- gallon: 34,068.706 mL for 4,500 pesos. 9 gallons of 3,200 mL is 28,800 mL, so
+-- the quantity and the stock were 5,268.706 mL too high and the cost per mL too
+-- low (0.1321 instead of 0.1563). Correct a row that still matches that import
+-- exactly; one that has changed since is left for scripts/gallon_stock_correction.py.
+-- Runs once: afterwards the quantity is 28,800 and no longer matches.
+UPDATE raw_materials
+SET stock_qty = GREATEST(0, stock_qty - 5268.706),
+    package_qty = 28800.000,
+    cost_per_unit = ROUND(package_cost / 28800, 4)
+WHERE material_name = 'Perfume Alcohol' AND unit = 'Milliliter'
+  AND package_qty = 34068.706 AND package_cost = 4500.00;
