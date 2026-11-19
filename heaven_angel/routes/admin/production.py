@@ -19,8 +19,8 @@ from heaven_angel.utils import (
 )
 
 from heaven_angel.routes.admin.batch_formulas import (
-    ROLES, calc_to_json, formula_for_scent, load_catalog, load_formula_config, load_scent_choices,
-    prepare_scent_oils,
+    ROLES, calc_to_json, ensure_cost_columns, formula_for_scent, load_catalog, load_formula_config,
+    load_scent_choices, prepare_scent_oils,
 )
 from heaven_angel.routes.admin._common import HQ_BRANCH_ID, bp
 
@@ -338,6 +338,7 @@ def bulk_batches():
     own cost/mL, and the per-bottle figure computed from it, are both
     informational only, not what production() logs.
     """
+    ensure_cost_columns()
     materials_list = query(
         """SELECT material_id, material_name, unit, stock_qty, cost_per_unit
            FROM raw_materials ORDER BY material_name"""
@@ -345,7 +346,8 @@ def bulk_batches():
     batch_rows = query(
         """SELECT batch_id, batch_code, scent_name, input_qty, input_unit,
                   total_volume_ml, total_cost, cost_per_ml, remaining_ml,
-                  notes, target_unit, target_bottle_qty, formula_label, created_at
+                  notes, target_unit, target_bottle_qty, formula_label, created_at,
+                  chemist_cost, labor_cost
            FROM bulk_batches ORDER BY created_at DESC"""
     )
     ingredient_rows = query(
@@ -686,6 +688,7 @@ def _create_bulk_batch_records(plan, user_id):
     """Write the batch in one transaction: its totals, one row per material line,
     and the stock deducted from each material. Returns (total_cost, cost_per_ml);
     raises TransactionAborted."""
+    ensure_cost_columns()
     with transaction() as conn:
         cur = conn.cursor(dictionary=True)
         materials_by_id, line_rows, liquid_subtotal = _price_liquid_lines(cur, plan.items, plan.scent_oil)
@@ -694,7 +697,18 @@ def _create_bulk_batch_records(plan, user_id):
 
         liquid_subtotal = liquid_subtotal.quantize(decimal.Decimal("0.01"))
         packaging_subtotal = packaging_subtotal.quantize(decimal.Decimal("0.01"))
-        total_cost = liquid_subtotal + packaging_subtotal
+        # A formula batch also carries the chemist and labor charge: a flat amount per
+        # bottle it yields (one of each), part of the batch's cost and so of the cost per
+        # new bottle. Not materials, so no stock moves. Hand-made batches are unchanged.
+        chemist_cost = labor_cost = decimal.Decimal("0.00")
+        if plan.formula_label and plan.target_bottle_qty:
+            cur.execute("SELECT chemist_per_bottle, labor_per_bottle FROM bulk_formula_settings WHERE id = 1")
+            rates = cur.fetchone()
+            if rates:
+                cents = decimal.Decimal("0.01")
+                chemist_cost = (rates["chemist_per_bottle"] * plan.target_bottle_qty).quantize(cents)
+                labor_cost = (rates["labor_per_bottle"] * plan.target_bottle_qty).quantize(cents)
+        total_cost = liquid_subtotal + packaging_subtotal + chemist_cost + labor_cost
         # Cost per mL is, and stays, a LIQUID-only rate — packaging is
         # piece-counted, not mL-counted, so mixing it in here would make this
         # figure meaningless everywhere else it's read (production()'s
@@ -705,11 +719,12 @@ def _create_bulk_batch_records(plan, user_id):
             """INSERT INTO bulk_batches
                (batch_code, base_code, scent_name, input_qty, input_unit, total_volume_ml,
                 total_cost, cost_per_ml, remaining_ml, notes, target_unit,
-                target_bottle_qty, created_by_user_id, formula_label)
-               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+                target_bottle_qty, created_by_user_id, formula_label, chemist_cost, labor_cost)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
             (plan.batch_code, plan.base_code, plan.scent_name, plan.input_qty, plan.input_unit,
              plan.total_volume_ml, total_cost, cost_per_ml, plan.total_volume_ml, plan.notes,
-             plan.target_unit, plan.target_bottle_qty, user_id, plan.formula_label),
+             plan.target_unit, plan.target_bottle_qty, user_id, plan.formula_label,
+             chemist_cost, labor_cost),
         )
         batch_id = cur.lastrowid
 

@@ -51,6 +51,36 @@ ROLES = {
 PACKAGING_ROLES = ("bottle", "sticker", "seal")
 
 
+# Chemist and labor: a flat charge per bottle a formula batch yields (5 pesos each by
+# default), added to the batch's cost and to the cost per NEW bottle. They are costs,
+# not materials, so nothing is deducted from stock.
+_cost_columns_checked = False
+
+
+def ensure_cost_columns():
+    """Make sure the chemist/labor columns exist, once per process, so a database that has
+    not re-run schema.sql yet keeps working (schema.sql adds them too, section 59)."""
+    global _cost_columns_checked
+    if _cost_columns_checked:
+        return
+    _cost_columns_checked = True
+    wanted = (
+        ("bulk_formula_settings", "chemist_per_bottle", "DECIMAL(10, 2) NOT NULL DEFAULT 5.00"),
+        ("bulk_formula_settings", "labor_per_bottle", "DECIMAL(10, 2) NOT NULL DEFAULT 5.00"),
+        ("bulk_batches", "chemist_cost", "DECIMAL(12, 2) NOT NULL DEFAULT 0.00"),
+        ("bulk_batches", "labor_cost", "DECIMAL(12, 2) NOT NULL DEFAULT 0.00"),
+    )
+    try:
+        for table, column, definition in wanted:
+            found = query(
+                "SELECT 1 FROM information_schema.columns WHERE table_schema = DATABASE() "
+                "AND table_name = %s AND column_name = %s", (table, column), fetchone=True)
+            if not found:
+                execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
+    except Exception:
+        current_app.logger.exception("Could not add the chemist and labor cost columns")
+
+
 # The opening Perfume Alcohol was imported as 9 gallons worked out with the US gallon
 # (34,068.706 mL for 4,500 pesos). A gallon here is 3,200 mL, so those 9 gallons are
 # 28,800 mL: the quantity and stock were 5,268.706 mL too high and the cost per mL too low.
@@ -86,11 +116,13 @@ def _heal_opening_alcohol():
 
 def load_formula_config():
     """The formulas and their shared settings, read from the database."""
-    settings = query("SELECT bottle_unit, mix_alcohol_parts, mix_water_parts FROM bulk_formula_settings "
-                     "WHERE id = 1", fetchone=True)
+    ensure_cost_columns()
+    settings = query("SELECT bottle_unit, mix_alcohol_parts, mix_water_parts, chemist_per_bottle, "
+                     "labor_per_bottle FROM bulk_formula_settings WHERE id = 1", fetchone=True)
     if settings is None:
         # Not seeded (schema.sql migration 50 not run): no formulas to offer.
         return {"bottle_unit": None, "bottle_ml": None, "alcohol_parts": None, "water_parts": None,
+                "chemist_per_bottle": D(0), "labor_per_bottle": D(0),
                 "packaging": {}, "formulas": {}, "default_formula": None, "scent_formulas": {}}
     # The mix is 1000 mL alcohol to 200 mL water. It was first seeded the other way
     # round (200 : 1000), which put far too little alcohol in every batch. A database
@@ -134,6 +166,8 @@ def load_formula_config():
         "bottle_ml": bottle_size_ml(settings["bottle_unit"]),
         "alcohol_parts": settings["mix_alcohol_parts"],
         "water_parts": settings["mix_water_parts"],
+        "chemist_per_bottle": settings["chemist_per_bottle"],
+        "labor_per_bottle": settings["labor_per_bottle"],
         "packaging": packaging,
         "formulas": formulas,
         "default_formula": default_formula,
@@ -260,7 +294,14 @@ def compute_formula(formula, size, resolved, config, stock_by_id=None):
             "line_cost": (qty * material["cost_per_unit"]).quantize(D("0.01")),
         })
     packaging_cost = sum((p["line_cost"] for p in packaging), D("0"))
-    total_cost = liquid_cost + packaging_cost
+    # Chemist and labor: a flat charge per bottle, one of each, shown under the packaging.
+    extras = []
+    for key, name in (("chemist_per_bottle", "Chemist"), ("labor_per_bottle", "Labor")):
+        rate = D(config.get(key) or 0)
+        extras.append({"name": name, "per_bottle": D(1), "qty": D(bottles), "rate": rate,
+                       "line_cost": (rate * bottles).quantize(D("0.01"))})
+    chemist_cost, labor_cost = extras[0]["line_cost"], extras[1]["line_cost"]
+    total_cost = liquid_cost + packaging_cost + chemist_cost + labor_cost
 
     # Is there enough of everything in stock? Same rule as producing the
     # batch (_price_liquid_lines / _price_packaging_lines in production.py):
@@ -285,7 +326,8 @@ def compute_formula(formula, size, resolved, config, stock_by_id=None):
                 shortages.append({"name": p["name"], "short_by": p["short_by"], "unit": p["unit"]})
     return {
         "formula": formula, "size": size, "label": formula_label(formula, size),
-        "lines": lines, "packaging": packaging,
+        "lines": lines, "packaging": packaging, "extras": extras,
+        "chemist_cost": chemist_cost, "labor_cost": labor_cost,
         "mix_ml": D(mix_ml), "alcohol_ml": alcohol_ml, "water_ml": water_ml,
         "mix_batch_ml": mix_batch_ml, "mix_batches": mix_batches, "mix_prepared_ml": mix_prepared_ml,
         "mix_leftover_ml": mix_prepared_ml - mix_ml,
@@ -315,6 +357,7 @@ def calc_to_json(c):
         "mix_prepared_ml": f(c["mix_prepared_ml"]), "mix_leftover_ml": f(c["mix_leftover_ml"]),
         "alcohol_parts": f(c["alcohol_parts"]), "water_parts": f(c["water_parts"]),
         "liquid_cost": f(c["liquid_cost"]), "packaging_cost": f(c["packaging_cost"]),
+        "chemist_cost": f(c["chemist_cost"]), "labor_cost": f(c["labor_cost"]),
         "total_cost": f(c["total_cost"]),
         "cost_per_new_bottle": f(c["cost_per_new_bottle"]) if c["bottles"] else None,
         "cost_per_refill_bottle": f(c["cost_per_refill_bottle"]) if c["bottles"] else None,
@@ -334,6 +377,11 @@ def calc_to_json(c):
              "unit": p["unit"], "rate": f(p["rate"]), "line_cost": f(p["line_cost"]),
              "stock": f(p["stock"]), "short_by": f(p["short_by"])}
             for p in c["packaging"]
+        ],
+        "extras": [
+            {"name": x["name"], "per_bottle": f(x["per_bottle"]), "qty": f(x["qty"]),
+             "rate": f(x["rate"]), "line_cost": f(x["line_cost"])}
+            for x in c["extras"]
         ],
     }
 

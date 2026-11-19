@@ -3252,3 +3252,42 @@ SET stock_qty = GREATEST(0, stock_qty - 5268.706),
     cost_per_unit = ROUND(package_cost / 28800, 4)
 WHERE material_name = 'Perfume Alcohol' AND unit = 'Milliliter'
   AND package_qty = 34068.706 AND package_cost = 4500.00;
+
+-- ----------------------------------------------------------------------------
+-- 59. Migration — chemist and labor, per bottle
+--
+--     A bulk batch made from a formula carries two flat charges per bottle it
+--     yields, one of each: the chemist and the labor (5 pesos each by default).
+--     They are costs, not materials, so nothing is deducted from stock. The rate
+--     per bottle lives on bulk_formula_settings; the amount charged on a batch
+--     (rate x the bottles it yields) is kept on the batch itself, and is part of
+--     its total_cost and so of the cost per new bottle. Safe to re-run.
+-- ----------------------------------------------------------------------------
+DELIMITER $$
+
+DROP PROCEDURE IF EXISTS _migrate_chemist_labor$$
+
+CREATE PROCEDURE _migrate_chemist_labor()
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = DATABASE() AND table_name = 'bulk_formula_settings' AND column_name = 'chemist_per_bottle'
+    ) THEN
+        ALTER TABLE bulk_formula_settings
+            ADD COLUMN chemist_per_bottle DECIMAL(10, 2) NOT NULL DEFAULT 5.00,
+            ADD COLUMN labor_per_bottle   DECIMAL(10, 2) NOT NULL DEFAULT 5.00;
+    END IF;
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = DATABASE() AND table_name = 'bulk_batches' AND column_name = 'chemist_cost'
+    ) THEN
+        ALTER TABLE bulk_batches
+            ADD COLUMN chemist_cost DECIMAL(12, 2) NOT NULL DEFAULT 0.00,
+            ADD COLUMN labor_cost   DECIMAL(12, 2) NOT NULL DEFAULT 0.00;
+    END IF;
+END$$
+
+DELIMITER ;
+
+CALL _migrate_chemist_labor();
+DROP PROCEDURE _migrate_chemist_labor;

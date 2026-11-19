@@ -470,7 +470,7 @@
             </table>
           </div>
 
-          <h3 class="bb-h3">Packaging, one of each per bottle</h3>
+          <h3 class="bb-h3">Packaging, chemist and labor, one of each per bottle</h3>
           <div class="bb-detail-scroll">
             <table class="bb-table fm-table">
               <colgroup><col style="width:34%"><col style="width:15%"><col style="width:21%"><col style="width:14%"><col style="width:16%"></colgroup>
@@ -512,7 +512,7 @@
               <input type="text" id="fmNotes" name="notes" maxlength="255">
             </div>
             <button type="submit" class="btn btn-accent fm-submit" id="fmSubmit">Produce batch</button>
-            <p class="fm-hint">Deducts material stock and adds bottle packaging to cost.</p>
+            <p class="fm-hint">Deducts material stock and adds bottle packaging, chemist and labor to cost.</p>
           </div>
         </aside>
       </div>
@@ -598,6 +598,7 @@
                 data-target-unit="{{ b.target_unit or '' }}" data-target-bottle-qty="{{ b.target_bottle_qty or '' }}"
                 data-liquid-subtotal="{{ b.liquid_subtotal if b.target_unit else '' }}"
                 data-packaging-subtotal="{{ b.packaging_subtotal if b.target_unit else '' }}"
+                data-chemist-cost="{{ b.chemist_cost or 0 }}" data-labor-cost="{{ b.labor_cost or 0 }}"
                 data-cost-per-new-bottle="{{ b.cost_per_new_bottle if b.target_unit else '' }}"
                 data-cost-per-refill-bottle="{{ b.cost_per_refill_bottle if b.target_unit else '' }}"
                 data-ingredients='{{ b.ingredients | tojson }}' data-yields='{{ b.yields | tojson }}'>Details</button>
@@ -811,9 +812,13 @@
         return row([esc(ln.material) + sub, num(ln.qty) + ' ' + esc(unit(ln.unit)),
           stockCell(ln.stock, ln.short_by, ln.unit), rate(ln.rate), peso(ln.line_cost)]);
       }).join('');
+      // Packaging draws on stock; chemist and labor are a flat charge per bottle, so they
+      // have no stock to show and sit below the packaging as two more rows.
       document.getElementById('fmPackaging').innerHTML = c.packaging.map(function (p) {
         return row([esc(p.name), num(p.qty) + ' ' + esc(unit(p.unit)), stockCell(p.stock, p.short_by, p.unit),
           rate(p.rate), peso(p.line_cost)]);
+      }).join('') + (c.extras || []).map(function (x) {
+        return row([esc(x.name) + '<span class="fm-sub">per bottle</span>', num(x.qty) + ' bottles', '', rate(x.rate), peso(x.line_cost)]);
       }).join('');
 
       document.getElementById('fmMixing').innerHTML =
@@ -835,6 +840,8 @@
       document.getElementById('fmTotals').innerHTML =
         totalRow('Liquid ingredients', peso(c.liquid_cost)) +
         totalRow('Packaging, ' + c.bottles + ' bottles', peso(c.packaging_cost)) +
+        totalRow('Chemist, ' + c.bottles + ' bottles', peso(c.chemist_cost)) +
+        totalRow('Labor, ' + c.bottles + ' bottles', peso(c.labor_cost)) +
         totalRow('Total cost to produce', peso(c.total_cost), true) +
         totalRow('Cost per refill, liquid only', peso(c.cost_per_refill_bottle));
       submitBtn.disabled = !c.enough_stock;
@@ -938,6 +945,8 @@
         planHeadingEl.textContent = targetQty + '× ' + targetUnit + ' planned for this batch';
         planBreakdownEl.textContent = 'Liquid ' + formatPeso(btn.dataset.liquidSubtotal) +
           ' + Packaging ' + formatPeso(btn.dataset.packagingSubtotal) +
+          (parseFloat(btn.dataset.chemistCost) > 0 ? ' + Chemist ' + formatPeso(btn.dataset.chemistCost) : '') +
+          (parseFloat(btn.dataset.laborCost) > 0 ? ' + Labor ' + formatPeso(btn.dataset.laborCost) : '') +
           ' = ' + formatPeso(btn.dataset.totalCost) + ' total';
         planResultsEl.innerHTML =
           '<div class="bb-preview-yields">' +

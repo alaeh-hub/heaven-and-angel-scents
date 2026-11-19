@@ -349,20 +349,29 @@
           '<td class="num"><input type="number" class="tl-rate" step="any" min="0" aria-label="Price per unit for ' + esc(p.name) + '" data-kind="pack" data-i="' + i + '" value="' + p.rate + '"></td>' +
           '<td class="num" id="fcPack' + i + '"></td></tr>');
       });
+      // Chemist and labor: a flat charge per bottle (a cost, not a material), one row each under the packaging.
+      (current.extras || []).forEach(function (x, i) {
+        rows.push('<tr><td>' + esc(x.name) + '<span class="tl-sublabel">per bottle</span></td>' +
+          '<td class="num">' + fmt(x.qty, 0) + ' bottles</td>' +
+          '<td class="num"><input type="number" class="tl-rate" step="any" min="0" aria-label="' + esc(x.name) + ' cost per bottle" data-kind="extra" data-i="' + i + '" value="' + x.rate + '"></td>' +
+          '<td class="num" id="fcExtra' + i + '"></td></tr>');
+      });
       $('fcBody').innerHTML = rows.join('');
       fcCompute();
     }
     function fcCompute() {
       if (!current) return;
-      var liquid = 0, packaging = 0;
+      var liquid = 0, packaging = 0, extras = 0;
       Array.prototype.forEach.call($('fcBody').querySelectorAll('input'), function (inp) {
         var rate = parseFloat(inp.value) || 0, i = parseInt(inp.dataset.i, 10), cost;
         if (inp.dataset.kind === 'line') { cost = current.lines[i].qty * rate; liquid += cost; $('fcLine' + i).textContent = peso(cost); }
+        else if (inp.dataset.kind === 'extra') { cost = current.extras[i].qty * rate; extras += cost; $('fcExtra' + i).textContent = peso(cost); }
         else { cost = current.packaging[i].qty * rate; packaging += cost; $('fcPack' + i).textContent = peso(cost); }
       });
-      var total = liquid + packaging, b = current.bottles;
+      var total = liquid + packaging + extras, b = current.bottles;
       $('fcTotals').innerHTML =
         res('Liquid ingredients', peso(liquid)) + res('Packaging, ' + b + ' bottles', peso(packaging)) +
+        res('Chemist and labor, ' + b + ' bottles', peso(extras)) +
         res('Total cost to produce', peso(total), true) +
         res('Cost per new bottle', b ? peso(total / b) : '', true) +
         res('Cost per refill, liquid only', b ? peso(liquid / b) : '');

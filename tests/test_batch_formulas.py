@@ -20,6 +20,7 @@ D = Decimal
 CONFIG = {
     "bottle_unit": "85ML", "bottle_ml": D(85), "alcohol_parts": D(1000), "water_parts": D(200),
     "packaging": {role: D(1) for role in PACKAGING_ROLES},
+    "chemist_per_bottle": D(5), "labor_per_bottle": D(5),
     "formulas": {"15%": {"scents": "", "sizes": {500: (D(10), D(2800), D(26))}}},
 }
 MATERIALS_URL = "/admin/bulk-batches/formula-materials"
@@ -113,6 +114,14 @@ def test_compute_formula_costs_like_the_spreadsheet():
     # 39 bottles x (15 + 3 + 1.50), worked out automatically from the bottle count.
     assert calc["packaging_cost"] == Decimal("760.50")
     assert [p["qty"] for p in calc["packaging"]] == [Decimal("39")] * 3
+    # Chemist and labor: 5 pesos each per bottle, so 39 x 5 = 195 each, added to the batch cost.
+    assert [(x["name"], x["qty"], x["line_cost"]) for x in calc["extras"]] == [
+        ("Chemist", Decimal("39"), Decimal("195.00")), ("Labor", Decimal("39"), Decimal("195.00"))]
+    assert calc["chemist_cost"] == Decimal("195.00") and calc["labor_cost"] == Decimal("195.00")
+    assert calc["total_cost"] == calc["liquid_cost"] + calc["packaging_cost"] + Decimal("390.00")
+    # ...and so into the cost per NEW bottle (10 pesos more per bottle), not into the refill cost.
+    assert calc["cost_per_new_bottle"] == (calc["total_cost"] / 39).quantize(Decimal("0.01"))
+    assert calc["cost_per_new_bottle"] - ((calc["liquid_cost"] + calc["packaging_cost"]) / 39).quantize(Decimal("0.01")) == Decimal("10.00")
     assert abs(calc["cost_per_refill_bottle"] - Decimal("60.39")) < Decimal("0.02")
     assert compute_formula("15%", 500, {}, CONFIG) is None
 
@@ -159,6 +168,13 @@ def test_producing_from_a_formula_splits_the_mix_and_deducts_stock(client, sql):
 
     liquid = sum(r["line_cost"] for r in lines.values())
     assert abs(liquid - Decimal("2355.10")) < Decimal("0.05")
+
+    # Chemist and labor: 5 pesos each per bottle (39 bottles = 195 each), part of the batch's cost.
+    assert batch["chemist_cost"] == Decimal("195.00") and batch["labor_cost"] == Decimal("195.00")
+    packaging = sum(r["line_cost"] for r in _rows(
+        sql, "SELECT line_cost FROM bulk_batch_materials WHERE batch_id = %s AND is_packaging = TRUE",
+        (batch["batch_id"],)))
+    assert abs(batch["total_cost"] - (liquid + packaging + Decimal("390.00"))) < Decimal("0.05")
 
     # Packaging is automatic: 39 bottles -> 39 of each, deducted and costed.
     packaging = {r["material_id"]: r for r in _rows(
