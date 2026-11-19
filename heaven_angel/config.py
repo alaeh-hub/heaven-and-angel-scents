@@ -149,9 +149,9 @@ class Config:
     # is 25 MB *after* base64 encoding, so ~18 MB of file).
     BACKUP_NOTIFY_EMAIL = os.environ.get("BACKUP_NOTIFY_EMAIL", "")
     BACKUP_EMAIL_MAX_MB = float(os.environ.get("BACKUP_EMAIL_MAX_MB", 18))
-    # Passphrase for the emailed backup: the attachment is an AES-256
-    # encrypted zip (it holds password hashes and customer data). Never
-    # emailed; keep it somewhere safe. Without it the backup is NOT sent.
+    # Passphrase for the emailed backup: the attachment is one AES-256
+    # encrypted file, .enc (it holds password hashes and customer data).
+    # Never emailed; keep it somewhere safe. Without it the backup is NOT sent.
     BACKUP_ZIP_PASSWORD = os.environ.get("BACKUP_ZIP_PASSWORD", "")
 
     # Partner Portal (public, unauthenticated — see routes/portal.py).

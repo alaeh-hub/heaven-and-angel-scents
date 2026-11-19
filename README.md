@@ -153,7 +153,7 @@ This process is transactional end-to-end, so stock counts and movement history n
 
 HQ logs production batches that convert raw materials into finished (bottled) and bulk stock. Each batch is costed against unit formulas and bulk rate settings, updating warehouse inventory and recording the production event in movement history — tying production directly into COGS and profit reporting.
 
-Bulk batches are made from the built-in formulas (15%, 14%, 13%, each in 500, 250 and 125 mL timpla sizes), so nobody picks materials one by one. Each ingredient role is tied once to a raw material, and the batch cost comes from that material's current price. When logging a production run, a short one-line note shows the cost per unit and the mL drawn from the chosen batch. A formula batch also carries a chemist and a labor charge, 5 pesos each per bottle it yields (39 bottles = 195 each), added to the batch's total cost and to the cost per new bottle, shown in the Bulk batches report and told to the AI assistant; the rates live in `bulk_formula_settings`. A gallon is 3,200 mL everywhere (`ML_PER_BATCH_UNIT` in `heaven_angel/utils.py`), not the 3,785 mL US gallon. A formula's "Alcohol" amount is alcohol and distilled water together, split 1000 : 200 (1000 mL alcohol to 200 mL water); the ratio lives in `bulk_formula_settings`, and `schema.sql` corrects a database still on the old 200 : 1000 default.
+Bulk batches are made from the built-in formulas (15%, 14%, 13%, each in 500, 250 and 125 mL timpla sizes), so nobody picks materials one by one. Each ingredient role is tied once to a raw material, and the batch cost comes from that material's current price. When logging a production run, a short one-line note shows the cost per unit and the mL drawn from the chosen batch. The Formulas page is now called Base Cost of Goods (the flat cost per bottle size and the bulk rate), and a new Process Flow page next to it draws the whole route, step by step and by formula: materials, the formula and the alcohol/water split, the liquid cost, the bulk batch (bottles, packaging, chemist and labor, cost per new bottle), bottling and selling, with every number worked out the way the system does it. It is read-only and uses the same calculation as producing a batch. A formula batch also carries a chemist and a labor charge, 5 pesos each per bottle it yields (39 bottles = 195 each), added to the batch's total cost and to the cost per new bottle, shown in the Bulk batches report and told to the AI assistant; the rates live in `bulk_formula_settings`. A gallon is 3,200 mL everywhere (`ML_PER_BATCH_UNIT` in `heaven_angel/utils.py`), not the 3,785 mL US gallon. A formula's "Alcohol" amount is alcohol and distilled water together, split 1000 : 200 (1000 mL alcohol to 200 mL water); the ratio lives in `bulk_formula_settings`, and `schema.sql` corrects a database still on the old 200 : 1000 default.
 
 How stock and cost move (so a batch's bottles are never counted twice):
 
@@ -263,11 +263,13 @@ product photos when the email attachment limit allows. Restore validates the
 archive before replacing database tables, keeps a safety copy of the current data,
 and records the attempt in the Admin Log. Every table is included automatically, new ones too. Restoring a backup that predates the per-scent oil tables empties them rather than leaving today's oil stock beside older data. Admins can also enable reminders and
 opt-in scheduled email backups. These archives contain customer data and password
-hashes, so the emailed copy is wrapped in an AES-256 encrypted zip using the
-`BACKUP_ZIP_PASSWORD` passphrase (12+ characters, never emailed). Without it, no
-backup email is sent. To restore from an emailed backup, open it with 7-Zip or
-WinRAR and the passphrase, then upload the inner `.zip` to **Restore**. Backups
-downloaded directly, and the on-disk safety copies, are not wrapped (the safety
+hashes, so the emailed copy is sealed into one AES-256 encrypted `.enc` file using
+the `BACKUP_ZIP_PASSWORD` passphrase (12+ characters, never emailed). It is a data
+file, not a locked zip, because Gmail refuses an archive it cannot look inside. Without
+the passphrase, no backup email is sent. To restore from an emailed backup, choose the
+`.enc` file as it is in **Restore** (the app opens it), or run
+`python scripts/decrypt_backup.py <file>` to get the backup zip out by hand. Backups
+downloaded directly, and the on-disk safety copies, are not encrypted (the safety
 copy is written owner-only).
 In Docker Compose deployments, the pre-restore safety copy is stored in the
 persistent `appbackups` volume so it survives container rebuilds. This volume is

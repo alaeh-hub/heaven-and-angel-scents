@@ -36,7 +36,7 @@ BOTTLE_UNITS = PRODUCT_UNITS
 # on this; nothing that lists products does.
 SALE_UNITS = PRODUCT_UNITS + ("BULK",)
 
-# What the Formulas (cost of goods) page covers — every bottle size.
+# What the Base Cost of Goods page covers — every bottle size.
 FORMULA_UNITS = BOTTLE_UNITS
 
 # Every product is a fixed-size bottle (one of BOTTLE_UNITS), priced and

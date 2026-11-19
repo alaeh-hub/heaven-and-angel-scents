@@ -154,13 +154,21 @@ block the live app. If the zip would exceed `BACKUP_EMAIL_MAX_MB` (default 18)
 the photos, then the CSVs, are dropped; if `database.sql` alone is too big, use
 the `mysqldump` command in this document instead. Each attempt is recorded in the Admin Log.
 
-The zip contains customer details and password hashes and is **not
-encrypted** - treat that mailbox accordingly. This does not replace the
-nightly off-server copy described above; it is the quick "give me a copy now".
+The attachment holds customer details and password hashes, so it is sent
+**encrypted**: one AES-256 file (`heaven-angel-backup-....enc`) holding the backup zip,
+sealed with `BACKUP_ZIP_PASSWORD` from the app's `.env` (12+ characters, never
+emailed; keep a copy somewhere safe, because without it the backup cannot be
+opened). It is a data file, not a password-protected zip, on purpose: Gmail refuses
+an archive it cannot look inside. With no `BACKUP_ZIP_PASSWORD` set, no backup email
+is sent. To get the backup zip out by hand, run
+`python scripts/decrypt_backup.py <file.enc>` (it asks for the passphrase); the zip
+is the backup described above. This does not replace the nightly off-server copy
+described above; it is the quick "give me a copy now".
 
 ### Restoring one (Settings -> Backup -> Restore from a backup)
 
-Choose the `.zip` from Email backup, enter your password and type `RESTORE`.
+Choose the file from Email backup as it is (the app opens the encrypted `.enc` itself using
+`BACKUP_ZIP_PASSWORD`, or pick the decrypted `.zip`), enter your password and type `RESTORE`.
 The whole file is validated first (only the statements this app writes are
 accepted - anything else is refused); then a safety copy of the *current*
 data is written to `backups/before-restore-<stamp>.zip`; then every table in

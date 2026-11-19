@@ -1,0 +1,471 @@
+{% extends "base.html" %}
+{% block title %}Process Flow{% endblock %}
+{% block heading %}Process Flow{% endblock %}
+
+{% block head %}
+<style>
+  /* Hallmark · checked: 2026-11-19 · shape: app screen · genre: modern-minimal (inferred) · built: the project · redesign: polish · v2.0.0 */
+  .pf-lead { max-width: 65ch; margin: 0 0 var(--space-md); font-size: 0.875rem; color: var(--ink-soft); }
+
+  /* ---- what to show: scent, formula, size ---- */
+  .pf-pick { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr) minmax(0, 1.2fr); gap: var(--space-lg); align-items: start; margin-bottom: var(--space-lg); }
+  .pf-step-label { display: block; margin-bottom: var(--space-xs); font-size: 0.875rem; font-weight: 500; color: var(--ink-soft); }
+  .pf-pick select { width: 100%; margin: 0; }
+  .pf-hint { margin: var(--space-xs) 0 0; font-size: 0.8125rem; color: var(--ink-faint); }
+  .pf-seg { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-xs); }
+  .pf-choice {
+    min-height: 2.25rem; padding: var(--space-xs) var(--space-sm);
+    border: 1px solid var(--field-edge); border-radius: var(--radius);
+    background: var(--field); color: var(--ink); font: inherit; text-align: center; cursor: pointer;
+    transition: border-color var(--dur-micro) var(--ease-out), background-color var(--dur-micro) var(--ease-out);
+  }
+  .pf-choice:hover { border-color: var(--border-strong); }
+  .pf-choice:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 2px; }
+  .pf-choice:active { transform: translateY(1px); }
+  .pf-choice[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); font-weight: 600; }
+  .pf-choice-name { display: block; white-space: nowrap; }
+  .pf-choice-sub { display: block; min-height: 1.1em; font-size: 0.75rem; font-weight: 400; color: var(--ink-faint); font-variant-numeric: tabular-nums; }
+
+  /* ---- the strip: the whole route at a glance, each stop a link to its step ---- */
+  .pf-track { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 0; margin: 0 0 var(--space-lg); padding: 0; list-style: none; }
+  .pf-track li { position: relative; min-width: 0; }
+  .pf-stop { display: grid; gap: var(--space-3xs); height: 100%; padding: var(--space-sm) var(--space-sm) var(--space-sm) var(--space-sm); border: 1px solid var(--border); border-left-width: 0; background: var(--surface); color: inherit; text-decoration: none; }
+  .pf-track li:first-child .pf-stop { border-left-width: 1px; border-radius: var(--radius) 0 0 var(--radius); }
+  .pf-track li:last-child .pf-stop { border-radius: 0 var(--radius) var(--radius) 0; }
+  .pf-stop:hover { background: var(--surface-2); }
+  .pf-stop:focus-visible { outline: 2px solid var(--color-focus); outline-offset: -2px; position: relative; z-index: 1; }
+  .pf-stop-no { font-size: 0.75rem; color: var(--ink-faint); font-variant-numeric: tabular-nums; }
+  .pf-stop-name { font-size: 0.875rem; font-weight: 600; }
+  .pf-stop-fig { font-size: 0.8125rem; color: var(--ink-soft); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+
+  /* ---- the steps ---- */
+  .pf-flow { margin: 0; padding: 0; list-style: none; display: grid; gap: 0; }
+  .pf-stage { display: grid; grid-template-columns: 2.5rem minmax(0, 1fr); gap: var(--space-md); scroll-margin-top: calc(var(--topbar-h) + var(--space-md)); }
+  .pf-rail { position: relative; display: flex; flex-direction: column; align-items: center; }
+  .pf-badge { flex: 0 0 auto; display: grid; place-items: center; width: 2rem; height: 2rem; border-radius: 50%; background: var(--accent); color: var(--gold-contrast); font-weight: 600; font-size: 0.875rem; font-variant-numeric: tabular-nums; }
+  .pf-line { position: relative; flex: 1 1 auto; width: 2px; min-height: var(--space-lg); margin-top: var(--space-2xs); background: var(--border-strong); overflow: clip; }
+  /* a small dot travels down each connector: what moves from one step to the next */
+  .pf-line::after { content: ""; position: absolute; left: 0; top: 0; width: 2px; height: 1.25rem; background: var(--accent); animation: pf-travel 2.6s var(--ease-out) infinite; }
+  @keyframes pf-travel { from { transform: translateY(-1.5rem); } to { transform: translateY(max(8rem, 100%)); } }
+  .pf-stage:last-child .pf-line { display: none; }
+  .pf-main { min-width: 0; padding-bottom: var(--space-md); }
+  .pf-card { padding: var(--space-lg); margin-bottom: 0; min-width: 0; }
+  .pf-card h2 { margin: 0 0 var(--space-3xs); font-size: 1.125rem; font-weight: 600; text-wrap: balance; }
+  .pf-what { margin: 0 0 var(--space-md); max-width: 65ch; font-size: 0.875rem; color: var(--ink-soft); }
+  .pf-sub { margin: var(--space-md) 0 var(--space-xs); font-size: 0.8125rem; font-weight: 600; color: var(--ink-soft); }
+  .pf-sub:first-of-type { margin-top: 0; }
+  /* what moves on to the next step, written under the step it leaves */
+  .pf-carry { margin: var(--space-sm) 0 0; padding: var(--space-xs) var(--space-sm); border-left: 2px solid var(--accent); font-size: 0.8125rem; color: var(--ink-soft); font-variant-numeric: tabular-nums; }
+  .pf-carry strong { color: var(--ink); font-weight: 600; }
+
+  /* a computation: what it is | how it is worked out | the result */
+  .pf-calc { display: grid; }
+  .pf-row { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1.5fr) minmax(0, 0.8fr); gap: var(--space-md); align-items: baseline; padding: var(--space-xs) 0; border-top: 1px solid var(--border); font-size: 0.875rem; font-variant-numeric: tabular-nums; }
+  .pf-row:first-child { border-top: 0; }
+  .pf-row > :nth-child(3) { text-align: right; font-weight: 500; }
+  .pf-expr { color: var(--ink-soft); overflow-wrap: anywhere; }
+  .pf-row.pf-total { font-weight: 600; border-top: 1px solid var(--border-strong); }
+  .pf-row.pf-total > :nth-child(3) { font-weight: 600; }
+  .pf-note { display: block; font-size: 0.75rem; font-weight: 400; color: var(--ink-faint); }
+  .pf-short { color: var(--red-ink); }
+
+  .pf-mats { display: grid; grid-template-columns: repeat(auto-fill, minmax(11.5rem, 1fr)); gap: var(--space-xs); margin: 0; padding: 0; list-style: none; }
+  .pf-mat { display: grid; gap: var(--space-3xs); padding: var(--space-sm); border: 1px solid var(--border); border-radius: var(--radius); font-size: 0.8125rem; font-variant-numeric: tabular-nums; }
+  .pf-mat-name { font-size: 0.875rem; font-weight: 600; }
+  .pf-mat-line { color: var(--ink-soft); }
+  .pf-mat.pf-flat { border-style: dashed; }
+  .pf-mat.pf-lack { border-color: var(--red-ink); }
+
+  .pf-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr)); gap: var(--space-sm); margin: var(--space-md) 0 0; }
+  .pf-fact { padding: var(--space-sm); border-radius: var(--radius); background: var(--surface-2); }
+  .pf-fact-fig { font-size: 1.375rem; font-weight: 600; font-variant-numeric: tabular-nums; line-height: 1.15; overflow-wrap: anywhere; }
+  .pf-fact-label { font-size: 0.8125rem; color: var(--ink-faint); }
+
+  .pf-empty { padding: var(--space-lg); }
+  .pf-glance { margin-top: var(--space-xl); }
+  .pf-glance h2 { margin: 0 0 var(--space-3xs); font-size: 1.125rem; }
+  .pf-table-scroll { overflow-x: auto; }
+  .pf-table { min-width: 36rem; font-variant-numeric: tabular-nums; }
+  .pf-table th.num, .pf-table td.num { text-align: right; }
+  .pf-table tr[aria-current="true"] td { background: var(--accent-soft); }
+
+  @media (max-width: 64rem) {
+    .pf-pick { grid-template-columns: minmax(0, 1fr); gap: var(--space-md); }
+    .pf-track { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-xs); }
+    .pf-stop, .pf-track li:first-child .pf-stop, .pf-track li:last-child .pf-stop { border: 1px solid var(--border); border-radius: var(--radius); }
+  }
+  @media (max-width: 40rem) {
+    .pf-choice { padding-inline: var(--space-2xs); }
+    .pf-choice-name { font-size: 0.9375rem; }
+    .pf-track { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .pf-stage { grid-template-columns: minmax(0, 1fr); gap: var(--space-xs); }
+    .pf-rail { flex-direction: row; justify-content: flex-start; gap: var(--space-xs); }
+    .pf-line { display: none; }
+    .pf-card { padding: var(--space-md); }
+    /* each computation stacks: name, then the working, then the result */
+    .pf-row { grid-template-columns: minmax(0, 1fr) auto; row-gap: var(--space-3xs); }
+    .pf-row > :nth-child(2) { grid-column: 1 / -1; grid-row: 2; font-size: 0.8125rem; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .pf-line::after { animation: none; display: none; }
+    .pf-choice { transition: none; }
+    .pf-choice:active { transform: none; }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+{# The numbers this page draws live in a data block INSIDE the page content (not only in the
+   script): the live refresh swaps the page only when the content's HTML changed, so a price or
+   stock change has to change this block, or it would be skipped as "nothing new". #}
+<script type="application/json" id="pfData">{{ {
+  'catalog': formula_catalog_json, 'specs': formula_specs, 'scent_oils': scent_oils_json,
+  'base_cost': base_cost_json, 'bulk_rate': bulk_rate, 'bottle_unit': bottle_unit,
+  'default_formula': default_formula, 'missing': missing_roles} | tojson }}</script>
+<p class="pf-lead">
+  How a bottle gets made and costed, one step after another. Pick a formula and a size: every number below is the
+  live number the system uses. This page only shows the flow; nothing here changes any data.
+</p>
+
+<div class="card card-pad">
+  <div class="pf-pick">
+    <div>
+      <label class="pf-step-label" for="pfScent">Scent</label>
+      <select id="pfScent">
+        <option value="">No scent, the formula as it is</option>
+        {% for s in scent_choices %}
+        <option value="{{ s.code }}" data-formula="{{ s.formula or '' }}">{{ s.name }} ({{ s.code }})</option>
+        {% endfor %}
+      </select>
+      <p class="pf-hint" id="pfScentHint">A scent uses its own oil price and stock, and picks its formula for you.</p>
+    </div>
+    <div>
+      <span class="pf-step-label" id="pfFormulaLabel">Formula</span>
+      <div class="pf-seg" id="pfFormulas" role="group" aria-labelledby="pfFormulaLabel">
+        {% for f, spec in formula_specs.items() %}
+        <button type="button" class="pf-choice" data-formula="{{ f }}" aria-pressed="false">
+          <span class="pf-choice-name">Formula {{ f }}</span>
+          <span class="pf-choice-sub">{{ spec.scents }}</span>
+        </button>
+        {% endfor %}
+      </div>
+    </div>
+    <div>
+      <span class="pf-step-label" id="pfSizeLabel">Size, in mL of oil scent</span>
+      <div class="pf-seg" id="pfSizes" role="group" aria-labelledby="pfSizeLabel"></div>
+    </div>
+  </div>
+</div>
+
+<div id="pfEmpty" class="card pf-empty" hidden>
+  <p id="pfEmptyText"></p>
+  <p><a class="btn btn-ghost" href="{{ url_for('admin.bulk_batches') }}">Open Bulk Batches</a></p>
+</div>
+
+<div id="pfBody" hidden>
+  <ol class="pf-track" id="pfTrack" aria-label="The route from materials to a sold bottle"></ol>
+  <ol class="pf-flow" id="pfFlow"></ol>
+
+  <section class="card card-pad pf-glance" aria-labelledby="pfGlanceTitle">
+    <h2 id="pfGlanceTitle">Every formula at a glance</h2>
+    <p class="pf-what">The same working, for each formula and size. Choose one to follow it above.</p>
+    <div class="pf-table-scroll">
+      <table class="bb-table pf-table">
+        <thead><tr><th>Formula</th><th class="num">Oil</th><th class="num">Liquid</th><th class="num">Bottles</th><th class="num">Total cost</th><th class="num">Per new bottle</th><th></th></tr></thead>
+        <tbody id="pfGlance"></tbody>
+      </table>
+    </div>
+  </section>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script nonce="{{ csp_nonce() }}">
+  (function () {
+    // Everything comes from the data block in the page content: when a price, stock or rate changes
+    // the live refresh sees different content, swaps it, and this script draws the new numbers.
+    var DATA = JSON.parse(document.getElementById('pfData').textContent);
+    var CATALOG = DATA.catalog;
+    var SPECS = DATA.specs;
+    var SCENT_OILS = DATA.scent_oils;
+    var BASE_COST = DATA.base_cost;
+    var BULK_RATE = DATA.bulk_rate;
+    var BOTTLE_UNIT = DATA.bottle_unit;
+    var DEFAULT_FORMULA = DATA.default_formula;
+    var MISSING = DATA.missing;
+    var BASE_COST_URL = {{ url_for('admin.formulas') | tojson }};
+    var UNIT = { Milliliter: 'mL', Gram: 'g', Liter: 'L', Gallon: 'gal', Piece: 'pcs' };
+
+    var scentSel = document.getElementById('pfScent');
+    var formulaBtns = document.querySelectorAll('#pfFormulas [data-formula]');
+    var sizesEl = document.getElementById('pfSizes');
+    var bodyEl = document.getElementById('pfBody');
+    var emptyEl = document.getElementById('pfEmpty');
+    var state = { scent: '', formula: '', size: '' };
+
+    function esc(v) { var d = document.createElement('div'); d.textContent = String(v); return d.innerHTML; }
+    function unit(u) { return UNIT[u] || String(u).toLowerCase(); }
+    function n(v, max) { return Number(v).toLocaleString('en-PH', { maximumFractionDigits: max === undefined ? 3 : max }); }
+    function peso(v) { return '₱' + Number(v).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+    function rate(v) { return '₱' + Number(v).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 4 }); }
+    function mlTxt(v) { return n(v) + ' mL'; }
+
+    // A scent has its own oil price and stock: re-cost the oil line and what follows from it.
+    function withScentOil(c, code) {
+      var own = c && code ? SCENT_OILS[code] : null;
+      if (!own) return c;
+      var out = JSON.parse(JSON.stringify(c));
+      var oil = out.lines[0];
+      var cost = Math.round(oil.qty * own.rate * 10000) / 10000;
+      var delta = cost - oil.line_cost;
+      oil.rate = own.rate; oil.line_cost = cost; oil.stock = own.stock;
+      oil.short_by = Math.max(0, oil.qty - own.stock);
+      out.liquid_cost += delta; out.total_cost += delta;
+      if (out.bottles) {
+        out.cost_per_new_bottle = out.total_cost / out.bottles;
+        out.cost_per_refill_bottle = out.liquid_cost / out.bottles;
+      }
+      out.shortages = out.shortages.filter(function (x) { return x.name !== oil.material; });
+      if (oil.short_by > 0) out.shortages.unshift({ name: oil.material, short_by: oil.short_by, unit: oil.unit });
+      out.enough_stock = out.shortages.length === 0;
+      return out;
+    }
+
+    /* ---------- small building blocks ---------- */
+    function row(name, expr, result, cls, note) {
+      return '<div class="pf-row' + (cls ? ' ' + cls : '') + '"><span>' + name +
+        (note ? '<span class="pf-note">' + note + '</span>' : '') + '</span><span class="pf-expr">' + expr +
+        '</span><span>' + result + '</span></div>';
+    }
+    function fact(fig, label) {
+      return '<div class="pf-fact"><div class="pf-fact-fig">' + fig + '</div><div class="pf-fact-label">' + esc(label) + '</div></div>';
+    }
+    function stage(no, id, title, what, body, carryHtml) {
+      return '<li class="pf-stage" id="' + id + '"><div class="pf-rail"><span class="pf-badge" aria-hidden="true">' + no +
+        '</span><span class="pf-line"></span></div><div class="pf-main"><section class="card pf-card" aria-labelledby="' + id + 'T"><h2 id="' + id + 'T">' +
+        esc(title) + '</h2><p class="pf-what">' + what + '</p>' + body + '</section>' +
+        (carryHtml ? '<p class="pf-carry">' + carryHtml + '</p>' : '') + '</div></li>';
+    }
+    function mat(name, line1, line2, cls) {
+      return '<li class="pf-mat' + (cls ? ' ' + cls : '') + '"><span class="pf-mat-name">' + esc(name) + '</span>' +
+        '<span class="pf-mat-line">' + line1 + '</span><span class="pf-mat-line">' + line2 + '</span></li>';
+    }
+    function stockTxt(have, short, u) {
+      return short > 0
+        ? '<span class="pf-short">' + n(have) + ' ' + esc(unit(u)) + ' in stock, short by ' + n(short) + '</span>'
+        : n(have) + ' ' + esc(unit(u)) + ' in stock';
+    }
+
+    /* ---------- the six steps, worked out from the one calculation ---------- */
+    function render() {
+      var f = state.formula, s = state.size;
+      var c = f && s && CATALOG[f] ? withScentOil(CATALOG[f][s], state.scent) : null;
+      if (!c) {
+        bodyEl.hidden = true; emptyEl.hidden = false;
+        document.getElementById('pfEmptyText').textContent = MISSING.length
+          ? 'The formula materials are not set up yet (still missing: ' + MISSING.join(', ') + '). Set them up on the Bulk Batches page, then this flow fills in.'
+          : 'Choose a formula and a size to follow it.';
+        return;
+      }
+      emptyEl.hidden = true; bodyEl.hidden = false;
+
+      var oil = c.lines[0], fix = c.lines[1], moist = c.lines[4];
+      var baseCost = BASE_COST[BOTTLE_UNIT] || 0;
+      var liquidPerMl = c.total_ml ? c.liquid_cost / c.total_ml : 0;
+      var leftoverBottling = c.total_ml - c.bottles * c.bottle_ml;
+      var bulk100 = 100;
+
+      // 1. Materials
+      var s1 = '<h3 class="pf-sub">Ingredients</h3><ul class="pf-mats">' + c.lines.map(function (ln) {
+        var role = ln.label.replace(/\s*\((.*)\)/, ', $1');
+        return mat(ln.material, rate(ln.rate) + ' per ' + esc(unit(ln.unit)) + (role.toLowerCase() === ln.material.toLowerCase() ? '' : ' (' + esc(role) + ')'),
+          stockTxt(ln.stock, ln.short_by, ln.unit), ln.short_by > 0 ? 'pf-lack' : '');
+      }).join('') + '</ul>' +
+        '<h3 class="pf-sub">Packaging, one of each per bottle</h3><ul class="pf-mats">' + c.packaging.map(function (p) {
+          return mat(p.name, rate(p.rate) + ' each', stockTxt(p.stock, p.short_by, p.unit), p.short_by > 0 ? 'pf-lack' : '');
+        }).join('') + '</ul>' +
+        '<h3 class="pf-sub">Flat charges, one of each per bottle</h3><ul class="pf-mats">' + (c.extras || []).map(function (x) {
+          return mat(x.name, rate(x.rate) + ' per bottle', 'a cost, no stock to deduct', 'pf-flat');
+        }).join('') + '</ul>' +
+        (state.scent ? '<p class="pf-hint">The oil uses the price and stock of the scent you picked.</p>'
+          : '<p class="pf-hint">The oil shown is the pooled Oil Scent. Pick a scent above to use that scent\'s own oil price and stock.</p>');
+
+      // 2. The formula
+      var s2 = '<h3 class="pf-sub">What goes in at ' + n(oil.qty) + ' mL of oil scent</h3><div class="pf-calc">' +
+        row('Oil scent', 'the size you chose', mlTxt(oil.qty)) +
+        row('Fixative', 'set by the formula', n(fix.qty) + ' ' + esc(unit(fix.unit))) +
+        row('Alcohol and water, mixed', 'set by the formula', mlTxt(c.mix_ml)) +
+        row('Moisturizer', 'set by the formula', mlTxt(moist.qty)) +
+        row('Total liquid', n(oil.qty) + ' + ' + n(fix.qty) + ' + ' + n(c.mix_ml) + ' + ' + n(moist.qty) + ' (the fixative counts 1 g as 1 mL)', mlTxt(c.total_ml), 'pf-total') +
+        '</div>' +
+        '<h3 class="pf-sub">Splitting the alcohol and water mix, ' + n(c.alcohol_parts, 0) + ' to ' + n(c.water_parts, 0) + '</h3><div class="pf-calc">' +
+        row('Alcohol', n(c.mix_ml) + ' × ' + n(c.alcohol_parts, 0) + ' ÷ (' + n(c.alcohol_parts, 0) + ' + ' + n(c.water_parts, 0) + ')', mlTxt(c.alcohol_ml)) +
+        row('Distilled water', n(c.mix_ml) + ' − ' + n(c.alcohol_ml), mlTxt(c.water_ml)) +
+        row('Mixed in batches of ' + mlTxt(c.mix_batch_ml), 'round up ' + n(c.mix_ml) + ' ÷ ' + n(c.mix_batch_ml) + ' = ' + c.mix_batches + ' batches, ' + mlTxt(c.mix_prepared_ml) + ' prepared',
+          mlTxt(c.mix_leftover_ml) + ' left', '', 'Only the mix used is costed and taken from stock; the rest keeps.') +
+        '</div>';
+
+      // 3. Cost the liquid
+      var s3 = '<div class="pf-calc">' + c.lines.map(function (ln) {
+        return row(esc(ln.material), n(ln.qty) + ' ' + esc(unit(ln.unit)) + ' × ' + rate(ln.rate), peso(ln.line_cost), '', ln.label.indexOf('(') > -1 ? esc(ln.label.replace(/\s*\((.*)\)/, ', $1')) : '');
+      }).join('') +
+        row('Liquid ingredients', 'add the five lines', peso(c.liquid_cost), 'pf-total') +
+        row('Liquid cost per mL', peso(c.liquid_cost) + ' ÷ ' + mlTxt(c.total_ml), '₱' + liquidPerMl.toFixed(4), '', 'What a mL of this batch costs. Bulk sales and refills use it.') +
+        '</div>';
+
+      // 4. The bulk batch
+      var s4 = '<h3 class="pf-sub">How many bottles it makes</h3><div class="pf-calc">' +
+        row('Bottles', 'round down ' + n(c.total_ml) + ' ÷ ' + n(c.bottle_ml) + ' mL', c.bottles + ' bottles') +
+        row('Left over', n(c.total_ml) + ' − ' + c.bottles + ' × ' + n(c.bottle_ml), mlTxt(leftoverBottling)) +
+        '</div>' +
+        '<h3 class="pf-sub">What the ' + c.bottles + ' bottles add</h3><div class="pf-calc">' + c.packaging.map(function (p) {
+          return row(esc(p.name), n(p.qty) + ' × ' + rate(p.rate), peso(p.line_cost));
+        }).join('') + (c.extras || []).map(function (x) {
+          return row(esc(x.name), n(x.qty) + ' bottles × ' + rate(x.rate), peso(x.line_cost));
+        }).join('') + '</div>' +
+        '<h3 class="pf-sub">The cost of the batch</h3><div class="pf-calc">' +
+        row('Total cost', peso(c.liquid_cost) + ' liquid + ' + peso(c.packaging_cost) + ' packaging + ' + peso(c.chemist_cost) + ' chemist + ' + peso(c.labor_cost) + ' labor', peso(c.total_cost), 'pf-total') +
+        row('Cost per new bottle', peso(c.total_cost) + ' ÷ ' + c.bottles + ' bottles', peso(c.cost_per_new_bottle), 'pf-total') +
+        row('Cost per refill', peso(c.liquid_cost) + ' liquid only ÷ ' + c.bottles + ' bottles', peso(c.cost_per_refill_bottle), '', 'A refill needs no new bottle, sticker, seal, chemist or labor.') +
+        '</div>' +
+        '<div class="pf-facts">' + fact(c.bottles, 'bottles from this batch') + fact(peso(c.cost_per_new_bottle), 'cost per new bottle') +
+        fact(mlTxt(c.total_ml), 'in the bulk batch') + '</div>' +
+        '<p class="pf-hint">' + (c.enough_stock
+          ? 'Every material above is taken out of stock when the batch is produced.'
+          : '<span class="pf-short">Not enough stock to produce this yet: ' + c.shortages.map(function (x) { return esc(x.name) + ' (short by ' + n(x.short_by) + ' ' + esc(unit(x.unit)) + ')'; }).join(', ') + '.</span>') + '</p>';
+
+      // 5. Bottling
+      var drawn = c.bottles * c.bottle_ml;
+      var s5 = '<p class="pf-hint" style="margin-top:0">Example: bottle all ' + c.bottles + ' bottles of ' + esc(BOTTLE_UNIT.replace('ML', ' mL')) + ' in one run.</p><div class="pf-calc">' +
+        row('Drawn from the batch', c.bottles + ' bottles × ' + n(c.bottle_ml) + ' mL', mlTxt(drawn)) +
+        row('Left in the batch', n(c.total_ml) + ' − ' + n(drawn), mlTxt(c.total_ml - drawn), '', 'Stays for refills or one more bottle.') +
+        row('Packaging taken from stock', 'already taken when the batch was made', 'none more', '', 'Bottle, sticker and seal were deducted at step 4.') +
+        row('Added to HQ stock', c.bottles + ' bottles', '+' + c.bottles) +
+        (baseCost > 0
+          ? row('Cost of goods logged', c.bottles + ' × ' + peso(baseCost) + ' (the base cost of goods for ' + esc(BOTTLE_UNIT.replace('ML', ' mL')) + ')', peso(c.bottles * baseCost), 'pf-total')
+          : row('Cost of goods logged', 'no base cost is set for ' + esc(BOTTLE_UNIT.replace('ML', ' mL')) + ' yet', 'set it', 'pf-total', '<a href="' + BASE_COST_URL + '">Set it on Base Cost of Goods</a>')) +
+        '</div>' +
+        (baseCost > 0
+          ? '<p class="pf-hint">What is charged is the flat base cost of goods, not this batch\'s own cost. This batch\'s real cost per new bottle is ' + peso(c.cost_per_new_bottle) +
+            ', so the base cost is ' + peso(Math.abs(baseCost - c.cost_per_new_bottle)) + (baseCost >= c.cost_per_new_bottle ? ' higher' : ' lower') + ' per bottle. Use it to check the base cost is right.</p>'
+          : '');
+
+      // 6. Selling
+      var s6 = '<h3 class="pf-sub">Bottles</h3><p class="pf-what" style="margin-bottom:var(--space-sm)">The bottles sit in the HQ warehouse, go to branches by stock request, and are sold at each product\'s price.' +
+        (baseCost > 0 ? ' Each bottle carries ' + peso(baseCost) + ' of cost of goods.' : '') + '</p>' +
+        '<h3 class="pf-sub">Bulk and refills, sold by the mL</h3><div class="pf-calc">' +
+        row('Rate per mL', 'the one shared bulk rate', BULK_RATE > 0 ? rate(BULK_RATE) : 'not set') +
+        row('Cost per mL', 'this batch\'s liquid cost per mL', '₱' + liquidPerMl.toFixed(4)) +
+        (BULK_RATE > 0
+          ? row('Example: ' + bulk100 + ' mL', bulk100 + ' × ' + rate(BULK_RATE) + ' sells, ' + bulk100 + ' × ₱' + liquidPerMl.toFixed(4) + ' costs', peso(bulk100 * (BULK_RATE - liquidPerMl)) + ' profit', 'pf-total')
+          : '') +
+        '</div>';
+
+      document.getElementById('pfTrack').innerHTML = [
+        ['1', 'pfS1', 'Materials', c.lines.length + c.packaging.length + (c.extras || []).length + ' items'],
+        ['2', 'pfS2', 'Formula', mlTxt(c.total_ml)],
+        ['3', 'pfS3', 'Liquid cost', peso(c.liquid_cost)],
+        ['4', 'pfS4', 'Bulk batch', c.bottles + ' bottles, ' + peso(c.cost_per_new_bottle) + ' each'],
+        ['5', 'pfS5', 'Bottling', baseCost > 0 ? peso(baseCost) + ' base cost' : 'base cost not set'],
+        ['6', 'pfS6', 'Selling', BULK_RATE > 0 ? rate(BULK_RATE) + ' per mL' : 'by product price']
+      ].map(function (t) {
+        return '<li><a class="pf-stop" href="#' + t[1] + '"><span class="pf-stop-no">Step ' + t[0] + '</span><span class="pf-stop-name">' + t[2] +
+          '</span><span class="pf-stop-fig">' + t[3] + '</span></a></li>';
+      }).join('');
+
+      document.getElementById('pfFlow').innerHTML =
+        stage('1', 'pfS1', 'Materials', 'Everything the system can use: what each costs now and how much is in stock.', s1,
+          'The formula takes what it needs from these materials.') +
+        stage('2', 'pfS2', 'The formula, ' + c.label.replace(' ml', ' mL'), 'The formula says how much of each ingredient goes in for the size you chose, and how the alcohol and water mix is split.', s2,
+          '<strong>' + mlTxt(c.total_ml) + '</strong> of liquid, in these amounts, goes on to be costed.') +
+        stage('3', 'pfS3', 'Cost the liquid', 'Each ingredient: the amount from the formula times its current price. Together they are the liquid cost.', s3,
+          '<strong>' + peso(c.liquid_cost) + '</strong> of liquid cost goes into the batch.') +
+        stage('4', 'pfS4', 'Make the bulk batch', 'The liquid becomes one bulk batch. The system works out how many bottles it fills, adds the packaging, chemist and labor for those bottles, and gets the cost of each new bottle.', s4,
+          '<strong>' + c.bottles + ' bottles</strong> at <strong>' + peso(c.cost_per_new_bottle) + '</strong> each are ready to bottle from <strong>' + mlTxt(c.total_ml) + '</strong>.') +
+        stage('5', 'pfS5', 'Bottle it', 'In the Production Log you turn bulk into bottles of a product. The batch gives up its mL, stock goes up, and the cost of goods is the flat base cost for the size.', s5,
+          '<strong>' + c.bottles + ' bottles</strong> are in HQ stock' + (baseCost > 0 ? ', carrying <strong>' + peso(c.bottles * baseCost) + '</strong> of cost of goods' : '') + '.') +
+        stage('6', 'pfS6', 'Sell it', 'Bottles are sold at the product price; bulk and refills are sold by the mL at the bulk rate.', s6);
+
+      // every formula and size, one row each
+      var rows = [];
+      var order = Array.prototype.map.call(formulaBtns, function (b) { return b.dataset.formula; });
+      order.forEach(function (fm) {
+        if (!CATALOG[fm]) return;
+        Object.keys(CATALOG[fm]).sort(function (a, b) { return b - a; }).forEach(function (sz) {
+          var k = CATALOG[fm][sz];
+          if (!k) return;
+          var on = fm === f && sz === s;
+          rows.push('<tr' + (on ? ' aria-current="true"' : '') + '><td>Formula ' + esc(fm) + '</td><td class="num">' + n(sz) + ' mL</td><td class="num">' + mlTxt(k.total_ml) +
+            '</td><td class="num">' + k.bottles + '</td><td class="num">' + peso(k.total_cost) + '</td><td class="num">' + peso(k.cost_per_new_bottle) +
+            '</td><td><button type="button" class="btn btn-ghost btn-sm" data-pick-formula="' + esc(fm) + '" data-pick-size="' + esc(sz) + '">' + (on ? 'Shown' : 'Show') + '</button></td></tr>');
+        });
+      });
+      document.getElementById('pfGlance').innerHTML = rows.join('');
+
+      // the new numbers ease in; nothing moves for anyone who asked for less motion
+      if (window.Motion && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+        var a = window.Motion.animate(document.getElementById('pfFlow'), { opacity: [0.35, 1] }, { duration: 0.25, easing: 'ease-out' });
+        if (a && a.then) a.then(null, function () { });
+      }
+    }
+
+    /* ---------- the choices ---------- */
+    function sync() {
+      Array.prototype.forEach.call(formulaBtns, function (b) {
+        b.setAttribute('aria-pressed', b.dataset.formula === state.formula ? 'true' : 'false');
+      });
+      var sizes = state.formula && SPECS[state.formula] ? SPECS[state.formula].sizes : [];
+      if (sizes.indexOf(Number(state.size)) < 0) state.size = sizes.length ? String(sizes[0]) : '';
+      sizesEl.innerHTML = sizes.map(function (sz) {
+        var k = CATALOG[state.formula] ? CATALOG[state.formula][String(sz)] : null;
+        return '<button type="button" class="pf-choice" data-size="' + sz + '" aria-pressed="' + (String(sz) === state.size) + '"><span class="pf-choice-name">' + sz +
+          ' mL</span><span class="pf-choice-sub">' + (k ? k.bottles + ' bottles' : '') + '</span></button>';
+      }).join('');
+      scentSel.value = state.scent;
+      // keep the choice in the address, so a link shows the same thing
+      try {
+        var q = new URLSearchParams();
+        if (state.scent) q.set('scent', state.scent);
+        if (state.formula) q.set('formula', state.formula);
+        if (state.size) q.set('size', state.size);
+        history.replaceState(history.state, '', location.pathname + (q.toString() ? '?' + q.toString() : ''));
+      } catch (e) { /* the page works without it */ }
+      render();
+    }
+
+    Array.prototype.forEach.call(formulaBtns, function (b) {
+      b.addEventListener('click', function () { state.formula = b.dataset.formula; sync(); });
+    });
+    sizesEl.addEventListener('click', function (e) {
+      var b = e.target.closest('[data-size]');
+      if (b) { state.size = b.dataset.size; sync(); }
+    });
+    scentSel.addEventListener('change', function () {
+      state.scent = scentSel.value;
+      var opt = scentSel.options[scentSel.selectedIndex];
+      if (state.scent && opt.dataset.formula) state.formula = opt.dataset.formula;
+      sync();
+    });
+    document.getElementById('pfGlance').addEventListener('click', function (e) {
+      var b = e.target.closest('[data-pick-formula]');
+      if (!b) return;
+      state.formula = b.dataset.pickFormula; state.size = b.dataset.pickSize; state.scent = '';
+      sync();
+      document.getElementById('pfTrack').scrollIntoView({ block: 'start', behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+    });
+
+    // start from the address (a shared link), else the default formula at its largest size
+    var q0 = new URLSearchParams(location.search);
+    var firstFormula = SPECS[DEFAULT_FORMULA] ? DEFAULT_FORMULA : (Object.keys(SPECS)[0] || '');
+    state.scent = SCENT_OILS[q0.get('scent')] !== undefined || scentSel.querySelector('option[value="' + (q0.get('scent') || '') + '"]') ? (q0.get('scent') || '') : '';
+    state.formula = SPECS[q0.get('formula')] ? q0.get('formula') : '';
+    if (state.scent && !state.formula) {
+      var o = scentSel.querySelector('option[value="' + state.scent + '"]');
+      state.formula = o && o.dataset.formula ? o.dataset.formula : '';
+    }
+    if (!state.formula) state.formula = firstFormula;
+    state.size = q0.get('size') || '';
+    sync();
+  })();
+</script>
+{% endblock %}

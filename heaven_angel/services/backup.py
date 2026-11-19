@@ -269,10 +269,42 @@ def split_sql(text):
     return statements
 
 
+def _decrypt_emailed_backup(path):
+    """The backup zip's bytes, if `path` is the encrypted .enc file Email backup sends.
+
+    It is opened with BACKUP_ZIP_PASSWORD (see backup_crypto.py) so it can be restored as it
+    is, without decrypting it by hand first. Returns None for anything else (a plain backup
+    zip, a bare .sql), which is read as before.
+    """
+    with open(path, "rb") as fh:
+        head = fh.read(16)
+    if not head.startswith(b"HABK1\n"):
+        return None
+    try:
+        from heaven_angel.services.backup_crypto import BackupDecryptError, decrypt_backup
+    except ImportError:
+        raise RestoreError("This backup is encrypted, and the cryptography package that opens it isn't "
+                           "installed. Run: pip install -r requirements.txt, then restart the app.") from None
+    password = current_app.config.get("BACKUP_ZIP_PASSWORD") or ""
+    if not password:
+        raise RestoreError("This backup is encrypted. Set BACKUP_ZIP_PASSWORD (the one it was emailed with) "
+                           "and try again, or decrypt it first with scripts/decrypt_backup.py.")
+    if os.path.getsize(path) > _MAX_SQL_BYTES:
+        raise RestoreError("That backup is larger than the restore limit.")
+    with open(path, "rb") as fh:
+        blob = fh.read()
+    try:
+        return decrypt_backup(blob, password)
+    except BackupDecryptError as err:
+        raise RestoreError(str(err)) from None
+
+
 def read_backup_sql(path):
-    """Return (sql_text, zipfile_or_None) from an uploaded backup .zip or a bare .sql."""
-    if zipfile.is_zipfile(path):
-        zf = zipfile.ZipFile(path)
+    """Return (sql_text, zipfile_or_None) from an uploaded backup .zip (plain, or the
+    encrypted .enc file Email backup sends) or a bare .sql."""
+    inner = _decrypt_emailed_backup(path)
+    if inner is not None or zipfile.is_zipfile(path):
+        zf = zipfile.ZipFile(io.BytesIO(inner)) if inner is not None else zipfile.ZipFile(path)
         try:
             info = zf.getinfo("database.sql")
         except KeyError:

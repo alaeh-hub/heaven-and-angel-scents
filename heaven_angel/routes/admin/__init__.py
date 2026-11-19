@@ -17,6 +17,7 @@ from heaven_angel.routes.admin import (  # noqa: F401  (imported for route regis
     materials,
     packages,
     partners,
+    process_flow,
     production,
     products,
     reports,

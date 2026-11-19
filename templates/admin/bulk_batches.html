@@ -453,6 +453,10 @@
   </p>
   {% endif %}
 
+{# The numbers this page draws live in a data block INSIDE the page content (not only in the
+   script): the live refresh swaps the page only when the content's HTML changed, so a price or
+   stock change has to change this block, or it would be skipped as "nothing new". #}
+  <script type="application/json" id="fmData">{{ {'catalog': formula_catalog_json, 'scent_oils': scent_oils_json} | tojson }}</script>
   <form method="POST" action="{{ url_for('admin.produce_batch_formula') }}" class="fm-form" id="fmProduceForm">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <input type="hidden" name="form_token" value="{{ form_token }}">
@@ -659,7 +663,7 @@
   <div class="pg-foot">
     <p>Bottling on the
       <a href="{{ url_for('admin.production') }}">Production Log page</a> is charged the flat price from the
-      <a href="{{ url_for('admin.formulas') }}">Formulas page</a>.</p>
+      <a href="{{ url_for('admin.formulas') }}">Base Cost of Goods page</a>.</p>
   </div>
   {% else %}
   {{ empty.state('No batches yet', 'A batch turns raw materials into bulk perfume. Produce one from a formula above and it is tracked here from the first mL to the last.', icon='flask') }}
@@ -734,8 +738,11 @@
 {% block scripts %}
 <script nonce="{{ csp_nonce() }}">
   (function () {
-    var CATALOG = {{ formula_catalog_json | tojson }};
-    var SCENT_OILS = {{ scent_oils_json | tojson }};
+    // Read from the data block in the page content, so a refresh that changes it re-draws the numbers.
+    var fmDataEl = document.getElementById('fmData');
+    var FM_DATA = fmDataEl ? JSON.parse(fmDataEl.textContent) : { catalog: {}, scent_oils: {} };
+    var CATALOG = FM_DATA.catalog;
+    var SCENT_OILS = FM_DATA.scent_oils;
     var form = document.getElementById('fmProduceForm');
     if (!form) return;
     var formulaInput = document.getElementById('fmFormula');
@@ -1042,7 +1049,7 @@
         // total_cost_per_bottle (liquid share + packaging formula total —
         // see bulk_batches()/_formula_items_by_unit() in routes/admin/)
         // is a reference only, never what a production run is actually
-        // charged (that's the flat base cost on the Formulas page).
+        // charged (that's the flat base cost on the Base Cost of Goods page).
         return '<div class="bb-yield-card">' +
           '<div class="bb-yield-unit">' + esc(y.unit) + '</div>' +
           '<div class="bb-yield-count">' + esc(y.bottle_count) + '</div>' +

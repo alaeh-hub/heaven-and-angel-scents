@@ -21,7 +21,8 @@ cp .env.example .env && nano .env
 ```
 
 Set at least: `DOMAIN`, `DB_ROOT_PASSWORD`, `DB_APP_PASSWORD`, `SECRET_KEY`,
-`PARTNER_PORTAL_SLUG`, plus your `MAIL_*` / `GEMINI_API_KEY` values. Use long
+`PARTNER_PORTAL_SLUG` (no built-in default; a long random value), `BACKUP_ZIP_PASSWORD` (12+ characters; the emailed backups are
+encrypted with it and are not sent without it), plus your `MAIL_*` / `GEMINI_API_KEY` values. Use long
 random values (`python3 -c "import secrets; print(secrets.token_urlsafe(24))"`).
 `APP_ENV`, debug and data-reset are forced to production-safe values by the
 compose file. `chmod 600 .env`.

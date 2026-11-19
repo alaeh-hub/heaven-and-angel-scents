@@ -147,6 +147,8 @@ MYSQL_PASSWORD=<the password you set above>
 MYSQL_DB=heaven_and_angel_scents
 SOCKETIO_CORS_ALLOWED_ORIGINS=https://yourdomain.com
 PARTNER_PORTAL_SLUG=<run: python3 -c "import secrets; print(secrets.token_urlsafe(16))">
+TRUST_PROXY=1
+BACKUP_ZIP_PASSWORD=<12+ characters; emailed backups are encrypted with it>
 ```
 
 Optional but recommended: `MAIL_*` settings and

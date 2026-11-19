@@ -207,7 +207,7 @@
                     </svg>
                     <span class="nav-text">Products</span>
                 </a>
-                <a class="nav-link has-subs {{ 'active' if request.endpoint in ('admin.production', 'admin.bulk_batches', 'admin.formulas') }}" {% if request.endpoint in ('admin.production', 'admin.bulk_batches', 'admin.formulas') %}aria-current="true"{% endif %}
+                <a class="nav-link has-subs {{ 'active' if request.endpoint in ('admin.production', 'admin.bulk_batches', 'admin.formulas', 'admin.process_flow') }}" {% if request.endpoint in ('admin.production', 'admin.bulk_batches', 'admin.formulas', 'admin.process_flow') %}aria-current="true"{% endif %}
                     href="{{ url_for('admin.production') }}">
                     <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
                         <path d="M12 3v6l-4 5v6a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1v-6l-4-5" />
@@ -237,7 +237,14 @@
                         <path d="M9 3v4M15 3v4M5 7h14l-1.5 13.5a1 1 0 0 1-1 .5H7.5a1 1 0 0 1-1-.9L5 7z" />
                         <path d="M8.5 12h7M8.5 16h4" />
                     </svg>
-                    <span class="nav-text">Formulas</span>
+                    <span class="nav-text">Base Cost of Goods</span>
+                </a>
+                <a class="nav-link nav-sub {{ 'active' if request.endpoint == 'admin.process_flow' }}" {% if request.endpoint == 'admin.process_flow' %}aria-current="page"{% endif %}
+                    href="{{ url_for('admin.process_flow') }}">
+                    <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                        <path d="M3.5 5h6v5h-6zM14.5 14h6v5h-6zM9.5 7.5h2.5a2.5 2.5 0 0 1 2.5 2.5v4" />
+                    </svg>
+                    <span class="nav-text">Process Flow</span>
                 </a>
                 <a class="nav-link {{ 'active' if request.endpoint == 'admin.materials' }}" {% if request.endpoint == 'admin.materials' %}aria-current="page"{% endif %}
                     href="{{ url_for('admin.materials') }}">
@@ -842,7 +849,7 @@
                    endpoint, extra endpoints it should also light up for. #}
                 {% if session.role == 'Admin' %}
                 {% set subnav_groups = [
-                    [('Production Log', 'admin.production', ()), ('Bulk Batches', 'admin.bulk_batches', ()), ('Formulas', 'admin.formulas', ())],
+                    [('Production Log', 'admin.production', ()), ('Bulk Batches', 'admin.bulk_batches', ()), ('Base Cost of Goods', 'admin.formulas', ()), ('Process Flow', 'admin.process_flow', ())],
                     [('Low Stock', 'admin.low_stock', ()), ('Inventory Log', 'admin.movement_logs', ()), ('Discrepancies', 'admin.discrepancies', ())],
                     [('Sales History', 'admin.sales_history', ()), ('Customers', 'admin.customers', ()), ('Credit Purchases', 'admin.credit_purchases', ())],
                     [('Branches', 'admin.branches', ()), ('Accounts', 'admin.users', ())],
@@ -981,8 +988,8 @@
                         <p class="settings-note settings-warn"><strong>This replaces the current data</strong> with the backup
                             and signs you out.</p>
                         <form id="restoreForm" autocomplete="off" novalidate>
-                        <label class="settings-field">Backup file <span>(the .zip from Email backup)</span>
-                            <input type="file" id="restoreFile" accept=".zip,.sql">
+                        <label class="settings-field">Backup file <span>(the file from Email backup, as it is)</span>
+                            <input type="file" id="restoreFile" accept=".zip,.sql,.enc">
                         </label>
                         <label class="settings-field">Your password
                             <input type="password" id="restorePassword" autocomplete="current-password">

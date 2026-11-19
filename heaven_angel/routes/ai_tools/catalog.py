@@ -114,9 +114,9 @@ def get_suppliers(args, ctx):
 
 
 def get_formulas(args, ctx):
-    """Cost-of-goods settings (the Formulas page): a flat base cost per
+    """Cost-of-goods settings (the Base Cost of Goods page): a flat base cost per
     bottle size, charged per bottle produced, plus the Bulk/Refill rate
-    per mL. Same tables production() and the Formulas report read
+    per mL. Same tables production() and the Base Cost of Goods report read
     (unit_cogs_settings / bulk_rate_settings); the old per-material
     recipe table (unit_formula_items) is no longer used."""
     unit = (args.get("unit") or "").strip().upper()

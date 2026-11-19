@@ -177,14 +177,14 @@ _ADMIN_DECLARATIONS = [
     },
     {
         "name": "get_formulas",
-        "description": "Cost-of-goods settings (the Formulas page): the flat base cost per bottle size (85ML/50ML/10ML/3ML) charged per bottle produced, and the Bulk/Refill rate per mL.",
+        "description": "Cost-of-goods settings (the Base Cost of Goods page): the flat base cost per bottle size (85ML/50ML/10ML/3ML) charged per bottle produced, and the Bulk/Refill rate per mL.",
         "parameters": {"type": "object", "properties": {
             "unit": {"type": "string", "description": "Bottle size, e.g. 85ML, or BULK for the per-mL rate. Omit for all."},
         }},
     },
     {
         "name": "get_bulk_batches",
-        "description": "Bulk scent batches (the stock refills and bottles are filled from): remaining mL, total volume, cost per mL, the formula or opening-balance note, whether its packaging is recorded, and how many bottles of each size the remaining mL could still fill.",
+        "description": "Bulk scent batches (the stock refills and bottles are filled from): remaining mL, total volume, cost per mL, total cost (for a formula batch: materials plus the flat chemist and labor charge per bottle), the formula or opening-balance note, whether its packaging is recorded, and how many bottles of each size the remaining mL could still fill.",
         "parameters": {"type": "object", "properties": {
             "active_only": {"type": "boolean", "description": "Defaults to true: only batches with mL remaining."},
         }},

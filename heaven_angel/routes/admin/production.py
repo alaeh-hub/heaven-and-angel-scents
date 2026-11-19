@@ -334,7 +334,7 @@ def bulk_batches():
     (this batch's liquid cost/mL x the size's mL, plus that size's
     packaging formula total — see formula_items_by_unit()). What a
     bottled run actually gets charged, though, is the flat base price set
-    per size on the Formulas page (see unit_cogs_settings) — this page's
+    per size on the Base Cost of Goods page (see unit_cogs_settings) — this page's
     own cost/mL, and the per-bottle figure computed from it, are both
     informational only, not what production() logs.
     """
@@ -424,7 +424,8 @@ def bulk_batches():
         # subtotals split straight from this batch's own materials (not
         # the generic per-size reference above), same SUMIF(Category=...)
         # split the "Timpla Costing" spreadsheet does. Cost per NEW
-        # bottle is liquid+packaging / yield; cost per REFILL is
+        # bottle is (liquid + packaging + chemist + labor) / yield, the
+        # batch's total_cost / yield; cost per REFILL is
         # liquid-only / yield (a refill doesn't need a new bottle/sticker/
         # seal) — matching that spreadsheet's own two result rows. A formula
         # batch's total_cost also carries its chemist and labor charge (a flat
@@ -825,7 +826,8 @@ def produce_batch_formula():
     into, so the only inputs are which formula and size, plus a scent name /
     code / notes. It then goes through the same transaction as any batch
     (_create_bulk_batch_records): stock checked and deducted, cost
-    snapshotted, the 85ML packaging folded in. Cost per bottle is total
+    snapshotted, the 85ML packaging folded in, and the chemist and labor charge
+    added (a flat amount per bottle it yields). Cost per bottle is total
     cost / bottles the formula yields.
     """
     if not consume_form_token("create_bulk_batch"):

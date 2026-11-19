@@ -24,7 +24,9 @@ from flask import current_app
 from heaven_angel.services import appsettings
 from heaven_angel.services.backup import TooLargeError, build_backup_zip
 from heaven_angel.db import execute, get_db, query
-from heaven_angel.services.mailer import backup_email_configured, send_backup_email
+from heaven_angel.services.mailer import (
+    BACKUP_PASSWORD_HELP, backup_email_configured, backup_password_ok, send_backup_email,
+)
 from heaven_angel.utils import business_now
 
 backup_lock = threading.Lock()          # held for the whole of a backup
@@ -57,6 +59,10 @@ def run_backup_job(app, actor_id, actor_name):
         automatic = actor_name == AUTO_ACTOR
         action, details = "BACKUP_EMAIL_FAILED", "The backup could not be created (see the server log)."
         try:
+            if not backup_password_ok(app.config):
+                # No point building a big zip that cannot be sent.
+                details = BACKUP_PASSWORD_HELP
+                return
             max_bytes = int(app.config["BACKUP_EMAIL_MAX_MB"] * 1024 * 1024)
             backup_state["phase"] = "Packing up your data"
             data, filename, summary = build_backup_zip(max_bytes)
@@ -68,11 +74,16 @@ def run_backup_job(app, actor_id, actor_name):
 File: {filename} ({size_mb:.1f} MB)
 Contains: {included} - {summary['tables']} tables, {summary['rows']:,} rows.
 
-database.sql restores everything:
+This file is ENCRYPTED (AES-256), so it ends in .enc and cannot be opened like a normal zip.
+Its passphrase is BACKUP_ZIP_PASSWORD from the app's .env.
+To restore: Settings > Backup > Restore from a backup, and choose this file as it is (the app
+opens it with that passphrase). To get the backup zip out by hand, run
+  python scripts/decrypt_backup.py <this file>
+
+Inside the backup zip, database.sql restores everything:
   mysql -u <user> -p <database> < database.sql
-  (or use Settings > Backup > Restore from a backup in the app)
 The csv/ folder holds each table as a spreadsheet-friendly file.
-MANIFEST.txt inside the zip lists row counts and restore steps.
+MANIFEST.txt lists row counts and restore steps.
 
 KEEP THIS PRIVATE: it contains customer details and account password hashes.
 Save it somewhere safe, then delete this email from shared or forwarded mailboxes.
@@ -210,7 +221,7 @@ def _tick(app):
     with app.app_context():
         if restore_running():
             return
-        if not backup_email_configured(app.config):
+        if not backup_email_configured(app.config) or not backup_password_ok(app.config):
             return
         test_at = _test_run_at(app)
         if test_at:

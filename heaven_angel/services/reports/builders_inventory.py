@@ -225,7 +225,7 @@ def report_formulas(filters, branch_scope):
     """The cost of goods on file right now: the flat base cost per
     Bottled packaging size (unit_cogs_settings) plus the single per-mL
     rate for Bulk/Refill (bulk_rate_settings) — exactly what the
-    Formulas page edits and what production() logs as cogs_per_unit.
+    Base Cost of Goods page edits and what production() logs as cogs_per_unit.
 
     This used to list unit_formula_items (a per-size materials recipe),
     but production() no longer reads that table — it was superseded by

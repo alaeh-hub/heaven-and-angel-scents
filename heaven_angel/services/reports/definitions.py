@@ -9,15 +9,15 @@
 REPORT_TYPES = {
     "products":        {"label": "Products",        "admin": True, "branch": False, "windowed": False},
     "production_log":  {"label": "Production Log",  "admin": True, "branch": False, "windowed": True},
-    # Materials/Suppliers/Formulas/Cost of Goods Log — admin-only (raw
+    # Materials/Suppliers/Base Cost of Goods/Cost of Goods Log — admin-only (raw
     # materials and cost of goods are HQ-side bookkeeping; branch
-    # accounts never see the Materials/Formulas pages either). Materials
+    # accounts never see the Materials/Base Cost of Goods pages either). Materials
     # and Cost of Goods Log are dated logs (windowed); Suppliers and
     # Formulas are catalog-style snapshots, same reasoning as Products/
     # Accounts/Partners/Packages above.
     "materials":       {"label": "Materials",        "admin": True, "branch": False, "windowed": True},
     "suppliers":       {"label": "Suppliers",        "admin": True, "branch": False, "windowed": False},
-    "formulas":        {"label": "Formulas (Cost of Goods)", "admin": True, "branch": False, "windowed": False},
+    "formulas":        {"label": "Base Cost of Goods", "admin": True, "branch": False, "windowed": False},
     "cogs_logs":       {"label": "Cost of Goods Log", "admin": True, "branch": False, "windowed": True},
     # Bulk Batches — the step between raw materials and bottling (see
     # bulk_batches in schema.sql). Admin-only like the rest of the

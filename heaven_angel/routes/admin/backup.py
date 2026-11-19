@@ -20,7 +20,9 @@ from heaven_angel.services.backup_jobs import backup_lock as _backup_lock
 from heaven_angel.services.backup_jobs import backup_state as _backup_state
 from heaven_angel.services.backup_jobs import run_backup_job as _backup_job
 from heaven_angel.extensions import limiter
-from heaven_angel.services.mailer import backup_email_configured, backup_recipient
+from heaven_angel.services.mailer import (
+    BACKUP_PASSWORD_HELP, backup_email_configured, backup_password_ok, backup_recipient,
+)
 from heaven_angel.utils import (
     business_today,
 )
@@ -49,6 +51,8 @@ def backup_email():
     if not backup_email_configured(current_app.config):
         return jsonify(error="Email isn't set up yet - add MAIL_SERVER, MAIL_DEFAULT_SENDER and "
                              "PARTNER_INQUIRY_NOTIFY_EMAIL (or BACKUP_NOTIFY_EMAIL) to .env."), 400
+    if not backup_password_ok(current_app.config):
+        return jsonify(error=BACKUP_PASSWORD_HELP), 400
     if not _backup_lock.acquire(blocking=False):
         return jsonify(error="A backup is already running."), 409
     log_action("BACKUP_REQUESTED", "database backup")
@@ -117,6 +121,8 @@ def backup_schedule_save():
         return jsonify(error="That schedule is not one of the choices."), 400
     if auto and not backup_email_configured(current_app.config):
         return jsonify(error="Email isn't set up yet, so automatic backups can't be turned on."), 400
+    if auto and not backup_password_ok(current_app.config):
+        return jsonify(error=BACKUP_PASSWORD_HELP), 400
     backup_jobs.save_schedule(days, auto, hour)
     log_action("BACKUP_SCHEDULE", "database backup",
                f"every {days} days, automatic {'on at %02d:00' % hour if auto else 'off'}")
@@ -198,6 +204,14 @@ def _restore_job(app, path, actor_id, actor_name):
             safety = save_safety_backup()
             _restore_state["phase"] = "Restoring the database"
             run_restore(statements)
+            # The restored tables are exactly what the backup held. A backup older than a feature
+            # lacks its columns (e.g. chemist and labor), and the once-per-process checks already
+            # ran: check again now, so the app does not break until it is restarted.
+            try:
+                from heaven_angel.routes.admin.batch_formulas import reapply_data_fixes
+                reapply_data_fixes()
+            except Exception:
+                app.logger.exception("Could not re-check the database after the restore")
             emptied = empty_tables_missing_from_backup(tables)
             photos = 0
             try:

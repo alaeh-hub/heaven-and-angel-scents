@@ -422,6 +422,15 @@ def backup_email_configured(cfg):
     return bool(cfg.get("MAIL_SERVER") and cfg.get("MAIL_DEFAULT_SENDER") and backup_recipient(cfg))
 
 
+BACKUP_PASSWORD_HELP = ("BACKUP_ZIP_PASSWORD isn't set (12+ characters), so no backup is emailed: the backup holds "
+                        "password hashes and customer data and is only sent encrypted. Add it to .env and restart.")
+
+
+def backup_password_ok(cfg):
+    """Emailed backups are encrypted with BACKUP_ZIP_PASSWORD; without it none is sent."""
+    return len(cfg.get("BACKUP_ZIP_PASSWORD") or "") >= 12
+
+
 def send_backup_email(*, zip_bytes, filename, subject, body):
     """Email a backup .zip to HQ. Returns (True, None) or (False, reason).
 
@@ -432,27 +441,25 @@ def send_backup_email(*, zip_bytes, filename, subject, body):
     if not backup_email_configured(cfg):
         return False, "Email isn't set up (MAIL_SERVER, MAIL_DEFAULT_SENDER and a recipient are required)."
     password = cfg.get("BACKUP_ZIP_PASSWORD") or ""
-    if len(password) < 12:
-        return False, ("BACKUP_ZIP_PASSWORD isn't set (12+ characters). The emailed backup holds password "
-                       "hashes and customer data, so it is only sent encrypted. Add it to .env and restart.")
+    if not backup_password_ok(cfg):
+        return False, BACKUP_PASSWORD_HELP
     try:
-        # Wrap the backup in an AES-256 zip. Restore: open it with 7-Zip/WinRAR and the
-        # passphrase, then upload the inner .zip as usual.
-        import io
-        import pyzipper
-        wrapped = io.BytesIO()
-        with pyzipper.AESZipFile(wrapped, "w", compression=pyzipper.ZIP_STORED,
-                                 encryption=pyzipper.WZ_AES) as zf:
-            zf.setpassword(password.encode("utf-8"))
-            zf.writestr(filename, zip_bytes)
-        zip_bytes = wrapped.getvalue()
-        filename = filename.rsplit(".", 1)[0] + "-encrypted.zip"
+        from heaven_angel.services.backup_crypto import encrypt_backup
+    except ImportError:
+        return False, ("The cryptography package that encrypts the backup isn't installed here. "
+                       "Run: pip install -r requirements.txt, then restart the app.")
+    try:
+        # Seal the backup into one opaque AES-256 file (.enc). Not a locked zip: Gmail refuses
+        # an archive it cannot look inside (see backup_crypto.py). Restore opens the .enc as it
+        # is, and scripts/decrypt_backup.py opens it by hand.
+        zip_bytes = encrypt_backup(zip_bytes, password)
+        filename = filename.rsplit(".", 1)[0] + ".enc"
         msg = EmailMessage()
         msg["Subject"] = subject
         msg["From"] = cfg["MAIL_DEFAULT_SENDER"]
         msg["To"] = backup_recipient(cfg)
         msg.set_content(body)
-        msg.add_attachment(zip_bytes, maintype="application", subtype="zip", filename=filename)
+        msg.add_attachment(zip_bytes, maintype="application", subtype="octet-stream", filename=filename)
         last_error = None
         for attempt in range(1, _SEND_ATTEMPTS + 1):
             try:

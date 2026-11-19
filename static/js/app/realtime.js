@@ -329,6 +329,8 @@ function initRealtime(notifBell) {
         { match: /^\/admin\/users\/?$/, scopes: ['users'] },
         { match: /^\/admin\/(materials|suppliers|formulas|tools)\/?$/, scopes: ['materials'] },
         { match: /^\/admin\/bulk-batches\/?$/, scopes: ['materials', 'production'] },
+        // Process Flow draws materials' prices and stock, the batch and the base cost, so it follows the same changes.
+        { match: /^\/admin\/process-flow\/?$/, scopes: ['materials', 'production'] },
         { match: /^\/admin\/partners\/\d+\/?$/, scopes: ['partners'] },
         { match: /^\/admin\/requests\/\d+\/?$/, scopes: ['requests'] },
         { match: /^\/admin\/(low-stock|discrepancies)\/?$/, scopes: ['inventory', 'movement_logs'] },

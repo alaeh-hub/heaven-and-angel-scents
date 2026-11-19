@@ -81,6 +81,16 @@ def ensure_cost_columns():
         current_app.logger.exception("Could not add the chemist and labor cost columns")
 
 
+def reapply_data_fixes():
+    """After a restore: the database is whatever the backup held, so make the once-per-process
+    checks (the chemist/labor columns, the opening alcohol) run again instead of trusting that
+    they already did. The ratio is re-checked every time the formulas load."""
+    global _cost_columns_checked, _opening_alcohol_checked
+    _cost_columns_checked = False
+    _opening_alcohol_checked = False
+    ensure_cost_columns()
+
+
 # The opening Perfume Alcohol was imported as 9 gallons worked out with the US gallon
 # (34,068.706 mL for 4,500 pesos). A gallon here is 3,200 mL, so those 9 gallons are
 # 28,800 mL: the quantity and stock were 5,268.706 mL too high and the cost per mL too low.

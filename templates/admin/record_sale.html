@@ -327,7 +327,7 @@
 
     <!-- ---- Bulk/Refill: sold by volume, not a fixed bottle. Qty (mL)
          is freely typed, price per mL is always the one shared rate on
-         file (see the Formulas page / bulk_rate_settings in schema.sql),
+         file (see the Base Cost of Goods page / bulk_rate_settings in schema.sql),
          never retyped by hand. Only products in the Bulk/Refill category
          show up here (see products.category). ---- -->
     <div id="looseSection" class="kind-panel" style="display:none;">
@@ -347,7 +347,7 @@
           <label for="unit_price_loose">Price per mL (₱)</label>
           <input type="number" id="unit_price_loose" name="unit_price" step="0.01" min="0" readonly disabled required
             data-bulk-rate="{{ bulk_rate }}">
-          <div class="help">Set on the Formulas page, not editable here.</div>
+          <div class="help">Set on the Base Cost of Goods page, not editable here.</div>
         </div>
       </div>
 
@@ -834,7 +834,7 @@
 
     // ---- Bulk/Refill: sold by volume, qty (mL) is freely typed, price
     // per mL is always the one shared rate on file (data-bulk-rate,
-    // never retyped by hand here, see the Formulas page /
+    // never retyped by hand here, see the Base Cost of Goods page /
     // bulk_rate_settings in schema.sql), with the total only ever
     // previewed here, same "never double up with the qty × price
     // multiplication done everywhere downstream" reasoning as

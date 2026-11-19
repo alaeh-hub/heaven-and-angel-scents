@@ -252,7 +252,7 @@
            schema.sql) — this is what deducts its remaining mL, enforcing
            "materials go into a batch before they're bottled". Cost of
            goods, though, comes from the flat base price set per size on
-           the Formulas page (see unit_cogs_settings) — not this batch's
+           the Base Cost of Goods page (see unit_cogs_settings) — not this batch's
            own real cost/mL, which stays informational (shown on the Bulk
            Batches page only). -->
       <div class="field" id="batchField">
@@ -272,7 +272,7 @@
         {% endif %}
       </div>
       <!-- Cost of goods is computed automatically from the flat base
-           price set per packaging size on the Formulas page — this is
+           price set per packaging size on the Base Cost of Goods page — this is
            only a live preview; the authoritative figure is recomputed
            and frozen server-side in production() when the run is
            actually logged. -->
@@ -360,7 +360,7 @@
     </div>
   </div>
   <div class="pg-foot">
-    <p>Cost of goods is the base price on the <a href="{{ url_for('admin.formulas') }}">Formulas page</a>, packaging included.</p>
+    <p>Cost of goods is the base price on the <a href="{{ url_for('admin.formulas') }}">Base Cost of Goods page</a>, packaging included.</p>
     <p>A batch with no packaging recorded also uses up each bottle's bottle, sticker and seal.</p>
   </div>
   {% else %}
@@ -605,7 +605,7 @@
         cogsPreview.textContent = 'Pick a bulk batch to draw the mL from.';
         return;
       }
-      // Cost of goods is the flat base price set for this packaging size on the Formulas page, not the batch's own
+      // Cost of goods is the flat base price set for this packaging size on the Base Cost of Goods page, not the batch's own
       // cost per mL, which only decides how much of the batch gets used up (see production()'s own comment).
       var qty = parseFloat(qtyProducedInput.value);
       var cogsPerUnit = parseFloat(opt.dataset.cogsPerUnit);
