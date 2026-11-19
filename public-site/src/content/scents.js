@@ -26,6 +26,7 @@ export const SCENTS = [
   { code: 'H14', name: 'Jeremiel', variant: 'Female', bottle: '/static/img/scents/female/h14-jeremiel-bottle.webp', box: '/static/img/scents/female/h14-jeremiel-box.webp' },
   { code: 'H15', name: 'Metatron', variant: 'Female', bottle: '/static/img/scents/female/h15-metatron-bottle.webp', box: '/static/img/scents/female/h15-metatron-box.webp' },
   { code: 'H16', name: 'Gavreel', variant: 'Female', bottle: '/static/img/scents/female/h16-gavreel-bottle.webp', box: '/static/img/scents/female/h16-gavreel-box.webp' },
+  { code: 'H17', name: 'Ariel', variant: 'Female', bottle: '/static/img/scents/female/h17-ariel-bottle.webp', box: '/static/img/scents/female/h17-ariel-box.webp' },
   { code: 'A1', name: 'Zadkiel', variant: 'Male', bottle: '/static/img/scents/male/a1-zadkiel-bottle.webp', box: '/static/img/scents/male/a1-zadkiel-box.webp' },
   { code: 'A2', name: 'Bvlgari Xtreme', variant: 'Male', bottle: '/static/img/scents/male/a2-bvlgari-xtreme-bottle.webp', box: '/static/img/scents/male/a2-bvlgari-xtreme-box.webp' },
   { code: 'A3', name: 'Raphael', variant: 'Male', bottle: '/static/img/scents/male/a3-raphael-bottle.webp', box: '/static/img/scents/male/a3-raphael-box.webp' },
@@ -37,4 +38,7 @@ export const SCENTS = [
   { code: 'A9', name: 'Zuriel', variant: 'Male', bottle: '/static/img/scents/male/a9-zuriel-bottle.webp', box: '/static/img/scents/male/a9-zuriel-box.webp' },
   { code: 'A10', name: 'Afriel', variant: 'Male', bottle: '/static/img/scents/male/a10-afriel-bottle.webp', box: '/static/img/scents/male/a10-afriel-box.webp' },
   { code: 'A11', name: 'Kerubiel', variant: 'Male', bottle: '/static/img/scents/male/a11-kerubiel-bottle.webp', box: '/static/img/scents/male/a11-kerubiel-box.webp' },
+  { code: 'A12', name: 'Michael', variant: 'Male', bottle: '/static/img/scents/male/a12-michael-bottle.webp', box: '/static/img/scents/male/a12-michael-box.webp' },
+  { code: 'A13', name: 'Chamuel', variant: 'Male', bottle: '/static/img/scents/male/a13-chamuel-bottle.webp', box: '/static/img/scents/male/a13-chamuel-box.webp' },
+  { code: 'A14', name: 'Barachiel', variant: 'Male', bottle: '/static/img/scents/male/a14-barachiel-bottle.webp', box: '/static/img/scents/male/a14-barachiel-box.webp' },
 ];

@@ -115,15 +115,17 @@ SCENT_IMAGE_DIR = "img/scents"
 
 
 def default_scent_image(base_code):
-    """The built-in bottle photo for a scent code (A1, H4...), as a path relative to
-    the static folder, or None when that scent has no render. Used when no photo is
+    """The built-in photo for a scent code (A1, H4...), as a path relative to the
+    static folder, or None when that scent has no render. It is the square,
+    bottle-centred thumbnail (the full renders are wide canvases with the bottle on
+    the right, which looks off-centre in a small square). Used when no photo is
     uploaded, so a product shows its own scent's bottle instead of a blank."""
     code = (base_code or "").strip().lower()
     if not code:
         return None
     root = os.path.join(current_app.static_folder, *SCENT_IMAGE_DIR.split("/"))
     for variant in ("male", "female"):
-        found = sorted(glob.glob(os.path.join(root, variant, f"{glob.escape(code)}-*-bottle-m.webp")))
+        found = sorted(glob.glob(os.path.join(root, variant, f"{glob.escape(code)}-*-thumb.webp")))
         if found:
             return f"{SCENT_IMAGE_DIR}/{variant}/{os.path.basename(found[0])}"
     return None

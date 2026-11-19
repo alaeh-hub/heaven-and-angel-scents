@@ -23,7 +23,11 @@ export function productImage(item) {
 // The scent renders are wide transparent layers with the bottle on the right
 // (see SCENT_BOTTLE_CENTRE), so they need centring wherever they are shown;
 // `.is-render` in detail.css does that. An uploaded photo needs nothing.
-const isRender = (item) => productImage(item).includes('/static/img/scents/');
+// The square product thumbnails (-thumb.webp) already have the bottle centred.
+const isRender = (item) => {
+  const src = productImage(item);
+  return src.includes('/static/img/scents/') && !src.includes('-thumb.');
+};
 
 /** A product's own photo, or its gender's placeholder bottle. Accepts
     motion props, so callers can animate it (e.g. on hover). */

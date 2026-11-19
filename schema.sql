@@ -2965,44 +2965,49 @@ SELECT b.branch_id, p.sku, 0 FROM branches b CROSS JOIN products p;
 -- 54a. Default product photos
 --
 --     Every catalog scent that has a built-in render in static/img/scents/
---     (the bottle, medium size) gets it as its product photo, for every bottle
---     size, so nobody has to upload one. Only products with NO photo are
---     filled in: a photo uploaded from the Products page is never replaced,
---     and this is safe to run on every deploy. A scent with no render
---     (A12-A14, H17) stays blank until a photo is uploaded.
+--     gets its square, bottle-centred thumbnail as its product photo, for
+--     every bottle size, so nobody has to upload one. Only products with NO
+--     photo (or the earlier wide render, which sat off-centre in small square
+--     boxes) are filled in: a photo uploaded from the Products page is never
+--     replaced, and this is safe to run on every deploy.
 -- ----------------------------------------------------------------------------
 UPDATE products p
 JOIN (
-    SELECT 'A1' AS code, 'img/scents/male/a1-zadkiel-bottle-m.webp' AS img
-    UNION ALL SELECT 'A2', 'img/scents/male/a2-bvlgari-xtreme-bottle-m.webp'
-    UNION ALL SELECT 'A3', 'img/scents/male/a3-raphael-bottle-m.webp'
-    UNION ALL SELECT 'A4', 'img/scents/male/a4-nathaniel-bottle-m.webp'
-    UNION ALL SELECT 'A5', 'img/scents/male/a5-gabriel-bottle-m.webp'
-    UNION ALL SELECT 'A6', 'img/scents/male/a6-tabbris-bottle-m.webp'
-    UNION ALL SELECT 'A7', 'img/scents/male/a7-ramiel-bottle-m.webp'
-    UNION ALL SELECT 'A8', 'img/scents/male/a8-hadraniel-bottle-m.webp'
-    UNION ALL SELECT 'A9', 'img/scents/male/a9-zuriel-bottle-m.webp'
-    UNION ALL SELECT 'A10', 'img/scents/male/a10-afriel-bottle-m.webp'
-    UNION ALL SELECT 'A11', 'img/scents/male/a11-kerubiel-bottle-m.webp'
-    UNION ALL SELECT 'H1', 'img/scents/female/h1-uriel-bottle-m.webp'
-    UNION ALL SELECT 'H2', 'img/scents/female/h2-micah-bottle-m.webp'
-    UNION ALL SELECT 'H3', 'img/scents/female/h3-raquel-bottle-m.webp'
-    UNION ALL SELECT 'H4', 'img/scents/female/h4-dina-bottle-m.webp'
-    UNION ALL SELECT 'H5', 'img/scents/female/h5-lailah-bottle-m.webp'
-    UNION ALL SELECT 'H6', 'img/scents/female/h6-cassiel-bottle-m.webp'
-    UNION ALL SELECT 'H7', 'img/scents/female/h7-azrael-bottle-m.webp'
-    UNION ALL SELECT 'H8', 'img/scents/female/h8-sachael-bottle-m.webp'
-    UNION ALL SELECT 'H9', 'img/scents/female/h9-jophiel-bottle-m.webp'
-    UNION ALL SELECT 'H10', 'img/scents/female/h10-raziel-bottle-m.webp'
-    UNION ALL SELECT 'H11', 'img/scents/female/h11-sariel-bottle-m.webp'
-    UNION ALL SELECT 'H12', 'img/scents/female/h12-manakel-bottle-m.webp'
-    UNION ALL SELECT 'H13', 'img/scents/female/h13-haniel-bottle-m.webp'
-    UNION ALL SELECT 'H14', 'img/scents/female/h14-jeremiel-bottle-m.webp'
-    UNION ALL SELECT 'H15', 'img/scents/female/h15-metatron-bottle-m.webp'
-    UNION ALL SELECT 'H16', 'img/scents/female/h16-gavreel-bottle-m.webp'
+    SELECT 'A1' AS code, 'img/scents/male/a1-zadkiel-thumb.webp' AS img
+    UNION ALL SELECT 'A2', 'img/scents/male/a2-bvlgari-xtreme-thumb.webp'
+    UNION ALL SELECT 'A3', 'img/scents/male/a3-raphael-thumb.webp'
+    UNION ALL SELECT 'A4', 'img/scents/male/a4-nathaniel-thumb.webp'
+    UNION ALL SELECT 'A5', 'img/scents/male/a5-gabriel-thumb.webp'
+    UNION ALL SELECT 'A6', 'img/scents/male/a6-tabbris-thumb.webp'
+    UNION ALL SELECT 'A7', 'img/scents/male/a7-ramiel-thumb.webp'
+    UNION ALL SELECT 'A8', 'img/scents/male/a8-hadraniel-thumb.webp'
+    UNION ALL SELECT 'A9', 'img/scents/male/a9-zuriel-thumb.webp'
+    UNION ALL SELECT 'A10', 'img/scents/male/a10-afriel-thumb.webp'
+    UNION ALL SELECT 'A11', 'img/scents/male/a11-kerubiel-thumb.webp'
+    UNION ALL SELECT 'A12', 'img/scents/male/a12-michael-thumb.webp'
+    UNION ALL SELECT 'A13', 'img/scents/male/a13-chamuel-thumb.webp'
+    UNION ALL SELECT 'A14', 'img/scents/male/a14-barachiel-thumb.webp'
+    UNION ALL SELECT 'H1', 'img/scents/female/h1-uriel-thumb.webp'
+    UNION ALL SELECT 'H2', 'img/scents/female/h2-micah-thumb.webp'
+    UNION ALL SELECT 'H3', 'img/scents/female/h3-raquel-thumb.webp'
+    UNION ALL SELECT 'H4', 'img/scents/female/h4-dina-thumb.webp'
+    UNION ALL SELECT 'H5', 'img/scents/female/h5-lailah-thumb.webp'
+    UNION ALL SELECT 'H6', 'img/scents/female/h6-cassiel-thumb.webp'
+    UNION ALL SELECT 'H7', 'img/scents/female/h7-azrael-thumb.webp'
+    UNION ALL SELECT 'H8', 'img/scents/female/h8-sachael-thumb.webp'
+    UNION ALL SELECT 'H9', 'img/scents/female/h9-jophiel-thumb.webp'
+    UNION ALL SELECT 'H10', 'img/scents/female/h10-raziel-thumb.webp'
+    UNION ALL SELECT 'H11', 'img/scents/female/h11-sariel-thumb.webp'
+    UNION ALL SELECT 'H12', 'img/scents/female/h12-manakel-thumb.webp'
+    UNION ALL SELECT 'H13', 'img/scents/female/h13-haniel-thumb.webp'
+    UNION ALL SELECT 'H14', 'img/scents/female/h14-jeremiel-thumb.webp'
+    UNION ALL SELECT 'H15', 'img/scents/female/h15-metatron-thumb.webp'
+    UNION ALL SELECT 'H16', 'img/scents/female/h16-gavreel-thumb.webp'
+    UNION ALL SELECT 'H17', 'img/scents/female/h17-ariel-thumb.webp'
 ) m ON m.code = LEFT(p.sku, CHAR_LENGTH(p.sku) - CHAR_LENGTH(p.unit) - 1)
 SET p.image_path = m.img
-WHERE p.image_path IS NULL OR p.image_path = '';
+WHERE p.image_path IS NULL OR p.image_path = ''
+   OR p.image_path LIKE 'img/scents/%-bottle-m.webp';
 
 -- ----------------------------------------------------------------------------
 -- 55. Migration — bulk is sold from the bulk batches, not from BULK products
