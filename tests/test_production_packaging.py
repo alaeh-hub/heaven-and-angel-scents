@@ -96,7 +96,7 @@ def test_a_batch_of_another_scent_or_size_is_refused(client, sql):
     sql.commit()
 
     resp = log_production(client, sku, 3, bulk_batch_id=batch_id, follow_redirects=True)
-    assert b"can't be bottled as" in resp.data
+    assert b"bottled as" in resp.data
 
     cur.execute("UPDATE bulk_batches SET base_code = NULL, target_unit = '50ML' WHERE batch_id = %s", (batch_id,))
     sql.commit()

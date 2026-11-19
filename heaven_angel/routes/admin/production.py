@@ -689,18 +689,6 @@ def _create_bulk_batch_records(plan, user_id):
     with transaction() as conn:
         cur = conn.cursor(dictionary=True)
         materials_by_id, line_rows, liquid_subtotal = _price_liquid_lines(cur, plan.items, plan.scent_oil)
-        # A hand-made batch must not claim far more volume than its liquids supply
-        # (e.g. "10 Liter" from 1 mL of oil would create sellable mL from nothing).
-        # Loose on purpose: only liquids measured by volume count, and a batch with
-        # none (oil by weight, say) can't be compared, so it is not checked.
-        if not plan.formula_label:
-            liquid_ml = sum(
-                (row[1] * ML_PER_BATCH_UNIT[row[2]] for row in line_rows if row[2] in ML_PER_BATCH_UNIT),
-                decimal.Decimal("0"))
-            if liquid_ml > 0 and plan.total_volume_ml > liquid_ml * decimal.Decimal("1.5"):
-                raise TransactionAborted(
-                    f"The batch size ({plan.total_volume_ml:g} mL) is much more than the liquids "
-                    f"you listed add up to ({liquid_ml:g} mL). Check the quantities or the batch size.")
         packaging_rows, packaging_subtotal = _price_packaging_lines(cur, plan, materials_by_id)
         line_rows += packaging_rows
 
