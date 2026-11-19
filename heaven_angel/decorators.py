@@ -1,4 +1,6 @@
 import hashlib
+import secrets
+import time
 from functools import wraps
 
 from flask import abort, flash, redirect, request, session, url_for
@@ -57,6 +59,31 @@ def live_account_or_none():
     return account
 
 
+# Server-side list of signed-out sessions. The session cookie is stateless, so
+# without this a copied cookie would keep working after logout. Each login gets a
+# random "sid"; logout remembers it here (one gunicorn worker, so in memory).
+_revoked_sids = {}
+_REVOKE_TTL = 60 * 60 * 24 * 2
+
+
+def new_session_id():
+    return secrets.token_urlsafe(12)
+
+
+def revoke_current_session():
+    sid = session.get("sid")
+    if sid:
+        now = time.time()
+        for k in [k for k, exp in _revoked_sids.items() if exp < now]:
+            del _revoked_sids[k]
+        _revoked_sids[sid] = now + _REVOKE_TTL
+
+
+def session_is_revoked():
+    sid = session.get("sid")
+    return bool(sid) and sid in _revoked_sids
+
+
 def _require_session(required_role=None):
     """Shared gate used by all three decorators below.
 
@@ -64,6 +91,11 @@ def _require_session(required_role=None):
     denied, or None if the request should proceed.
     """
     if "user_id" not in session:
+        flash("Please sign in to continue.", "warning")
+        return redirect(url_for("auth.login"))
+
+    if session_is_revoked():
+        session.clear()
         flash("Please sign in to continue.", "warning")
         return redirect(url_for("auth.login"))
 

@@ -139,6 +139,10 @@ class Config:
     # is 25 MB *after* base64 encoding, so ~18 MB of file).
     BACKUP_NOTIFY_EMAIL = os.environ.get("BACKUP_NOTIFY_EMAIL", "")
     BACKUP_EMAIL_MAX_MB = float(os.environ.get("BACKUP_EMAIL_MAX_MB", 18))
+    # Passphrase for the emailed backup: the attachment is an AES-256
+    # encrypted zip (it holds password hashes and customer data). Never
+    # emailed; keep it somewhere safe. Without it the backup is NOT sent.
+    BACKUP_ZIP_PASSWORD = os.environ.get("BACKUP_ZIP_PASSWORD", "")
 
     # Partner Portal (public, unauthenticated — see routes/portal.py).
     # The portal is never linked from the login page or anywhere else in
@@ -157,9 +161,9 @@ class Config:
     # The full, current link (built from whichever value is active) is
     # always shown to admins on the Partners page so it's easy to copy
     # and send to a distributor or reseller.
-    # Defaults to the production link,
-    # https://heavenandangels.jampongcorp.tech/partner-portal/qo8WQ2joiYi7GXX6OMitPQ/packages
-    PARTNER_PORTAL_SLUG = os.environ.get("PARTNER_PORTAL_SLUG") or "qo8WQ2joiYi7GXX6OMitPQ"
+    # No default on purpose: a slug committed to the repo is a public
+    # credential. Set it in the environment (.env), never in code.
+    PARTNER_PORTAL_SLUG = os.environ.get("PARTNER_PORTAL_SLUG") or ""
 
     # Direct contact details shown on the partner portal (the closing
     # "talk to us" band, the inquiry form's confirmation). Each is

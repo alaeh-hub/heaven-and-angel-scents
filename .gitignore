@@ -129,3 +129,8 @@ docs/private/
 *.bak
 *.tmp
 *.swp
+
+# Encrypted emailed-backup wrappers and any local passphrase notes
+*-encrypted.zip
+backup-passphrase*
+.env.local

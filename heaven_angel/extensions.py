@@ -23,7 +23,7 @@ limiter = Limiter(
     default_limits=[],
 )
 
-_socketio_origins = os.environ.get("SOCKETIO_CORS_ALLOWED_ORIGINS", "*")
+_socketio_origins = os.environ.get("SOCKETIO_CORS_ALLOWED_ORIGINS", "same-origin")
 socketio_cors_is_wildcard = _socketio_origins == "*"
 if _socketio_origins == "same-origin":
     # python-engineio's default: accept only when the Origin header matches the

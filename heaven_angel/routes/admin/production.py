@@ -69,6 +69,10 @@ def _plan_production_run(form):
         "SELECT base_cost_per_unit FROM unit_cogs_settings WHERE unit = %s",
         (product["unit"],), fetchone=True,
     )
+    if not cogs_setting:
+        # Not a blocker (the run is still real), but the cost of goods will be 0.
+        flash(f"No cost is set for {product['unit']} bottles, so this run is logged at 0 cost of goods. "
+              "Set it under Settings so profit isn't overstated.", "warning")
     cogs_per_unit = (
         cogs_setting["base_cost_per_unit"] if cogs_setting else decimal.Decimal("0")
     ).quantize(decimal.Decimal("0.0001"))
@@ -136,12 +140,24 @@ def _record_production_run(run, user_id):
         # it, so two concurrent runs against the same batch can't both
         # pass a stale remaining_ml check.
         cur.execute(
-            "SELECT batch_id, remaining_ml FROM bulk_batches WHERE batch_id = %s FOR UPDATE",
+            "SELECT batch_id, remaining_ml, base_code, target_unit, scent_name "
+            "FROM bulk_batches WHERE batch_id = %s FOR UPDATE",
             (run.bulk_batch_id,),
         )
         batch = cur.fetchone()
         if not batch:
             raise TransactionAborted("Select a valid bulk batch.")
+        # A batch that records its scent code / bottle size must match the
+        # product, or the run would book one scent as another and skip (or
+        # double-take) the packaging made for the batch's own size. Older
+        # batches without these fields are accepted as before.
+        if batch["base_code"] and batch["base_code"] != base_code_from_sku(run.sku, run.unit):
+            raise TransactionAborted(
+                f"That batch is {batch['scent_name']} ({batch['base_code']}) and can't be "
+                f"bottled as {run.sku}.")
+        if batch["target_unit"] and batch["target_unit"] != run.unit:
+            raise TransactionAborted(
+                f"That batch was made for {batch['target_unit']} bottles, not {run.unit}.")
         needed_ml = run.bottle_ml * run.qty
         if batch["remaining_ml"] < needed_ml:
             raise TransactionAborted(
@@ -673,6 +689,18 @@ def _create_bulk_batch_records(plan, user_id):
     with transaction() as conn:
         cur = conn.cursor(dictionary=True)
         materials_by_id, line_rows, liquid_subtotal = _price_liquid_lines(cur, plan.items, plan.scent_oil)
+        # A hand-made batch must not claim far more volume than its liquids supply
+        # (e.g. "10 Liter" from 1 mL of oil would create sellable mL from nothing).
+        # Loose on purpose: only liquids measured by volume count, and a batch with
+        # none (oil by weight, say) can't be compared, so it is not checked.
+        if not plan.formula_label:
+            liquid_ml = sum(
+                (row[1] * ML_PER_BATCH_UNIT[row[2]] for row in line_rows if row[2] in ML_PER_BATCH_UNIT),
+                decimal.Decimal("0"))
+            if liquid_ml > 0 and plan.total_volume_ml > liquid_ml * decimal.Decimal("1.5"):
+                raise TransactionAborted(
+                    f"The batch size ({plan.total_volume_ml:g} mL) is much more than the liquids "
+                    f"you listed add up to ({liquid_ml:g} mL). Check the quantities or the batch size.")
         packaging_rows, packaging_subtotal = _price_packaging_lines(cur, plan, materials_by_id)
         line_rows += packaging_rows
 

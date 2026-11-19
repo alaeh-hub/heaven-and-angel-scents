@@ -145,6 +145,8 @@ def record_sale():
            ORDER BY s.customer_name""",
         (HQ_BRANCH_ID, HQ_BRANCH_ID),
     )
+    _seen = set()
+    customers = [c for c in customers if not (c["name"] in _seen or _seen.add(c["name"]))]
     return render_template(
         "admin/record_sale.html", inventory=inventory, recent_sales=recent_sales, employees=employees,
         customers=customers, bulk_rate=bulk_rate, form_token=issue_form_token(
@@ -264,6 +266,10 @@ def customers():
            JOIN branches last_b ON last_sale.branch_id = last_b.branch_id
            ORDER BY agg.total_spent DESC"""
     )
+    # Several lines from one receipt share a sold_at, so the timestamp joins can
+    # repeat a customer; the aggregates are per customer, so keep the first row.
+    _seen_names = set()
+    rows = [r for r in rows if not (r["name"] in _seen_names or _seen_names.add(r["name"]))]
 
     totals = query(
         """SELECT COUNT(DISTINCT customer_name) AS customer_count,

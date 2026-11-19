@@ -4,7 +4,10 @@ from flask import Blueprint, flash, redirect, render_template, request, session,
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from heaven_angel.db import execute, query
-from heaven_angel.decorators import login_required, password_fingerprint
+from heaven_angel.decorators import (
+    login_required, new_session_id, password_fingerprint, revoke_current_session,
+)
+from heaven_angel.sockets import disconnect_session
 from heaven_angel.extensions import limiter
 from heaven_angel.services import login_activity
 
@@ -128,6 +131,7 @@ def login():
         session["branch_name"] = user["branch_name"]
         session["must_change_password"] = bool(user["must_change_password"])
         session["pwv"] = password_fingerprint(user["password_hash"])
+        session["sid"] = new_session_id()
 
         if session["must_change_password"]:
             flash(
@@ -158,6 +162,9 @@ def login():
 # sign-out form in base.html is what satisfies it.
 @bp.route("/logout", methods=["POST"])
 def logout():
+    sid = session.get("sid")
+    revoke_current_session()
+    disconnect_session(sid)
     session.clear()
     flash("You've been signed out.", "success")
     return redirect(url_for("auth.login"))

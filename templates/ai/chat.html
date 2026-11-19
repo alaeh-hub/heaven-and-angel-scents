@@ -523,7 +523,7 @@
   var sendBtn = document.getElementById('chatSend');
   var csrfToken = document.querySelector('meta[name="csrf-token"]').content;
   var history = [];
-  var userInitial = "{{ (session.username[0]|upper) if session.username else '?' }}";
+  var userInitial = {{ ((session.username[0]|upper) if session.username else '?')|tojson }};
   var reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   var assistantAvatarSvg = '<svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">' +

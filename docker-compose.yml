@@ -82,6 +82,10 @@ services:
     logging: *default-logging
     env_file: .env
     environment:
+      # The app only needs the limited heaven_app DB user; never hand it root.
+      # (environment: overrides whatever env_file brings in.)
+      DB_ROOT_PASSWORD: ""
+      MYSQL_ROOT_PASSWORD: ""
       APP_ENV: production
       FLASK_DEBUG: "0"
       ALLOW_DATA_RESET: "0"
@@ -195,6 +199,15 @@ services:
     restart: unless-stopped
     logging: *default-logging
     env_file: .env
+    environment:
+      # rclone only needs its own RCLONE_* / OFFSITE_* settings: blank every app secret.
+      SECRET_KEY: ""
+      DB_ROOT_PASSWORD: ""
+      DB_APP_PASSWORD: ""
+      MYSQL_PASSWORD: ""
+      MAIL_PASSWORD: ""
+      GEMINI_API_KEY: ""
+      BACKUP_ZIP_PASSWORD: ""
     volumes:
       - ./backups:/backups:ro
     entrypoint: ["/bin/sh", "-c"]

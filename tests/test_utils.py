@@ -8,12 +8,12 @@ NaN/Infinity gap a naive float->Decimal port would otherwise reopen
 import decimal
 
 import pytest
-from flask import request
+from flask import request, session
 
 from heaven_angel.utils import (ValidationError, consume_form_token, issue_form_token,
                     parse_non_negative_decimal, parse_non_negative_int,
                     parse_past_date, parse_positive_decimal,
-                    parse_positive_int, percent_change,
+                    parse_positive_int, parse_required_text, percent_change,
                     product_avatar)
 
 
@@ -180,3 +180,45 @@ def test_percent_change_is_none_without_a_baseline():
     # Nothing last period -> no meaningful percentage.
     assert percent_change(500, 0) is None
     assert percent_change(0, decimal.Decimal("0")) is None
+
+
+# ---------------------------------------------------------------- hardening
+def test_issue_form_token_is_stable_until_it_is_used(app):
+    # A live-refresh GET must not rotate the token under a half-filled form.
+    with app.test_request_context():
+        first = issue_form_token("stable_form")
+        assert issue_form_token("stable_form") == first
+        request.form = {"form_token": first}
+        assert consume_form_token("stable_form") is True
+        assert issue_form_token("stable_form") != first
+
+
+def test_a_replayed_cookie_cannot_use_a_form_token_twice(app):
+    # The session is a client-side cookie: two requests carrying the SAME cookie
+    # (double-click, two tabs) must not both be accepted.
+    with app.test_request_context():
+        token = issue_form_token("replay_form")
+        saved = dict(session)
+    for _ in range(2):
+        with app.test_request_context():
+            session.update(saved)
+            request.form = {"form_token": token}
+            results = consume_form_token("replay_form")
+            if _ == 0:
+                assert results is True
+            else:
+                assert results is False
+
+
+def test_required_text_rejects_line_breaks():
+    with pytest.raises(ValidationError):
+        parse_required_text("Acme\r\nBcc: x@evil.test", "Company")
+    assert parse_required_text("  Acme Corp ", "Company") == "Acme Corp"
+
+
+def test_excel_text_cells_cannot_become_formulas():
+    from heaven_angel.services.reports.excel import _safe_text
+    assert _safe_text("=1+1").startswith("'=")
+    assert _safe_text("@SUM(A1)").startswith("'@")
+    assert _safe_text("Plain text") == "Plain text"
+    assert _safe_text(5) == "5"

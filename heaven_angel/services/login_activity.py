@@ -40,6 +40,11 @@ LOGIN_FAILURE_REASONS = {
 # LOCKOUT_WINDOW_MINUTES *since its last successful login* (a success
 # resets the count immediately, it doesn't just age out of the window).
 LOCKOUT_FAILURE_THRESHOLD = 5
+# Failures are counted per (username, source IP), so a stranger guessing the
+# admin's password from their own IP can't lock the real admin out from theirs.
+# A much higher total across ALL IPs still locks the account (distributed
+# brute force) - except for an IP that has signed in as that user before.
+LOCKOUT_GLOBAL_THRESHOLD = 30
 LOCKOUT_WINDOW_MINUTES = 15
 
 
@@ -81,7 +86,7 @@ def ensure_table():
     )
 
 
-def is_locked_out(username):
+def is_locked_out(username, ip=None):
     """True if `username` currently has >= LOCKOUT_FAILURE_THRESHOLD
     failed login attempts within LOCKOUT_WINDOW_MINUTES, since its last
     successful login.
@@ -115,9 +120,12 @@ def is_locked_out(username):
     isn't there yet (pre-migration database) this fails open (not
     locked out) rather than breaking every login attempt.
     """
+    if ip is None:
+        ip = request.remote_addr
     try:
         row = query(
-            """SELECT COUNT(*) AS c
+            """SELECT COUNT(*) AS total,
+                      COALESCE(SUM(ip_address <=> %s), 0) AS from_ip
                FROM login_activity
                WHERE username_attempted = %s
                  AND success = FALSE
@@ -128,14 +136,25 @@ def is_locked_out(username):
                       WHERE username_attempted = %s AND success = TRUE),
                      '1970-01-01'
                  )""",
-            (username, FAILURE_BAD_CREDENTIALS, LOCKOUT_WINDOW_MINUTES, username),
+            (ip, username, FAILURE_BAD_CREDENTIALS, LOCKOUT_WINDOW_MINUTES, username),
             fetchone=True,
         )
+        if not row:
+            return False
+        if int(row["from_ip"]) >= LOCKOUT_FAILURE_THRESHOLD:
+            return True
+        if int(row["total"]) >= LOCKOUT_GLOBAL_THRESHOLD:
+            known = query(
+                """SELECT 1 FROM login_activity
+                   WHERE username_attempted = %s AND success = TRUE AND ip_address <=> %s
+                   LIMIT 1""",
+                (username, ip), fetchone=True)
+            return not known
+        return False
     except Exception:
         current_app.logger.exception(
             "Failed to check login lockout status for username=%s", username)
         return False
-    return bool(row and row["c"] >= LOCKOUT_FAILURE_THRESHOLD)
 
 
 def log_attempt(*, username_attempted, role_attempted, success, user_id=None, failure_reason=None):

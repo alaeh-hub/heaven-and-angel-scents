@@ -251,10 +251,17 @@ def edit_product():
     # would leave the SKU claiming a size the row no longer has. To
     # change a product's size, add it again under the same base code
     # with the new unit — that gets its own SKU, same as any other size.
-    execute(
-        "UPDATE products SET item_name = %s, variant = %s, price = %s, image_path = %s WHERE sku = %s",
-        (item_name, variant, price, image_path, sku),
-    )
+    try:
+        execute(
+            "UPDATE products SET item_name = %s, variant = %s, price = %s, image_path = %s WHERE sku = %s",
+            (item_name, variant, price, image_path, sku),
+        )
+    except Exception:
+        current_app.logger.exception("edit product failed for sku=%s", sku)
+        if new_image_path:
+            _delete_product_image(new_image_path)
+        flash("Couldn't save that product - check the name length and that the price isn't too large.", "error")
+        return redirect(url_for("admin.products"))
     # Only delete the old file once the row has been updated to point
     # elsewhere (or nowhere) — never delete first, so a crash mid-request
     # can't leave the row referencing a file that's already gone.
@@ -423,7 +430,7 @@ def import_products():
         from openpyxl import load_workbook
         try:
             sheet = load_workbook(file_storage, read_only=True, data_only=True).active
-            sheet_rows = list(sheet.iter_rows(values_only=True))
+            sheet_rows = list(sheet.iter_rows(max_row=5001, max_col=20, values_only=True))
         except Exception:
             flash("That doesn't look like a valid .xlsx file.", "error")
             return redirect(url_for("admin.products"))
@@ -459,6 +466,7 @@ def import_products():
     created = 0
     updated = 0
     errors = []
+    seen_skus = set()
 
     for row_num, row in enumerate(row_iter, start=2):  # row 1 is the header
         try:
@@ -478,6 +486,11 @@ def import_products():
         except ValidationError as err:
             errors.append(f"Row {row_num}: {err}")
             continue
+
+        if sku in seen_skus:
+            errors.append(f"Row {row_num}: duplicate of SKU {sku} earlier in the file, skipped.")
+            continue
+        seen_skus.add(sku)
 
         existing = query(
             "SELECT sku FROM products WHERE sku = %s", (sku,), fetchone=True)

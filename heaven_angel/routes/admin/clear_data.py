@@ -20,7 +20,7 @@ from heaven_angel.routes.admin._common import bp
 # table in the database is emptied, including ones added after this was
 # written (the list comes from information_schema, not a hard-coded set).
 CLEAR_DATA_KEEP_TABLES = frozenset({
-    "users", "branches", "bulk_rate_settings", "unit_cogs_settings",
+    "users", "branches", "admin_actions", "login_activity", "bulk_rate_settings", "unit_cogs_settings",
     # The built-in bulk batch formulas are configuration, not business data
     # (see bulk_formulas in schema.sql, migration 50).
     "bulk_formulas", "bulk_formula_sizes", "bulk_formula_settings", "bulk_formula_packaging",

@@ -261,7 +261,12 @@ product photos when the email attachment limit allows. Restore validates the
 archive before replacing database tables, keeps a safety copy of the current data,
 and records the attempt in the Admin Log. Every table is included automatically, new ones too. Restoring a backup that predates the per-scent oil tables empties them rather than leaving today's oil stock beside older data. Admins can also enable reminders and
 opt-in scheduled email backups. These archives contain customer data and password
-hashes; they are not encrypted, so handle the destination mailbox carefully.
+hashes, so the emailed copy is wrapped in an AES-256 encrypted zip using the
+`BACKUP_ZIP_PASSWORD` passphrase (12+ characters, never emailed). Without it, no
+backup email is sent. To restore from an emailed backup, open it with 7-Zip or
+WinRAR and the passphrase, then upload the inner `.zip` to **Restore**. Backups
+downloaded directly, and the on-disk safety copies, are not wrapped (the safety
+copy is written owner-only).
 In Docker Compose deployments, the pre-restore safety copy is stored in the
 persistent `appbackups` volume so it survives container rebuilds. This volume is
 not a substitute for the separate, off-server backup routine.
@@ -294,6 +299,16 @@ The application is built with a production-minded security posture:
 - Atomic multi-table writes through a shared transaction layer (`db.transaction()`) to prevent partial updates on failure
 - Best-effort audit logging and email notifications that never block the underlying business action if they fail
 - The app refuses to start in a non-debug run with a default/insecure `SECRET_KEY`
+- No third-party scripts: Socket.IO is vendored in `static/js/vendor/`, and the CSP also sets `base-uri`, `form-action` and `object-src`
+- Signed-in pages and exports are sent with `Cache-Control: no-store`, so the Back button after logout can't show cached data
+- Logging out invalidates that session server-side and closes its live connections; deactivating an account or resetting its password closes the account's live connections
+- Single-use form tokens are remembered server-side, so a double-click or a replayed cookie can't record the same sale twice
+- Login lockout is counted per username and IP address (with a higher account-wide threshold), so a stranger can't lock the real admin out from another IP
+- Excel exports neutralise cell text that starts with `=`, `+`, `-` or `@`; restoring a backup only accepts image files for uploads, with size caps
+- Temporary passwords are shown once from server memory, never stored in the session cookie
+- Clear Data keeps the Admin Log and login activity; the web container does not receive the MySQL root password
+
+> The in-memory pieces above (used form tokens, signed-out sessions, live-connection tracking) rely on the single gunicorn worker the app is designed to run with; a restart forgets them.
 
 ---
 
@@ -309,14 +324,15 @@ The app reads configuration from environment variables and a local `.env` file w
 - `MYSQL_HOST`, `MYSQL_PORT`, `MYSQL_USER`, `MYSQL_PASSWORD`, `MYSQL_DB`, `MYSQL_POOL_SIZE` (defaults to `20`, capped at `32`)
 - `MYSQL_POOL_WAIT_SECONDS` = how long a request waits for a free pooled database connection before receiving a `503` (defaults to `5`)
 - `BUSINESS_TIMEZONE_OFFSET` = the UTC offset used for "business day" boundaries in reporting (defaults to `+08:00`, Philippines)
-- `PARTNER_PORTAL_SLUG` = stable public portal slug for partner access (auto-generated and logged if unset in dev — unsuitable for production, since it changes every restart)
+- `PARTNER_PORTAL_SLUG` = stable public portal slug for partner access. There is no built-in default: set a long random value (`python -c "import secrets; print(secrets.token_urlsafe(16))"`). If unset, a random one is generated per process and the shared link breaks on every restart, so always set it in production
 - `GEMINI_API_KEY` and `GEMINI_MODEL` for the AI assistant, plus `AI_CHAT_RATE_LIMIT`
 - `MAIL_SERVER`, `MAIL_PORT`, `MAIL_USE_TLS`, `MAIL_USERNAME`, `MAIL_PASSWORD`, `MAIL_DEFAULT_SENDER`, `PARTNER_INQUIRY_NOTIFY_EMAIL`
 - `BACKUP_NOTIFY_EMAIL` (defaults to the partner-inquiry notification address), `BACKUP_EMAIL_MAX_MB` (attachment limit), and `BACKUP_SCHEDULER` (disable scheduled backup checks in a process)
+- `BACKUP_ZIP_PASSWORD` = passphrase (12+ characters) that encrypts the emailed backup; required for backup emails to be sent
 - `PORTAL_CONTACT_PHONE`, `PORTAL_CONTACT_EMAIL`, `PORTAL_CONTACT_VIBER`, `PORTAL_CONTACT_MESSENGER_URL`, `PORTAL_REPLY_TIME` — optional contact details shown on the public portal
 - `RATELIMIT_ENABLED` and `MAX_CONTENT_LENGTH`
-- `SOCKETIO_CORS_ALLOWED_ORIGINS` = origins allowed to connect over Socket.IO (defaults to any origin when unset; the Docker Compose deployment uses `same-origin`)
-- `TRUST_PROXY` = set to `1` only when the app is reachable exclusively through a trusted reverse proxy; enables one-hop forwarded host/protocol/IP handling
+- `SOCKETIO_CORS_ALLOWED_ORIGINS` = origins allowed to connect over Socket.IO (defaults to `same-origin`; use `*` only if you really want any origin)
+- `TRUST_PROXY` = set to `1` only when the app is reachable exclusively through a trusted reverse proxy (nginx/Caddy); enables one-hop forwarded host/protocol/IP handling. Docker Compose sets it already; on a direct server install add it to that server's `.env`, otherwise every visitor shares one rate-limit bucket and the login log records `127.0.0.1`
 - `ALLOW_DATA_RESET` = enables the dev-only "clear all data" admin action; hard-disabled in production regardless of this setting
 
 The app is intentionally strict in production mode and will warn, or fail to start, if required configuration is missing or insecure.

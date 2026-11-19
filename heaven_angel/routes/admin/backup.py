@@ -9,7 +9,7 @@ from flask import (
 from werkzeug.security import check_password_hash
 
 from heaven_angel.db import execute, query
-from heaven_angel.decorators import admin_required
+from heaven_angel.decorators import _require_session, admin_required
 from heaven_angel.services.audit import log_action
 from heaven_angel.services import backup_jobs
 from heaven_angel.services.backup import (
@@ -319,6 +319,13 @@ def restore_status():
     # rebuilt, so the usual database-backed admin check could fail.
     if session.get("role") != "Admin":
         abort(403)
+    # Once nothing is running and no result is waiting to be read, the users
+    # table is stable again, so do the full check (account still active,
+    # password unchanged) and don't let a stale session read status.
+    if not _restore_state["running"] and not _restore_state["done"]:
+        deny = _require_session(required_role="Admin")
+        if deny is not None:
+            return deny
     return jsonify(
         running=_restore_state["running"], done=_restore_state["done"],
         phase=_restore_state["phase"], error=_restore_state["error"], summary=_restore_state["summary"],

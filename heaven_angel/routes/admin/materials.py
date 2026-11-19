@@ -14,7 +14,7 @@ from heaven_angel.services.scent_oils import (
 )
 from heaven_angel.sockets import notify_all
 from heaven_angel.utils import (
-    MATERIAL_UNITS, ValidationError,
+    MATERIAL_UNITS, ValidationError, is_duplicate_error,
     parse_non_negative_decimal, parse_optional_id,
     parse_past_date, parse_positive_decimal,
 )
@@ -85,11 +85,14 @@ def materials():
                        + (f" — receipt {receipt_number}" if receipt_number else ""))
             flash(
                 f"{material_name} added at ₱{cost_per_unit:,.4f} per {unit.lower()}.", "success")
-        except Exception:
+        except Exception as exc:
             current_app.logger.exception(
                 "add material failed for material_name=%s", material_name)
-            flash(
-                f"'{material_name}' already exists in the materials list.", "error")
+            if is_duplicate_error(exc):
+                flash(f"'{material_name}' already exists in the materials list.", "error")
+            else:
+                flash("Couldn't save that material - check the name length and that the "
+                      "quantity and cost aren't too large.", "error")
         return redirect(url_for("admin.materials"))
 
     materials_list = query(
@@ -269,10 +272,14 @@ def edit_material():
                    + (f" — receipt {receipt_number}" if receipt_number else ""))
         flash(
             f"{material_name} updated at ₱{cost_per_unit:,.4f} per {unit.lower()}.", "success")
-    except Exception:
+    except Exception as exc:
         current_app.logger.exception(
             "edit material failed for material_id=%s material_name=%s", material_id, material_name)
-        flash(f"'{material_name}' already exists in the materials list.", "error")
+        if is_duplicate_error(exc):
+            flash(f"'{material_name}' already exists in the materials list.", "error")
+        else:
+            flash("Couldn't save that material - check the name length and that the "
+                  "quantity and cost aren't too large.", "error")
     return redirect(url_for("admin.materials"))
 
 
@@ -462,16 +469,29 @@ def import_scent_oils():
     except ValidationError as err:
         flash(str(err), "error")
         return redirect(url_for(SCENT_OILS_URL))
-    with transaction() as conn:
-        cur = conn.cursor()
-        for code, price, stock in rows:
-            if price is not None:
-                cur.execute("UPDATE scent_oils SET cost_per_unit = %s WHERE base_code = %s", (price, code))
-            if stock is not None:
-                cur.execute("UPDATE scent_oils SET stock_qty = %s WHERE base_code = %s", (stock, code))
-        cur.close()
+    stock_changes = []
+    try:
+        with transaction() as conn:
+            cur = conn.cursor()
+            for code, price, stock in rows:
+                # Lock the row and write stock only when it really differs, so a
+                # price-only upload (or an unchanged template cell) can't put back
+                # oil that production used since the template was downloaded.
+                cur.execute("SELECT stock_qty FROM scent_oils WHERE base_code = %s FOR UPDATE", (code,))
+                current = cur.fetchone()
+                if price is not None:
+                    cur.execute("UPDATE scent_oils SET cost_per_unit = %s WHERE base_code = %s", (price, code))
+                if stock is not None and current and current[0] != stock:
+                    cur.execute("UPDATE scent_oils SET stock_qty = %s WHERE base_code = %s", (stock, code))
+                    stock_changes.append(f"{code}: {current[0]:g}->{stock:g}")
+            cur.close()
+    except Exception:
+        current_app.logger.exception("scent oil import failed")
+        flash("Couldn't import that file - nothing was changed.", "error")
+        return redirect(url_for(SCENT_OILS_URL))
     notify_all(["materials"])
-    log_action("import_scent_oils", target="Scent oils", details=f"{len(rows)} scents")
+    log_action("import_scent_oils", target="Scent oils",
+               details=f"{len(rows)} scents; stock set: {'; '.join(stock_changes)[:400] or 'none'}")
     flash(f"Updated the oil for {len(rows)} scent{'s' if len(rows) != 1 else ''}.", "success")
     return redirect(url_for(SCENT_OILS_URL))
 

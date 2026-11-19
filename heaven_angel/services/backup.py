@@ -395,6 +395,11 @@ def run_restore(statements):
             cur.close()
 
 
+_RESTORE_IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".gif"}
+_MAX_RESTORE_FILE_BYTES = 10 * 1024 * 1024
+_MAX_RESTORE_TOTAL_BYTES = 500 * 1024 * 1024
+
+
 def restore_uploads(zf):
     """Copy uploads/ from the zip into static/uploads, refusing any path
     that would land outside it. Returns the number of files written."""
@@ -405,13 +410,28 @@ def restore_uploads(zf):
     if len(names) > _MAX_UPLOAD_FILES:
         raise RestoreError("The backup holds an unreasonable number of photos.")
     written = 0
+    total_bytes = 0
     for name in names:
         target = os.path.realpath(os.path.join(root, name[len("uploads/"):]))
         if not target.startswith(root + os.sep):
             continue
+        # Only plain image files: anything else (.html, .svg, scripts) would be
+        # served same-origin from /static/uploads and run as stored XSS.
+        if os.path.splitext(target)[1].lower() not in _RESTORE_IMAGE_EXTS:
+            continue
+        info = zf.getinfo(name)
+        if info.file_size > _MAX_RESTORE_FILE_BYTES:
+            continue
+        total_bytes += info.file_size
+        if total_bytes > _MAX_RESTORE_TOTAL_BYTES:
+            raise RestoreError("The backup's photos are unreasonably large.")
         os.makedirs(os.path.dirname(target), exist_ok=True)
         with zf.open(name) as src, open(target, "wb") as dst:
-            dst.write(src.read())
+            # Bounded read: don't trust the declared size alone.
+            data = src.read(_MAX_RESTORE_FILE_BYTES + 1)
+            if len(data) > _MAX_RESTORE_FILE_BYTES:
+                continue
+            dst.write(data)
         written += 1
     return written
 
@@ -423,6 +443,7 @@ def save_safety_backup():
     folder = current_app.config.get("BACKUP_DIR") or os.path.join(current_app.root_path, "backups")
     os.makedirs(folder, exist_ok=True)
     path = os.path.join(folder, "before-restore-" + filename)
-    with open(path, "wb") as fh:
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "wb") as fh:
         fh.write(data)
     return path

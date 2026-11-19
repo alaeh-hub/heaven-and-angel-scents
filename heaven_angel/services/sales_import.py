@@ -234,7 +234,12 @@ def parse_sales_import_workbook(file_storage):
 
     ws = wb[SHEET_NAME] if SHEET_NAME in wb.sheetnames else wb.worksheets[0]
     rows = []
-    for excel_row_num, row in enumerate(ws.iter_rows(min_row=3, values_only=True), start=3):
+    # Bounded read: a sheet that declares a huge empty range can't make the
+    # worker scan it all. Rows beyond the cap are caught by the caller's
+    # MAX_IMPORT_ROWS check.
+    last_row = MAX_IMPORT_ROWS + 1000
+    for excel_row_num, row in enumerate(
+            ws.iter_rows(min_row=3, max_row=last_row, max_col=12, values_only=True), start=3):
         if row is None or all(cell is None or str(cell).strip() == "" for cell in row):
             continue
         rows.append((excel_row_num, row))
@@ -295,7 +300,10 @@ def _parse_row(excel_row_num, row):
     if sale_type == "Freebie":
         unit_price = decimal.Decimal("0")
     else:
-        unit_price = parse_positive_decimal(_cell(row, 3), "Price Charged")
+        unit_price = parse_positive_decimal(_cell(row, 3), "Price Charged").quantize(
+            decimal.Decimal("0.01"))
+        if unit_price < decimal.Decimal("0.01"):
+            raise ValidationError("Price Charged must be at least 0.01.")
 
     # Freebie is never actually paid for, so Payment Method doesn't mean
     # anything for it — forced to Cash regardless of what the column

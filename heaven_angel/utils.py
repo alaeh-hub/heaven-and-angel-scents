@@ -11,6 +11,8 @@ import os
 import re
 import secrets
 import string
+import threading
+import time
 from datetime import datetime, timedelta, timezone
 
 from flask import current_app, has_app_context, request, session
@@ -336,6 +338,9 @@ def parse_required_text(raw, field_label="Value", max_length=None):
     value = str(raw or "").strip()
     if not value:
         raise ValidationError(f"{field_label} is required.")
+    # Line breaks / control characters would break mail headers built from this.
+    if any(ord(ch) < 32 or ord(ch) == 127 for ch in value):
+        raise ValidationError(f"{field_label} can't contain line breaks or control characters.")
     if max_length and len(value) > max_length:
         raise ValidationError(
             f"{field_label} must be under {max_length} characters.")
@@ -487,12 +492,28 @@ def generate_temp_password(length=12):
 # before any other validation, and stop (flash + redirect back to the GET
 # route, which issues a fresh token) if it returns False.
 # ---------------------------------------------------------------------------
+def is_duplicate_error(exc):
+    """True for a MySQL duplicate-key error (1062), so a route can say "already
+    exists" only when that's really the problem and not for any failure."""
+    return getattr(exc, "errno", None) == 1062
+
+
+_used_tokens = {}
+_used_tokens_lock = threading.Lock()
+
+
 def issue_form_token(key):
     """Generate a fresh single-use token for the form named `key`, stash
     it in the session, and return it to embed as a hidden field.
     """
-    token = secrets.token_urlsafe(16)
-    session[f"_form_token:{key}"] = token
+    # Reuse an unconsumed token: live-refresh and other tabs re-render the page
+    # via GET, and rotating here would invalidate the token in a half-filled
+    # form. It is still single-use, since consume_form_token() pops it.
+    skey = f"_form_token:{key}"
+    token = session.get(skey)
+    if not token:
+        token = secrets.token_urlsafe(16)
+        session[skey] = token
     return token
 
 
@@ -508,7 +529,20 @@ def consume_form_token(key):
     submitted = request.form.get("form_token", "")
     if not expected or not submitted:
         return False
-    return hmac.compare_digest(expected, submitted)
+    if not hmac.compare_digest(expected, submitted):
+        return False
+    # The session is a client-side cookie, so popping the token only affects THIS
+    # request's copy: a double-click (or two tabs) sends the same cookie twice and
+    # both would pass. Remember used tokens server-side (one gunicorn worker) so
+    # the second use is refused.
+    now = time.time()
+    with _used_tokens_lock:
+        for t in [t for t, exp in _used_tokens.items() if exp < now]:
+            del _used_tokens[t]
+        if submitted in _used_tokens:
+            return False
+        _used_tokens[submitted] = now + 3600
+    return True
 
 
 # ---------------------------------------------------------------------------

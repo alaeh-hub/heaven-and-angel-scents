@@ -26,11 +26,54 @@ Scopes in use (kept intentionally coarse):
   branches       a branch was added
   users          a login account was added/toggled/reset
 """
-from flask import session
+from flask import request, session
 from flask_socketio import join_room
 
-from heaven_angel.decorators import _current_account_or_none, password_fingerprint
+from heaven_angel.decorators import (
+    _current_account_or_none, password_fingerprint, session_is_revoked,
+)
 from heaven_angel.extensions import socketio
+
+
+# Open sockets by user and by login session, so a logout, deactivation or
+# password reset can cut them off instead of waiting for the tab to close.
+_sockets_by_user = {}
+_sockets_by_session = {}
+
+
+def _drop(table, key, socket_sid):
+    group = table.get(key)
+    if group:
+        group.discard(socket_sid)
+        if not group:
+            table.pop(key, None)
+
+
+def _kick(table, key):
+    for socket_sid in list(table.get(key, ())):
+        try:
+            socketio.server.disconnect(socket_sid, namespace="/")
+        except Exception:
+            pass
+    table.pop(key, None)
+
+
+def disconnect_user(user_id):
+    """Close every live socket of this account (deactivated / password reset)."""
+    _kick(_sockets_by_user, user_id)
+
+
+def disconnect_session(session_sid):
+    """Close the sockets of one login session (logout)."""
+    if session_sid:
+        _kick(_sockets_by_session, session_sid)
+
+
+@socketio.on("disconnect")
+def handle_disconnect(*_args):
+    for table in (_sockets_by_user, _sockets_by_session):
+        for key in [k for k, group in table.items() if request.sid in group]:
+            _drop(table, key, request.sid)
 
 
 @socketio.on("connect")
@@ -42,7 +85,7 @@ def handle_connect():
     screen, which never signs in) could open a raw Socket.IO connection
     and ask to join the "admin" room themselves.
     """
-    if "user_id" not in session:
+    if "user_id" not in session or session_is_revoked():
         return False
     # Same live checks as the HTTP routes (decorators._require_session): a
     # deactivated account, a changed password or a branchless Branch account
@@ -51,6 +94,9 @@ def handle_connect():
     if (account is None or not account["is_active"]
             or session.get("pwv") != password_fingerprint(account["password_hash"])):
         return False
+    _sockets_by_user.setdefault(session["user_id"], set()).add(request.sid)
+    if session.get("sid"):
+        _sockets_by_session.setdefault(session["sid"], set()).add(request.sid)
     if account["role"] == "Admin":
         join_room("admin")
     elif account["branch_id"]:

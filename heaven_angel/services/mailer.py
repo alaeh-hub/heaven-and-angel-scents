@@ -17,6 +17,7 @@ but the record is safe."
 """
 import html as html_lib
 import smtplib
+import ssl
 import time
 from email.message import EmailMessage
 from urllib.parse import quote
@@ -94,7 +95,7 @@ def _contact_actions(*, email, phone, preferred_contact, reference):
                     else "Your Heaven & Angel Scents inquiry")
     dial = _dial_digits(phone)
     options = {
-        "Email": (f"mailto:{email}?subject={subject}", "Reply by email") if email else None,
+        "Email": (f"mailto:{quote(email, safe='@')}?subject={subject}", "Reply by email") if email else None,
         "Call": (f"tel:{dial}", "Call now") if dial else None,
         "SMS": (f"sms:{dial}", "Send SMS") if dial else None,
         # Viber has no deep link that works reliably from every mail
@@ -392,7 +393,7 @@ def send_partner_inquiry_email(
             try:
                 with smtplib.SMTP(cfg["MAIL_SERVER"], cfg.get("MAIL_PORT", 587), timeout=10) as smtp:
                     if cfg.get("MAIL_USE_TLS", True):
-                        smtp.starttls()
+                        smtp.starttls(context=ssl.create_default_context())
                     if cfg.get("MAIL_USERNAME") and cfg.get("MAIL_PASSWORD"):
                         smtp.login(cfg["MAIL_USERNAME"], cfg["MAIL_PASSWORD"])
                     smtp.send_message(msg)
@@ -430,7 +431,22 @@ def send_backup_email(*, zip_bytes, filename, subject, body):
     cfg = current_app.config
     if not backup_email_configured(cfg):
         return False, "Email isn't set up (MAIL_SERVER, MAIL_DEFAULT_SENDER and a recipient are required)."
+    password = cfg.get("BACKUP_ZIP_PASSWORD") or ""
+    if len(password) < 12:
+        return False, ("BACKUP_ZIP_PASSWORD isn't set (12+ characters). The emailed backup holds password "
+                       "hashes and customer data, so it is only sent encrypted. Add it to .env and restart.")
     try:
+        # Wrap the backup in an AES-256 zip. Restore: open it with 7-Zip/WinRAR and the
+        # passphrase, then upload the inner .zip as usual.
+        import io
+        import pyzipper
+        wrapped = io.BytesIO()
+        with pyzipper.AESZipFile(wrapped, "w", compression=pyzipper.ZIP_STORED,
+                                 encryption=pyzipper.WZ_AES) as zf:
+            zf.setpassword(password.encode("utf-8"))
+            zf.writestr(filename, zip_bytes)
+        zip_bytes = wrapped.getvalue()
+        filename = filename.rsplit(".", 1)[0] + "-encrypted.zip"
         msg = EmailMessage()
         msg["Subject"] = subject
         msg["From"] = cfg["MAIL_DEFAULT_SENDER"]
@@ -442,7 +458,7 @@ def send_backup_email(*, zip_bytes, filename, subject, body):
             try:
                 with smtplib.SMTP(cfg["MAIL_SERVER"], cfg.get("MAIL_PORT", 587), timeout=90) as smtp:
                     if cfg.get("MAIL_USE_TLS", True):
-                        smtp.starttls()
+                        smtp.starttls(context=ssl.create_default_context())
                     if cfg.get("MAIL_USERNAME") and cfg.get("MAIL_PASSWORD"):
                         smtp.login(cfg["MAIL_USERNAME"], cfg["MAIL_PASSWORD"])
                     smtp.send_message(msg)

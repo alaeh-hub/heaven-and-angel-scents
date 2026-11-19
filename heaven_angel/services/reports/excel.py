@@ -50,6 +50,16 @@ _INK = "17140D"
 _MUTED = "5B5445"
 _HAIRLINE = Border(bottom=Side(style="hair", color="B8AF98"))
 
+
+
+def _safe_text(value):
+    """Text for a cell. A string starting with = + - @ (or tab/CR) would be
+    stored as a live formula; prefix an apostrophe so user-typed text stays text."""
+    text = str(value)
+    if text[:1] in ("=", "+", "-", "@", "\t", "\r"):
+        return "'" + text
+    return text
+
 
 def render_report_excel(report):
     """Return a BytesIO .xlsx for a report dict built by get_report().
@@ -133,13 +143,13 @@ def render_report_excel(report):
                 cell.number_format = XL_DATE_FMT if isinstance(value, datetime.datetime) else "mmm d, yyyy"
                 cell.alignment = Alignment(horizontal="left", vertical="center")
             elif ctype.startswith("badge:"):
-                cell.value = str(value)
+                cell.value = _safe_text(value)
                 # A status is coloured bold text (the same colour as its badge on screen), not a filled chip.
                 badge = badge_colors(ctype.split(":", 1)[1], value)
                 if badge:
                     cell.font = Font(name="Calibri", size=10, bold=True, color=badge[1].lstrip("#"))
             else:
-                cell.value = str(value)
+                cell.value = _safe_text(value)
             width = len(str(cell.value)) if cell.value is not None else 0
             if ctype == "datetime":
                 width = 20

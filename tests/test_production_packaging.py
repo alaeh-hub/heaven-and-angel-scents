@@ -83,3 +83,29 @@ def test_a_batch_that_already_had_its_packaging_is_not_deducted_twice(client, sq
     assert get_inventory_qty(sql, HQ, sku) == 3
     for material_id in packaging:
         assert get_raw_material(sql, material_id)["stock_qty"] == Decimal("10")
+
+
+def test_a_batch_of_another_scent_or_size_is_refused(client, sql):
+    _admin(client, sql)
+    packaging = _packaging_materials(sql, 10)
+    sku = make_product(sql, unit="85ML")
+    set_unit_cogs(sql, "85ML", "95.00")
+    batch_id = make_bulk_batch(sql, [(make_raw_material(sql), "1000", "0.82")], input_qty="1000")
+    cur = sql.cursor()
+    cur.execute("UPDATE bulk_batches SET base_code = 'ZZ9' WHERE batch_id = %s", (batch_id,))
+    sql.commit()
+
+    resp = log_production(client, sku, 3, bulk_batch_id=batch_id, follow_redirects=True)
+    assert b"can't be bottled as" in resp.data
+
+    cur.execute("UPDATE bulk_batches SET base_code = NULL, target_unit = '50ML' WHERE batch_id = %s", (batch_id,))
+    sql.commit()
+    cur.close()
+    resp = log_production(client, sku, 3, bulk_batch_id=batch_id, follow_redirects=True)
+    assert b"was made for 50ML bottles" in resp.data
+
+    assert get_inventory_qty(sql, HQ, sku) in (None, 0)
+    assert get_batch_remaining(sql, batch_id) == Decimal("1000")
+    for material_id in packaging:
+        assert get_raw_material(sql, material_id)["stock_qty"] == Decimal("10")
+

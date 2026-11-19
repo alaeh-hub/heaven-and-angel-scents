@@ -175,7 +175,8 @@ def dispatch_request(request_id):
             # doesn't take the except/rollback path. Every abort in here
             # must `raise TransactionAborted(...)` instead — see its
             # docstring in db.py.
-            for item_id, qty in requested_dispatch.items():
+            # SKU order, so two overlapping deliveries lock stock rows in the same order.
+            for item_id, qty in sorted(requested_dispatch.items(), key=lambda kv: items_by_id[kv[0]]["sku"]):
                 item = items_by_id[item_id]
                 if qty == 0:
                     continue

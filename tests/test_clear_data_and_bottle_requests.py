@@ -115,8 +115,9 @@ def test_clear_data_empties_business_tables_but_keeps_accounts(app, client, sql,
     assert _count(sql, "branches", "branch_id = %s", (branch_id,)) == 1
     assert _count(sql, "unit_cogs_settings") > 0
     assert not (photos / "a.jpg").exists()
-    # The reset itself is the first entry in the fresh Admin Log.
-    assert _count(sql, "admin_actions", "action = 'clear_all_data'") == 1
+    # The Admin Log is kept through a reset (the trail of who did what must survive),
+    # and the reset itself is logged in it.
+    assert _count(sql, "admin_actions", "action = 'clear_all_data'") >= 1
 
 
 # ---------------------------------------------------------------- BULK hidden from branch filters / low stock

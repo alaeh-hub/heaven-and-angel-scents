@@ -65,6 +65,9 @@ def _identity_locks(email, phone, package_id):
             query("SELECT RELEASE_LOCK(%s)", (lock_key,), fetchone=True)
 
 
+DAILY_INQUIRY_CAP = 300
+
+
 def _match_or_create_partner(partner_type, company_name, contact_person, phone, email, address,
                              source="package inquiry"):
     """Match an inquiry to an existing partner by email, then phone, so
@@ -352,12 +355,19 @@ def inquire(slug, package_id):
     _verify_slug(slug)
 
     pkg = query(
-        "SELECT package_id, package_name, discount_percent FROM packages "
+        "SELECT package_id, package_name, discount_percent, partner_scope FROM packages "
         "WHERE package_id = %s AND is_active = TRUE",
         (package_id,), fetchone=True,
     )
     if not pkg:
         return jsonify(error="That package is no longer available."), 404
+
+    # Whole-portal ceiling on top of the per-IP limits: many IPs can't flood HQ's
+    # inbox and the Partners list with fake leads.
+    recent = query("SELECT COUNT(*) AS c FROM partner_inquiries WHERE created_at >= NOW() - INTERVAL 1 DAY",
+                   fetchone=True)
+    if recent and recent["c"] >= DAILY_INQUIRY_CAP:
+        return jsonify(error="We're receiving a lot of inquiries right now. Please try again tomorrow."), 429
 
     data = request.get_json(silent=True)
     if not isinstance(data, dict):
@@ -368,6 +378,8 @@ def inquire(slug, package_id):
         fields = _parse_inquiry(data)
     except ValidationError as err:
         return jsonify(error=str(err)), 400
+    if pkg["partner_scope"] not in ("Both", fields["partner_type"]):
+        return jsonify(error="That package isn't available for your partner type."), 403
 
     # order_amount snapshots what this partner would actually pay for the
     # package right now — same reference-total-then-discount math as

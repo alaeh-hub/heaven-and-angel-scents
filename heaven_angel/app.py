@@ -2,7 +2,7 @@ import os
 import secrets
 import uuid
 
-from flask import Flask, g, request, send_from_directory
+from flask import Flask, g, request, send_from_directory, session
 from flask_talisman import Talisman
 from flask_wtf import CSRFProtect
 
@@ -23,7 +23,7 @@ from heaven_angel.template_helpers import register_error_handlers, register_temp
 # are covered regardless.
 _CSP = {
     "default-src": "'self'",
-    "script-src": ["'self'", "https://cdn.socket.io"],
+    "script-src": ["'self'"],
     # motion.js used to load from cdn.jsdelivr.net — it's now vendored at
     # static/js/motion.js (see base.html / login.html), so jsdelivr no
     # longer needs to be here. Being a third-party origin was also why
@@ -32,8 +32,11 @@ _CSP = {
     # browser now sees it as same-origin.
     "style-src": ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
     "font-src": ["'self'", "https://fonts.gstatic.com"],
-    "connect-src": ["'self'", "wss:", "ws:", "https://cdn.socket.io"],
+    "connect-src": ["'self'", "wss:", "ws:"],
     "img-src": ["'self'", "data:"],
+    "base-uri": "'self'",
+    "form-action": "'self'",
+    "object-src": "'none'",
 }
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -86,6 +89,14 @@ def _install_request_id(app):
         # report can be matched to log lines; otherwise mint one.
         incoming = request.headers.get("X-Request-ID", "")
         g.request_id = incoming if REQUEST_ID_OK.match(incoming) else uuid.uuid4().hex[:16]
+
+    @app.after_request
+    def _no_store_when_signed_in(response):
+        # Signed-in pages and exports hold sales, cost and user data: keep them
+        # out of browser/proxy caches so Back after logout can't show them.
+        if session.get("user_id") and not request.path.startswith("/static/"):
+            response.headers.setdefault("Cache-Control", "no-store, private")
+        return response
 
     @app.after_request
     def _echo_request_id(response):

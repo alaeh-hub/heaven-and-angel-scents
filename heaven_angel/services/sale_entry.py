@@ -55,6 +55,11 @@ def parse_sale_form(form, *, qty_label, sale_type_prompt, product_prompt,
             unit_price = decimal.Decimal("0")
         else:
             unit_price = parse_positive_decimal(form.get("unit_price"), "Price charged")
+            # sales.unit_price is DECIMAL(10,2): a sub-cent price would be
+            # stored as 0.00 and pass as a free sale.
+            unit_price = unit_price.quantize(decimal.Decimal("0.01"))
+            if unit_price < decimal.Decimal("0.01"):
+                raise ValidationError("Price charged must be at least 0.01.")
         customer_name = parse_optional_text(form.get("customer_name"), "Customer name", MAX_NAME_LENGTH)
         customer_address = parse_optional_text(form.get("customer_address"), "Customer address", 255)
         # Lets a sale that happened earlier be logged under that date; blank is today.
@@ -163,7 +168,9 @@ def record_sale_order(sales, *, branch_id, user_id, note_suffix=""):
     with transaction() as conn:
         cur = conn.cursor(dictionary=True)
         ids = [_record_line(cur, sale, branch_id=branch_id, user_id=user_id, note_suffix=note_suffix)
-               for sale in sales]
+               # Locked in SKU order so two orders listing the same scents in opposite
+               # order can't deadlock; ids[0] is still the first row inserted.
+               for sale in sorted(sales, key=lambda s: s.sku)]
         if len(ids) > 1:
             cur.execute("UPDATE sales SET order_id = %s WHERE sale_id IN (" + ", ".join(["%s"] * len(ids)) + ")",
                         (ids[0], *ids))

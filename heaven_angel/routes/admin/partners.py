@@ -50,13 +50,20 @@ def partners():
             flash("Select whether this is a Distributor or a Reseller.", "error")
         elif not name:
             flash("Partner name is required.", "error")
+        elif len(name) > 150 or any(len(v or "") > 255 for v in (contact_person, phone, email, address)):
+            flash("One of the fields is too long.", "error")
         else:
-            execute(
-                """INSERT INTO partners
-                       (partner_type, partner_name, contact_person, phone, email, address, notes)
-                   VALUES (%s, %s, %s, %s, %s, %s, %s)""",
-                (partner_type, name, contact_person, phone, email, address, notes),
-            )
+            try:
+                execute(
+                    """INSERT INTO partners
+                           (partner_type, partner_name, contact_person, phone, email, address, notes)
+                       VALUES (%s, %s, %s, %s, %s, %s, %s)""",
+                    (partner_type, name, contact_person, phone, email, address, notes),
+                )
+            except Exception:
+                current_app.logger.exception("add partner failed for %s", name)
+                flash("Couldn't save that partner - check the field lengths.", "error")
+                return redirect(url_for("admin.partners", type=return_type))
             notify_all(["partners"])
             log_action("add_partner", target=name, details=partner_type)
             flash(f"{name} added as a {partner_type.lower()}.", "success")

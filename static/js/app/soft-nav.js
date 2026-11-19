@@ -328,7 +328,7 @@ function initSoftNav() {
     // Promise<Response> — a GET for a link, a POST with the form's
     // data for a form — so the two call sites below only differ in
     // how they build that one request.
-    function go(request, url, historyMode, preserveScroll) {
+    function go(request, url, historyMode, preserveScroll, isPost) {
         const myToken = ++navToken;
         const scrollY = window.scrollY;
         navProgress.start();
@@ -359,7 +359,9 @@ function initSoftNav() {
                     // session) — landing there directly instead of
                     // re-requesting the original url avoids bouncing
                     // through the same redirect a second time.
-                    window.location.href = finalUrl;
+                    // A POST response page that can't be swapped must not be
+                    // re-requested as a GET (405); reload the current page.
+                    if (isPost) window.location.reload(); else window.location.href = finalUrl;
                     return;
                 }
                 appendFreshFlashes(fresh);
@@ -388,7 +390,7 @@ function initSoftNav() {
                 if (myToken !== navToken) return;
                 hideLoadingOverlay();
                 navProgress.done();
-                window.location.href = url;
+                if (isPost) window.location.reload(); else window.location.href = url;
             });
     }
 
@@ -459,6 +461,7 @@ function initSoftNav() {
             form.action,
             'push',
             preserveScroll,
+            true,
         );
     });
 
