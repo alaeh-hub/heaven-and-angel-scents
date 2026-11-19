@@ -503,6 +503,8 @@ def report_bulk_batches(filters, branch_scope):
     bulk_batch_materials) rather than one row per ingredient, so the
     batch totals stay one-row-per-batch and total up correctly.
     """
+    from heaven_angel.routes.admin.batch_formulas import ensure_cost_columns
+    ensure_cost_columns()
     where, params = "", []
     if filters["search"]:
         where += " AND (bb.scent_name LIKE %s OR bb.batch_code LIKE %s)"
@@ -515,6 +517,7 @@ def report_bulk_batches(filters, branch_scope):
     rows = query(
         f"""SELECT bb.created_at, bb.batch_code, bb.scent_name, bb.input_qty, bb.input_unit, bb.notes,
                    bb.total_volume_ml, bb.remaining_ml, bb.total_cost, bb.cost_per_ml,
+                   bb.chemist_cost, bb.labor_cost,
                    (SELECT GROUP_CONCAT(
                         CONCAT(rm.material_name, ' ', TRIM(TRAILING '.' FROM TRIM(TRAILING '0' FROM bbm.qty_used)),
                                ' ', COALESCE(bbm.qty_used_unit, rm.unit))
@@ -535,6 +538,8 @@ def report_bulk_batches(filters, branch_scope):
         r["used_ml"] = r["total_volume_ml"] - r["remaining_ml"]
         r["total_cost"] = float(r["total_cost"])
         r["cost_per_ml"] = float(r["cost_per_ml"])
+        r["chemist_cost"] = float(r["chemist_cost"] or 0)
+        r["labor_cost"] = float(r["labor_cost"] or 0)
         r["materials_used"] = r["materials_used"] or "—"
         r["username"] = r["username"] or "—"
         r["size_entered"] = f"{float(r.pop('input_qty')):g} {r.pop('input_unit')}"
@@ -554,6 +559,8 @@ def report_bulk_batches(filters, branch_scope):
         ("used_ml", "Bottled (mL)", "num"),
         ("remaining_ml", "Remaining (mL)", "num"),
         ("bottles_left", "Bottles Left", "str"),
+        # Batch Cost = the materials' cost + chemist + labor (a flat charge per bottle a formula batch yields).
+        ("chemist_cost", "Chemist", "money"), ("labor_cost", "Labor", "money"),
         ("total_cost", "Batch Cost", "money"),
         ("cost_per_ml", "Cost / mL", "money"),
         ("username", "Made By", "str"),

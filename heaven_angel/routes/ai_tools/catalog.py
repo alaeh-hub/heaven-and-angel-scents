@@ -140,10 +140,12 @@ def get_formulas(args, ctx):
 
 
 def get_bulk_batches(args, ctx):
+    from heaven_angel.routes.admin.batch_formulas import ensure_cost_columns
+    ensure_cost_columns()
     active_only = args.get("active_only", True)
     sql = (
         "SELECT bb.batch_code, bb.base_code, bb.scent_name, bb.total_volume_ml, bb.remaining_ml, bb.cost_per_ml, "
-        "bb.total_cost, bb.created_at, bb.formula_label, bb.notes, "
+        "bb.total_cost, bb.chemist_cost, bb.labor_cost, bb.created_at, bb.formula_label, bb.notes, "
         "EXISTS(SELECT 1 FROM bulk_batch_materials m WHERE m.batch_id = bb.batch_id AND m.is_packaging) AS has_packaging "
         "FROM bulk_batches bb"
     )
@@ -162,6 +164,8 @@ def get_bulk_batches(args, ctx):
             "packaging_recorded": bool(r["has_packaging"]),
             "total_volume_ml": float(r["total_volume_ml"] or 0), "remaining_ml": remaining,
             "cost_per_ml": float(r["cost_per_ml"] or 0), "total_cost": float(r["total_cost"] or 0),
+            # A formula batch's total_cost includes these two flat charges (a set amount per bottle it yields).
+            "chemist_cost": float(r["chemist_cost"] or 0), "labor_cost": float(r["labor_cost"] or 0),
             # Same yield figure the Bulk Batches page shows: how many full
             # bottles of each size the remaining mL could still fill.
             "bottles_possible": {u: int(remaining // float(bottle_size_ml(u))) for u in BOTTLE_UNITS},
@@ -169,7 +173,8 @@ def get_bulk_batches(args, ctx):
         })
     return {
         "results": results,
-        "note": ("bottles_possible counts liquid only. Making bottles from a batch whose packaging is not recorded "
+        "note": ("total_cost = materials + chemist_cost + labor_cost; cost_per_ml is liquid only. "
+                 "bottles_possible counts liquid only. Making bottles from a batch whose packaging is not recorded "
                  "(packaging_recorded false, e.g. an opening balance) also takes one bottle, sticker and seal per "
                  "bottle out of materials stock."),
     }

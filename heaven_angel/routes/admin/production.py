@@ -426,7 +426,9 @@ def bulk_batches():
         # split the "Timpla Costing" spreadsheet does. Cost per NEW
         # bottle is liquid+packaging / yield; cost per REFILL is
         # liquid-only / yield (a refill doesn't need a new bottle/sticker/
-        # seal) — matching that spreadsheet's own two result rows.
+        # seal) — matching that spreadsheet's own two result rows. A formula
+        # batch's total_cost also carries its chemist and labor charge (a flat
+        # amount per bottle), so the cost per new bottle includes them too.
         if b["target_unit"] and b["target_bottle_qty"]:
             liquid_subtotal = sum(
                 (i["line_cost"] for i in ingredients if not i["is_packaging"]),

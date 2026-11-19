@@ -74,8 +74,10 @@ separate from those totals: restocking adds to it and bulk batches use it up.
 bulk batch made through the formula flow for a catalog scent is costed at that scent's oil price, takes its oil from \
 that scent's stock, and also takes the packaging (bottle, sticker, seal) for every bottle it can fill out of materials \
 stock when it is made. A batch with no packaging recorded, such as an opening balance, has its packaging taken out of \
-stock bottle by bottle as production runs are logged from it. Cost of goods per bottle is a flat cost per size that \
-already includes packaging. Opening-balance stock loaded into the system has its own cost-of-goods record, so it counts \
+stock bottle by bottle as production runs are logged from it. A batch made from a formula also carries a chemist and a \
+labor charge, a flat amount per bottle it yields (5 pesos each by default): they are costs, not materials, and are part \
+of the batch's total cost and of its cost per new bottle, but not of the liquid-only cost per mL or per refill. \
+Cost of goods per bottle is a flat cost per size that already includes packaging. Opening-balance stock loaded into the system has its own cost-of-goods record, so it counts \
 in capital and has a cost when sold.
 - A stock request can ship in several partial shipments. It stays Partially Fulfilled until every quantity has \
 gone out, and each shipment is received separately by the branch.

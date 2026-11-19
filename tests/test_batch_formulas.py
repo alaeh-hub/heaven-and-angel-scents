@@ -183,7 +183,8 @@ def test_producing_from_a_formula_splits_the_mix_and_deducts_stock(client, sql):
     assert {pid: r["qty_used"] for pid, r in packaging.items()} == {
         m["bottle"]: Decimal("39"), m["sticker"]: Decimal("39"), m["seal"]: Decimal("39")}
     assert get_raw_material(sql, m["bottle"])["stock_qty"] == Decimal("500") - 39
-    assert batch["total_cost"] == liquid.quantize(Decimal("0.01")) + Decimal("760.50")
+    # Liquid + packaging + chemist (195) + labor (195).
+    assert batch["total_cost"] == liquid.quantize(Decimal("0.01")) + Decimal("760.50") + Decimal("390.00")
 
 
 def test_producing_without_materials_set_up_is_refused(client, sql):
@@ -482,3 +483,25 @@ def test_the_opening_alcohol_is_corrected_to_a_3200_ml_gallon(app, sql):
         load_formula_config()
     again = _rows(sql, "SELECT stock_qty FROM raw_materials WHERE material_name = 'Perfume Alcohol'")[0]
     assert again["stock_qty"] == row["stock_qty"]
+
+
+def test_chemist_and_labor_show_in_the_batch_report_and_the_ai_tool(app, client, sql):
+    """The Bulk batches report and the AI assistant show the two charges, so a formula batch's
+    cost adds up to what they list."""
+    from heaven_angel.routes.ai_tools.catalog import get_bulk_batches
+    from heaven_angel.services.reports import get_report, parse_report_filters
+    _signed_in_admin(client, sql)
+    m = _make_role_materials(sql)
+    _save_materials(client, m)
+    token = get_form_token(client, BULK_BATCHES_URL)
+    client.post(PRODUCE_URL, data={"form_token": token, "formula": "15%", "size": "500",
+                                   "scent_name": "Report Batch", "batch_code": "", "notes": ""})
+    with app.test_request_context():
+        tool = get_bulk_batches({"active_only": False}, {"role": "Admin", "branch_id": None})
+        report = get_report("bulk_batches", parse_report_filters({"mode": "all", "search": "Report Batch"}))
+    mine = [r for r in tool["results"] if r["scent"] == "Report Batch"][0]
+    assert mine["chemist_cost"] == 195.0 and mine["labor_cost"] == 195.0
+    assert "chemist_cost" in tool["note"]
+    keys = [c[0] for c in report["columns"]]
+    assert keys.index("chemist_cost") < keys.index("labor_cost") < keys.index("total_cost")
+    assert report["rows"][0]["chemist_cost"] == 195.0 and report["rows"][0]["labor_cost"] == 195.0
