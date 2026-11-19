@@ -167,10 +167,16 @@ def record_sale_order(sales, *, branch_id, user_id, note_suffix=""):
     """
     with transaction() as conn:
         cur = conn.cursor(dictionary=True)
+        # Lock this branch's stock rows in SKU order first, so two orders listing the
+        # same scents in opposite order can't deadlock. The lines themselves are still
+        # recorded in the order they were entered (receipt order, ids[0] = first line).
+        for sku in sorted({sale.sku for sale in sales}):
+            cur.execute(
+                "SELECT stock_qty FROM branch_inventory WHERE branch_id = %s AND sku = %s FOR UPDATE",
+                (branch_id, sku))
+            cur.fetchall()
         ids = [_record_line(cur, sale, branch_id=branch_id, user_id=user_id, note_suffix=note_suffix)
-               # Locked in SKU order so two orders listing the same scents in opposite
-               # order can't deadlock; ids[0] is still the first row inserted.
-               for sale in sorted(sales, key=lambda s: s.sku)]
+               for sale in sales]
         if len(ids) > 1:
             cur.execute("UPDATE sales SET order_id = %s WHERE sale_id IN (" + ", ".join(["%s"] * len(ids)) + ")",
                         (ids[0], *ids))
