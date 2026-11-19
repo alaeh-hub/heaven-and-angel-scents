@@ -44,7 +44,7 @@ def corrected(package_qty, package_cost, stock_qty, gallons):
     new_qty = D(package_qty) - over
     if new_qty <= 0:
         raise ValueError("The correction is larger than the recorded purchase quantity.")
-    return new_qty, (D(package_cost) / new_qty).quantize(D("0.0001")), D(stock_qty) - over
+    return new_qty, (D(package_cost) / new_qty).quantize(D("0.0001"), rounding=decimal.ROUND_HALF_UP), D(stock_qty) - over
 
 
 def main():
