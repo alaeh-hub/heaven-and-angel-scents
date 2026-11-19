@@ -49,14 +49,25 @@
   .fm-choice:active { transform: translateY(1px); }
   .fm-choice[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); font-weight: 600; }
   .fm-choice:disabled { opacity: .55; cursor: not-allowed; }
-  .fm-choice-name { white-space: nowrap; }
+  .fm-choice-name { display: block; white-space: nowrap; }
+  /* How many bottles that size makes: the figure the choice turns on. */
+  .fm-choice-sub { display: block; min-height: 1.1em; font-size: 0.75rem; font-weight: 400; color: var(--ink-faint); font-variant-numeric: tabular-nums; }
+  .fm-choice[aria-pressed="true"] .fm-choice-sub { color: var(--ink-soft); }
 
   .fm-summary { margin-top: var(--space-lg); padding-top: var(--space-lg); border-top: 1px solid var(--border); }
   .fm-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 21rem); gap: var(--space-xl); align-items: start; }
   .fm-main .bb-h3:first-child { margin-top: 0; }
   .fm-table { min-width: 34rem; }
+  .fm-table col:nth-child(1) { width: 34%; } .fm-table col:nth-child(2) { width: 15%; } .fm-table col:nth-child(3) { width: 21%; }
+  .fm-table col:nth-child(4) { width: 14%; } .fm-table col:nth-child(5) { width: 16%; }
   .fm-table td, .fm-table th { font-variant-numeric: tabular-nums; }
+  .fm-table tbody tr:hover td { background: color-mix(in srgb, var(--ink) 4%, transparent); }
   .fm-sub { display: block; font-size: 0.75rem; color: var(--ink-faint); }
+  /* A row short of stock is marked on its own edge as well as in its stock cell. */
+  .fm-table tr.fm-row-short td:first-child { box-shadow: inset 3px 0 0 var(--red-ink); }
+  /* Chemist and labor are flat charges, not stock: the stock cell says so. */
+  .fm-flat td:nth-child(3) { color: var(--ink-faint); font-size: 0.8125rem; }
+  .fm-h3-label { font-weight: 400; color: var(--ink-faint); }
   .fm-dl { display: grid; grid-template-columns: minmax(0, max-content) minmax(0, 1fr); gap: var(--space-2xs) var(--space-lg); margin: 0; font-size: 0.875rem; }
   .fm-dl dt { color: var(--ink-faint); }
   .fm-dl dd { margin: 0; font-variant-numeric: tabular-nums; }
@@ -66,11 +77,20 @@
   .fm-status svg { flex: 0 0 auto; width: 1rem; height: 1rem; margin-top: var(--space-3xs); }
   .fm-ok { color: var(--success); }
   .fm-short { color: var(--red-ink); }
-  .fm-fig { font-size: 1.5rem; font-weight: 600; font-variant-numeric: tabular-nums; line-height: 1.2; }
+  .fm-fig { font-size: 2.125rem; font-weight: 600; font-variant-numeric: tabular-nums; line-height: 1.1; letter-spacing: -0.01em; }
   .fm-fig-label { font-size: 0.8125rem; color: var(--ink-faint); }
   .fm-headline { margin: 0; font-size: 0.875rem; color: var(--ink-soft); }
   .fm-totals { display: grid; }
   .fm-total { display: flex; justify-content: space-between; gap: var(--space-md); padding: var(--space-xs) 0; border-top: 1px solid var(--border); font-size: 0.875rem; font-variant-numeric: tabular-nums; }
+  .fm-total > span:first-child { display: inline-flex; align-items: center; gap: var(--space-xs); }
+  /* Where the cost goes: one bar split in the same four parts as the lines under it. */
+  .fm-bar { display: flex; height: 0.5rem; gap: 2px; border-radius: 999px; overflow: clip; }
+  .fm-bar > span { min-width: 2px; }
+  .fm-k-liquid { background: var(--accent); }
+  .fm-k-pack { background: color-mix(in srgb, var(--accent) 48%, var(--surface-2)); }
+  .fm-k-chem { background: var(--ink-faint); }
+  .fm-k-labor { background: color-mix(in srgb, var(--ink-faint) 50%, var(--surface-2)); }
+  .fm-key { flex: 0 0 auto; width: 0.625rem; height: 0.625rem; border-radius: 2px; }
   .fm-total-strong { font-weight: 600; }
   .fm-fields { display: grid; gap: var(--space-sm); margin-top: var(--space-md); }
   .fm-fields .field { margin: 0; }
@@ -85,9 +105,28 @@
   .fm-roles { display: grid; grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr)); gap: var(--space-sm); margin-bottom: var(--space-md); }
   .fm-roles .field { margin: 0; }
 
-  @media (min-width: 64.0625rem) { .fm-side { position: sticky; top: var(--space-md); } }
-  @media (max-width: 64rem) { .fm-grid { grid-template-columns: minmax(0, 1fr); gap: var(--space-lg); } }
-  @media (max-width: 48rem) { .fm-pick { grid-template-columns: minmax(0, 1fr); gap: var(--space-md); } .fm-form { padding-inline: var(--space-md); } }
+  @media (min-width: 64.0625rem) { .fm-side { position: sticky; top: calc(var(--topbar-h) + var(--space-md)); } }
+  @media (max-width: 64rem) {
+    .fm-grid { grid-template-columns: minmax(0, 1fr); gap: var(--space-lg); }
+    /* Narrow screens: the result (cost per bottle, any shortage) comes first, then the
+       detail, then the name fields and the button, instead of sitting 1,500px down. */
+    .fm-side { display: contents; }
+    .fm-result { order: -1; }
+    .fm-main { order: 1; }
+    .fm-fields { order: 2; margin-top: 0; }
+  }
+  @media (max-width: 48rem) {
+    .fm-pick { grid-template-columns: minmax(0, 1fr); gap: var(--space-md); }
+    .fm-form { padding-inline: var(--space-md); }
+    /* The tables fit the screen instead of scrolling the cost out of sight: the rate
+       column goes (it is cost / needed), the rest wrap. */
+    .fm-table { min-width: 0; table-layout: fixed; }
+    .fm-table col:nth-child(1) { width: 30%; } .fm-table col:nth-child(2) { width: 26%; }
+    .fm-table col:nth-child(3) { width: 21%; } .fm-table col:nth-child(4) { width: 0; } .fm-table col:nth-child(5) { width: 23%; }
+    .fm-table th:nth-child(4), .fm-table td:nth-child(4) { display: none; }
+    .fm-table th, .fm-table td { padding-inline: var(--space-3xs); font-size: 0.8125rem; overflow-wrap: anywhere; }
+    .fm-table td { white-space: normal; }
+  }
   @media (prefers-reduced-motion: reduce) { .fm-choice { transition: none; } .fm-choice:active { transform: none; } }
   .pg-foot { padding: var(--space-2xs) var(--space-lg) var(--space-md); }
   .pg-foot p { font-size: 0.875rem; color: var(--ink-faint); margin: 0; }
@@ -451,6 +490,7 @@
           {% for size in spec.sizes %}
           <button type="button" class="fm-choice" data-size="{{ size }}" aria-pressed="false">
             <span class="fm-choice-name">{{ size }} mL</span>
+            <span class="fm-choice-sub" data-yield></span>
           </button>
           {% endfor %}
         </div>
@@ -461,10 +501,10 @@
     <div id="fmSummary" class="fm-summary" style="display:none;">
       <div class="fm-grid">
         <div class="fm-main">
-          <h3 class="bb-h3">Formula</h3>
+          <h3 class="bb-h3" id="fmFormulaTitle">Formula</h3>
           <div class="bb-detail-scroll">
             <table class="bb-table fm-table">
-              <colgroup><col style="width:34%"><col style="width:15%"><col style="width:21%"><col style="width:14%"><col style="width:16%"></colgroup>
+              <colgroup><col><col><col><col><col></colgroup>
               <thead><tr><th>Material</th><th class="num">Needed</th><th class="num">In stock</th><th class="num">Rate</th><th class="num">Cost</th></tr></thead>
               <tbody id="fmLines"></tbody>
             </table>
@@ -473,7 +513,7 @@
           <h3 class="bb-h3">Packaging, chemist and labor, one of each per bottle</h3>
           <div class="bb-detail-scroll">
             <table class="bb-table fm-table">
-              <colgroup><col style="width:34%"><col style="width:15%"><col style="width:21%"><col style="width:14%"><col style="width:16%"></colgroup>
+              <colgroup><col><col><col><col><col></colgroup>
               <thead><tr><th>Item</th><th class="num">Needed</th><th class="num">In stock</th><th class="num">Rate</th><th class="num">Cost</th></tr></thead>
               <tbody id="fmPackaging"></tbody>
             </table>
@@ -491,6 +531,7 @@
               <div class="fm-fig-label">cost per new bottle</div>
             </div>
             <p class="fm-headline" id="fmHeadline"></p>
+            <div class="fm-bar" id="fmBar" role="img" aria-label="Where the cost goes"></div>
             <div class="fm-totals" id="fmTotals"></div>
           </div>
           <div class="fm-fields">
@@ -511,8 +552,8 @@
               <label for="fmNotes">Notes <span class="text-faint">(optional)</span></label>
               <input type="text" id="fmNotes" name="notes" maxlength="255">
             </div>
-            <button type="submit" class="btn btn-accent fm-submit" id="fmSubmit">Produce batch</button>
-            <p class="fm-hint">Deducts material stock and adds bottle packaging, chemist and labor to cost.</p>
+            <button type="submit" class="btn btn-accent fm-submit" id="fmSubmit" aria-describedby="fmSubmitHint">Produce batch</button>
+            <p class="fm-hint" id="fmSubmitHint">Deducts material stock and adds bottle packaging, chemist and labor to cost.</p>
           </div>
         </aside>
       </div>
@@ -731,14 +772,31 @@
     function num(n) {
       return Number(n).toLocaleString('en-PH', { maximumFractionDigits: 3 });
     }
-    function row(cells) {
-      return '<tr>' + cells.map(function (c, i) {
+    function row(cells, cls) {
+      return '<tr' + (cls ? ' class="' + cls + '"' : '') + '>' + cells.map(function (c, i) {
         return '<td' + (i ? ' class="num"' : '') + '>' + c + '</td>';
       }).join('') + '</tr>';
     }
-    function totalRow(label, value, strong) {
-      return '<div class="fm-total' + (strong ? ' fm-total-strong' : '') + '"><span>' + esc(label) +
+    // `key` colours a small square in front of the label, matching a segment of the cost bar.
+    function totalRow(label, value, strong, key) {
+      return '<div class="fm-total' + (strong ? ' fm-total-strong' : '') + '"><span>' +
+        (key ? '<i class="fm-key ' + key + '" aria-hidden="true"></i>' : '') + esc(label) +
         '</span><span>' + value + '</span></div>';
+    }
+    // The figure rolls to its new value (Motion) instead of jumping; reduced motion sets it at once.
+    var figShown = null, figAnim = null;
+    function showFigure(el, value) {
+      if (figAnim && figAnim.stop) figAnim.stop();
+      var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      if (!window.Motion || reduce || figShown === null || figShown === value) {
+        el.textContent = peso(value); figShown = value; return;
+      }
+      var from = figShown; figShown = value;
+      figAnim = window.Motion.animate(from, value, {
+        duration: 0.45, ease: [0.22, 1, 0.36, 1],
+        onUpdate: function (v) { el.textContent = peso(v); },
+        onComplete: function () { el.textContent = peso(value); }
+      });
     }
     function stockCell(have, short, u) {
       var text = num(have) + (u ? ' ' + esc(unit(u)) : '');
@@ -786,6 +844,12 @@
       });
       sizeHint.style.display = haveGroup ? 'none' : '';
       if (!haveSize) { s = ''; sizeInput.value = ''; }
+      // Each size says how many bottles it makes for the chosen formula.
+      Array.prototype.forEach.call(sizeBtns, function (b) {
+        var tag = b.querySelector('[data-yield]');
+        var calc = f && CATALOG[f] ? CATALOG[f][b.dataset.size] : null;
+        if (tag) tag.textContent = calc ? calc.bottles + ' bottles' : '';
+      });
       setPressed(formulaBtns, 'formula', f);
       setPressed(sizeBtns, 'size', s);
       var c = f && s && CATALOG[f] ? withScentOil(CATALOG[f][s], scentCodeInput.value) : null;
@@ -795,13 +859,15 @@
       if (!c) {
         stockEl.className = 'fm-status fm-short';
         stockEl.innerHTML = ICON_WARN + '<span>Materials are not set up yet.</span>';
-        ['fmLines', 'fmPackaging', 'fmTotals', 'fmMixing', 'fmPerBottle', 'fmHeadline'].forEach(function (id) {
+        ['fmLines', 'fmPackaging', 'fmTotals', 'fmMixing', 'fmPerBottle', 'fmHeadline', 'fmBar'].forEach(function (id) {
           document.getElementById(id).innerHTML = '';
         });
         submitBtn.disabled = true;
         return;
       }
-      document.getElementById('fmPerBottle').textContent = peso(c.cost_per_new_bottle);
+      showFigure(document.getElementById('fmPerBottle'), c.cost_per_new_bottle);
+      document.getElementById('fmFormulaTitle').innerHTML = esc(c.label.replace(' ml', ' mL')) +
+        ' <span class="fm-h3-label">materials</span>';
       document.getElementById('fmHeadline').textContent =
         c.bottles + ' bottles of ' + num(c.bottle_ml) + ' mL from ' + num(c.total_ml) + ' mL of liquid.';
 
@@ -810,15 +876,16 @@
         var role = ln.label.replace(/\s*\((.*)\)/, ', $1');
         var sub = role.toLowerCase() === ln.material.toLowerCase() ? '' : '<span class="fm-sub">' + esc(role) + '</span>';
         return row([esc(ln.material) + sub, num(ln.qty) + ' ' + esc(unit(ln.unit)),
-          stockCell(ln.stock, ln.short_by, ln.unit), rate(ln.rate), peso(ln.line_cost)]);
+          stockCell(ln.stock, ln.short_by, ln.unit), rate(ln.rate), peso(ln.line_cost)], ln.short_by > 0 ? 'fm-row-short' : '');
       }).join('');
       // Packaging draws on stock; chemist and labor are a flat charge per bottle, so they
       // have no stock to show and sit below the packaging as two more rows.
       document.getElementById('fmPackaging').innerHTML = c.packaging.map(function (p) {
         return row([esc(p.name), num(p.qty) + ' ' + esc(unit(p.unit)), stockCell(p.stock, p.short_by, p.unit),
-          rate(p.rate), peso(p.line_cost)]);
+          rate(p.rate), peso(p.line_cost)], p.short_by > 0 ? 'fm-row-short' : '');
       }).join('') + (c.extras || []).map(function (x) {
-        return row([esc(x.name) + '<span class="fm-sub">per bottle</span>', num(x.qty) + ' bottles', '', rate(x.rate), peso(x.line_cost)]);
+        return row([esc(x.name) + '<span class="fm-sub">per bottle</span>', num(x.qty) + ' bottles', 'flat charge',
+          rate(x.rate), peso(x.line_cost)], 'fm-flat');
       }).join('');
 
       document.getElementById('fmMixing').innerHTML =
@@ -837,14 +904,25 @@
           return esc(x.name) + ' (' + num(x.short_by) + ' ' + esc(unit(x.unit)) + ')';
         }).join(', ') + '.') + '</span>';
 
+      var parts = [['fm-k-liquid', c.liquid_cost, 'Liquid'], ['fm-k-pack', c.packaging_cost, 'Packaging'],
+        ['fm-k-chem', c.chemist_cost, 'Chemist'], ['fm-k-labor', c.labor_cost, 'Labor']];
+      var bar = document.getElementById('fmBar');
+      bar.innerHTML = parts.filter(function (p) { return p[1] > 0; }).map(function (p) {
+        return '<span class="' + p[0] + '" style="flex:' + p[1] + '"></span>';
+      }).join('');
+      bar.setAttribute('aria-label', 'Where the cost goes: ' + parts.map(function (p) { return p[2] + ' ' + peso(p[1]); }).join(', '));
       document.getElementById('fmTotals').innerHTML =
-        totalRow('Liquid ingredients', peso(c.liquid_cost)) +
-        totalRow('Packaging, ' + c.bottles + ' bottles', peso(c.packaging_cost)) +
-        totalRow('Chemist, ' + c.bottles + ' bottles', peso(c.chemist_cost)) +
-        totalRow('Labor, ' + c.bottles + ' bottles', peso(c.labor_cost)) +
+        totalRow('Liquid ingredients', peso(c.liquid_cost), false, 'fm-k-liquid') +
+        totalRow('Packaging, ' + c.bottles + ' bottles', peso(c.packaging_cost), false, 'fm-k-pack') +
+        totalRow('Chemist, ' + c.bottles + ' bottles', peso(c.chemist_cost), false, 'fm-k-chem') +
+        totalRow('Labor, ' + c.bottles + ' bottles', peso(c.labor_cost), false, 'fm-k-labor') +
         totalRow('Total cost to produce', peso(c.total_cost), true) +
         totalRow('Cost per refill, liquid only', peso(c.cost_per_refill_bottle));
       submitBtn.disabled = !c.enough_stock;
+      // A disabled button says why, right under it.
+      document.getElementById('fmSubmitHint').textContent = c.enough_stock
+        ? 'Deducts material stock and adds bottle packaging, chemist and labor to cost.'
+        : 'Not enough stock yet. Restock what is marked short above, then produce.';
     }
 
     formulaBtns.forEach(function (b) {
