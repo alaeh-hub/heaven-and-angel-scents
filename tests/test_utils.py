@@ -222,3 +222,12 @@ def test_excel_text_cells_cannot_become_formulas():
     assert _safe_text("@SUM(A1)").startswith("'@")
     assert _safe_text("Plain text") == "Plain text"
     assert _safe_text(5) == "5"
+
+
+def test_portal_slug_is_cleaned_of_pasted_links():
+    from heaven_angel.config import clean_portal_slug
+    assert clean_portal_slug("abc_DEF-123") == "abc_DEF-123"
+    assert clean_portal_slug("abc_DEF-123/packages") == "abc_DEF-123"
+    assert clean_portal_slug("https://x.test/partner-portal/abc_DEF-123/packages") == "abc_DEF-123"
+    assert clean_portal_slug("  /abc/  ") == "abc"
+    assert clean_portal_slug(None) == ""

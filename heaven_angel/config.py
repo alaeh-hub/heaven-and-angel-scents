@@ -15,6 +15,16 @@ basedir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 INSECURE_DEFAULT_SECRET_KEY = "dev-secret-key-change-me"
 
 
+
+def clean_portal_slug(raw):
+    """Accept the slug as typed, or by mistake as a pasted link or with a trailing
+    "/packages": a slug containing "/" can never match the portal route, which
+    would 404 the whole portal. Returns just the first path segment."""
+    value = (raw or "").strip()
+    if "/partner-portal/" in value:
+        value = value.split("/partner-portal/", 1)[1]
+    return value.strip("/").split("/")[0].strip()
+
 class Config:
     """
     Default values match a stock XAMPP install (MySQL on localhost:3306,
@@ -163,7 +173,7 @@ class Config:
     # and send to a distributor or reseller.
     # No default on purpose: a slug committed to the repo is a public
     # credential. Set it in the environment (.env), never in code.
-    PARTNER_PORTAL_SLUG = os.environ.get("PARTNER_PORTAL_SLUG") or ""
+    PARTNER_PORTAL_SLUG = clean_portal_slug(os.environ.get("PARTNER_PORTAL_SLUG"))
 
     # Direct contact details shown on the partner portal (the closing
     # "talk to us" band, the inquiry form's confirmation). Each is
