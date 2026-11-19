@@ -78,7 +78,7 @@
 .nav-links::after { inset: 0; z-index: 0; background: radial-gradient(110px circle at var(--spot-x) 100%, color-mix(in srgb, var(--gold) 34%, transparent), transparent 70%); }
 .nav-link { z-index: 1; }
 .nav-link-pill { background: color-mix(in srgb, var(--gold) 16%, var(--surface-sunk)); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--gold) 35%, transparent); }
-.nav[data-scrolled="true"] .nav-brand img { filter: drop-shadow(0 4px 14px rgb(0 0 0 / 0.6)); }
+.nav[data-scrolled="true"] .nav-brand img { filter: drop-shadow(0 4px 14px var(--black-60)); }
 
 /* ------------------------------------------------------ scent rail */
 
@@ -111,7 +111,7 @@
 .pkg-card h3 { font-family: var(--font-display); font-weight: 400; font-size: clamp(30px, 3vw, 44px); line-height: 1; letter-spacing: -0.01em; }
 .pkg-card-featured h3 { font-size: clamp(44px, 5vw, 76px); }
 .pkg-price-now { font-family: var(--font-display); font-weight: 400; font-size: clamp(40px, 4vw, 60px); letter-spacing: -0.02em; }
-.pkg-card-featured .pkg-price-now { font-size: clamp(60px, 7vw, 108px); color: var(--gold-ink); }
+.pkg-card-featured .pkg-price-now { font-size: clamp(60px, 7vw, 108px); color: var(--gold-ink); font-variant-numeric: tabular-nums; }
 .pkg-card-featured .pkg-bottle { transform: scale(1.35); }
 .pkg-card-featured .pkg-card-top { margin-bottom: clamp(24px, 6vw, 80px); }
 /* Card header: an editorial index numeral over a tracked label, set on
@@ -132,10 +132,8 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 500;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
   color: var(--ink-3);
 }
 .pkg-card-featured .pkg-tag-label { color: var(--gold-ink); }
@@ -149,9 +147,7 @@
   gap: 5px;
   padding-left: 14px;
   border-left: 1px solid var(--hairline-strong);
-  font-size: 11px;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
+  font-size: 13px;
   color: var(--ink-2);
 }
 .pkg-save em {
@@ -229,9 +225,9 @@
 .cursor-card-pop {
   overflow: hidden;
   border-radius: 14px;
-  background: #121214;
+  background: var(--pop);
   border: 1px solid var(--hairline-strong);
-  box-shadow: 0 24px 60px -16px rgb(0 0 0 / 0.85), 0 0 0 1px rgb(0 0 0 / 0.4);
+  box-shadow: 0 24px 60px -16px var(--black-85), 0 0 0 1px var(--black-40);
 }
 .cursor-card-stage {
   display: grid;
@@ -239,10 +235,10 @@
   height: 184px;
   background:
     radial-gradient(70% 60% at 50% 70%, color-mix(in srgb, var(--gold) 26%, transparent), transparent 75%),
-    linear-gradient(180deg, #0a0a0b, #131315);
+    linear-gradient(180deg, var(--stage-top), var(--stage-bottom));
   border-bottom: 1px solid var(--hairline);
 }
-.cursor-card-img { height: 164px; width: auto; max-width: 90%; object-fit: contain; filter: drop-shadow(0 12px 16px rgb(0 0 0 / 0.6)); }
+.cursor-card-img { height: 164px; width: auto; max-width: 90%; object-fit: contain; filter: drop-shadow(0 12px 16px var(--black-60)); }
 .cursor-card-body { display: grid; gap: 4px; padding: 12px 14px 14px; }
 .cursor-card-title { margin: 0; font-family: var(--font-display); font-size: 26px; line-height: 1; letter-spacing: -0.005em; color: var(--ink); }
 .cursor-card-text { margin: 0; font-size: 13.5px; line-height: 1.4; color: var(--ink-2); }
@@ -385,7 +381,7 @@
 
 .house {
   position: relative;
-  background: #0a0a0a;
+  background: var(--house-bg);
   border-block: 1px solid var(--hairline);
 }
 .house > .section { border-top: 0; }
@@ -414,7 +410,7 @@
    section's black, over the stage, so nothing has an edge to see. */
 .hero-pin::after {
   z-index: 4;
-  height: clamp(180px, 26vh, 260px);
+  height: clamp(180px, 26svh, 260px);
   pointer-events: none;
   background: linear-gradient(
     to bottom,
@@ -519,12 +515,14 @@
   height: 1.6px;
   border-radius: 2px;
   background: currentColor;
-  transition: top 0.3s var(--ease-out), transform 0.35s var(--ease-out), width 0.3s var(--ease-out);
+  top: 0;
+  transition: transform 0.35s var(--ease-out);
 }
-.burger i:nth-child(1) { top: 0; }
-.burger i:nth-child(2) { top: 9px; width: 70%; }
-.nav-menu-btn[aria-expanded="true"] .burger i:nth-child(1) { top: 4.7px; transform: rotate(45deg); }
-.nav-menu-btn[aria-expanded="true"] .burger i:nth-child(2) { top: 4.7px; width: 100%; transform: rotate(-45deg); }
+/* Compositor-only: the bars move and shorten with transform, never top or width. */
+.burger i:nth-child(1) { transform: translate(0, 0) rotate(0deg) scaleX(1); }
+.burger i:nth-child(2) { transform: translate(-15%, 9px) rotate(0deg) scaleX(0.7); }
+.nav-menu-btn[aria-expanded="true"] .burger i:nth-child(1) { transform: translate(0, 4.7px) rotate(45deg) scaleX(1); }
+.nav-menu-btn[aria-expanded="true"] .burger i:nth-child(2) { transform: translate(0, 4.7px) rotate(-45deg) scaleX(1); }
 
 .mobile-menu {
   position: fixed;
@@ -533,7 +531,7 @@
   display: flex;
   flex-direction: column;
   padding: calc(var(--nav-h) + 36px) var(--gutter) calc(24px + env(safe-area-inset-bottom));
-  background: rgb(5 5 6 / 0.97);
+  background: var(--menu-bg);
   -webkit-backdrop-filter: blur(22px) saturate(160%);
   backdrop-filter: blur(22px) saturate(160%);
   overflow-y: auto;
@@ -648,7 +646,7 @@
   box-shadow: none;
   outline: 1px solid var(--hairline-strong);
   outline-offset: -0.5px;
-  transition: background-color 0.35s ease, outline-color 0.35s ease;
+  transition: background-color 0.35s ease;
 }
 .product-card:hover {
   background: var(--shade-a);
@@ -665,7 +663,7 @@
   border-radius: 4px;
   background:
     radial-gradient(75% 60% at 50% 72%, color-mix(in srgb, var(--gold) 14%, transparent), transparent 75%),
-    linear-gradient(180deg, #060607, #0c0c0e);
+    linear-gradient(180deg, var(--tile-top), var(--tile-bottom));
   overflow: hidden;
 }
 .product-card-glow {
@@ -679,14 +677,14 @@
   position: relative;
   height: 90%;
   max-width: 92%;
-  filter: drop-shadow(0 18px 22px rgb(0 0 0 / 0.55));
+  filter: drop-shadow(0 18px 22px var(--black-55));
 }
 .pc-box, .pc-bottle { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; user-select: none; }
 .pc-box { transform-origin: 20% 70%; }
 .pc-bottle { transform-origin: 70% 80%; }
 
 .product-card-body { display: grid; gap: 4px; padding: 0 2px; }
-.pc-code { font-size: 12.5px; color: var(--gold-ink); font-variant-numeric: tabular-nums; letter-spacing: 0.04em; }
+.pc-code { font-size: 12.5px; color: var(--gold-ink); font-variant-numeric: tabular-nums; }
 .product-card-body h3 { font-family: var(--font-display); font-weight: 400; font-size: clamp(24px, 2.2vw, 31px); line-height: 1; letter-spacing: -0.005em; color: var(--ink); }
 .product-card-sizes { padding: 0; font-size: 13.5px; color: var(--ink-3); }
 .product-card-ask { display: inline-flex; align-items: center; gap: 6px; min-height: 40px; margin: auto 0 0; padding: 0 2px; justify-self: start; }
@@ -701,7 +699,7 @@
 .page-btn:hover:not(:disabled) { color: var(--gold-ink); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--gold) 45%, transparent); }
 .page-btn[aria-current="page"] { color: var(--gold-ink); box-shadow: none; }
 .page-pill { border-radius: 10px; background: var(--gold-soft); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--gold) 60%, transparent); }
-.page-btn:disabled { background: transparent; opacity: 0.4; }
+.page-btn:disabled { background: var(--surface-sunk); color: var(--ink-3); box-shadow: none; opacity: 0.55; cursor: not-allowed; }
 
 @media (max-width: 640px) {
   .product-card-body h3 { font-size: 22px; }
@@ -732,8 +730,8 @@
    frame over moving content). */
 .scent-rail .logo-slider__container,
 .word-rail .logo-slider__container {
-  -webkit-mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent);
-  mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent);
+  -webkit-mask-image: linear-gradient(90deg, transparent, var(--black) 12%, var(--black) 88%, transparent);
+  mask-image: linear-gradient(90deg, transparent, var(--black) 12%, var(--black) 88%, transparent);
 }
 
 /* ======================== catalog: the home collection's own tiles

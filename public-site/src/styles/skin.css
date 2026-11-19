@@ -40,8 +40,8 @@
   -webkit-backdrop-filter: blur(calc(var(--blur-index) * 0.6px * var(--blur)));
   --a: calc(var(--blur-index) / var(--blurs) * 100%);
   --b: calc((var(--blur-index) + 1) / var(--blurs) * 100%);
-  mask-image: linear-gradient(to right, transparent var(--a), #000 var(--b), transparent calc(var(--b) + 12%));
-  -webkit-mask-image: linear-gradient(to right, transparent var(--a), #000 var(--b), transparent calc(var(--b) + 12%));
+  mask-image: linear-gradient(to right, transparent var(--a), var(--black) var(--b), transparent calc(var(--b) + 12%));
+  -webkit-mask-image: linear-gradient(to right, transparent var(--a), var(--black) var(--b), transparent calc(var(--b) + 12%));
 }
 
 /* ---------- Scent rail (between the hero and the packages) ---------- */
@@ -77,7 +77,7 @@
 .scent-chip img {
   height: 100px;
   width: auto;
-  filter: drop-shadow(0 10px 14px rgb(0 0 0 / 0.55));
+  filter: drop-shadow(0 10px 14px var(--black-55));
   transition: transform 0.4s cubic-bezier(0.22, 1, 0.36, 1);
 }
 .scent-chip:hover img { transform: translateY(-6px) scale(1.06); }

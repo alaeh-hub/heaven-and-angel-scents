@@ -225,6 +225,8 @@ document.addEventListener('DOMContentLoaded', () => {
     safeInit(revealContent, 'revealContent');
     safeInit(initStatCountUp, 'statCountUp');
     safeInit(initEntranceStagger, 'entranceStagger');
+    safeInit(initBelowFoldReveal, 'belowFoldReveal');
+    safeInit(initFieldShake, 'fieldShake');
     safeInit(initFillBars, 'fillBars');
     safeInit(initMascots, 'mascots');
 

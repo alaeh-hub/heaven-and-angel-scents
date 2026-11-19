@@ -6,11 +6,14 @@ import { useSite } from '../components/InquiryProvider.jsx';
 import { SCENTS } from '../content/scents.js';
 import { ScentTile, SHELF_VARS } from '../components/landing/Collection.jsx';
 import Pagination from '../components/catalog/Pagination.jsx';
+import AnimatedNumber from '../components/AnimatedNumber.jsx';
 import Chapter from '../components/Chapter.jsx';
 import Footer from '../components/Footer.jsx';
 import Segmented from '../components/Segmented.jsx';
-import { ARRIVE, EASE_OUT } from '../motion.js';
+import { ARRIVE, EASE_OUT, SPRING } from '../motion.js';
 import { packagesPath } from '../utils.js';
+
+const whole = (n) => String(Math.round(n));
 
 const GENDERS = [
   ['all', 'All'],
@@ -128,13 +131,15 @@ export default function ProductsPage() {
                     <div className="catalog-tile" style={SHELF_VARS}>
                       <ScentTile scent={scent} eager={i < 4} nearby={i < 8} />
                     </div>
-                    <button
+                    <motion.button
                       type="button"
                       className="product-card-ask"
+                      whileTap={reduce ? undefined : { scale: 0.97 }}
+                      transition={SPRING}
                       onClick={() => openInquiry({ message: `I'm interested in ${scent.name} (${scent.variant}).` })}
                     >
                       Ask about this scent
-                    </button>
+                    </motion.button>
                   </motion.div>
                 ))}
               </motion.div>
@@ -142,7 +147,7 @@ export default function ProductsPage() {
 
             <div className="catalog-foot">
               <p className="muted">
-                Showing {first}-{last} of {list.length} scents
+                Showing <AnimatedNumber value={first} format={whole} duration={0.5} />-<AnimatedNumber value={last} format={whole} duration={0.5} /> of {list.length} scents
               </p>
               <Pagination page={current} pages={pages} onChange={(p) => go({ gender, page: p })} />
             </div>

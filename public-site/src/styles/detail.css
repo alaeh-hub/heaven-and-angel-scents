@@ -9,7 +9,7 @@
   z-index: 60;
   /* Plain dimming: a blur that animates with the scrim's opacity has to be
      recomputed every frame, which made the opening stutter. */
-  background: rgb(0 0 0 / 0.72);
+  background: var(--black-72);
 }
 
 .sheet {
@@ -105,11 +105,12 @@
   right: 5px;
   width: 6px;
   border-radius: 999px;
-  background: color-mix(in srgb, var(--gold) 38%, rgb(255 255 255 / 0.1));
+  background: color-mix(in srgb, var(--gold) 38%, var(--white-10));
   opacity: 0.55;
   cursor: grab;
   touch-action: none;
-  transition: width 0.2s var(--ease-out), right 0.2s var(--ease-out), background-color 0.2s ease, opacity 0.3s ease;
+  transform-origin: 100% 50%;
+  transition: transform 0.2s var(--ease-out), background-color 0.2s ease, opacity 0.3s ease;
 }
 
 .cscroll.is-awake .cscroll-thumb,
@@ -120,8 +121,7 @@
 
 .cscroll:hover .cscroll-thumb,
 .cscroll.is-dragging .cscroll-thumb {
-  width: 8px;
-  right: 4px;
+  transform: scaleX(1.34);
 }
 
 .cscroll.is-dragging .cscroll-thumb {

@@ -78,6 +78,7 @@ function refreshDynamicContent(skipReveal) {
         safeInit(revealContent, 'revealContent');
         safeInit(initStatCountUp, 'statCountUp');
         safeInit(initEntranceStagger, 'entranceStagger');
+        safeInit(initBelowFoldReveal, 'belowFoldReveal');
     }
 }
 

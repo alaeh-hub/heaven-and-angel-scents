@@ -11,9 +11,9 @@ const WORDS = ['Eau de parfum', 'Partner pricing', 'Small-batch runs', 'Easy reo
  * large serif type. A look at what is on offer before any decision.
  */
 export default function ScentRail() {
-  const bottles = SCENTS.map((s) => (
+  const bottles = SCENTS.map((s, i) => (
     <div className="scent-chip" key={s.code}>
-      <img src={thumb(s.bottle, 's')} alt="" width="68" height="100" loading="lazy" decoding="async" />
+      <img src={thumb(s.bottle, 's')} alt="" width="68" height="100" loading={i < 6 ? 'eager' : 'lazy'} decoding="async" />
       <span>
         <span className="scent-chip-code">{s.code}</span>
         <span className="scent-chip-name">{s.name}</span>

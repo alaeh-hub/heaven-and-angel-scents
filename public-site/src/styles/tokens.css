@@ -1,5 +1,5 @@
-/* Hallmark · checked: 2026-10-29 · genre: atmospheric (inferred)
- * floor: 0 FAIL · fixed: 48, 7a, 6a, 10a, 34, 39a, 40, 49a, 56, 62, 67 · structural: 3, 44c, 58, 77 printed
+/* Hallmark · checked: 2026-11-19 · genre: atmospheric (inferred)
+ * floor: 0 FAIL · fixed: 48, 7a, 6a, 10a, 15, 28a, 34, 39a, 40, 49a, 56, 62, 67 · structural: 3, 44c, 58, 77 printed
  * surface: absolute (the hero stage only, matching the WebGL canvas)
  * surface: absolute (the hero stage only, matching the WebGL canvas)
  * built: the project · redesign: polish · v2.0.0 */
@@ -57,6 +57,22 @@
   --aura-female: #ff2f7a;
   --aura-male: #2f86ff;
   --shadow-bottle: rgb(20 20 30 / 0.16);
+
+  /* Black and near-black values the page rules used to carry as literals. */
+  --black: #000;
+  --black-40: rgb(0 0 0 / 0.4);
+  --black-55: rgb(0 0 0 / 0.55);
+  --black-60: rgb(0 0 0 / 0.6);
+  --black-72: rgb(0 0 0 / 0.72);
+  --black-85: rgb(0 0 0 / 0.85);
+  --white-10: rgb(255 255 255 / 0.1);
+  --pop: #121214;
+  --stage-top: #0a0a0b;
+  --stage-bottom: #131315;
+  --house-bg: #0a0a0a;
+  --menu-bg: rgb(5 5 6 / 0.97);
+  --tile-top: #060607;
+  --tile-bottom: #0c0c0e;
 
   --success: #4cc07a;
   --success-soft: rgb(76 192 122 / 0.14);

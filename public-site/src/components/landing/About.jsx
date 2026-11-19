@@ -33,7 +33,7 @@ export default function About() {
 
         <div className="about-body">
           <Reveal className="about-media">
-            <img className="about-photo about-photo-main" src={main.src} alt={main.alt} loading="lazy" width="1600" height="1200" />
+            <img className="about-photo about-photo-main" src={main.src} alt={main.alt} loading="eager" fetchPriority="high" decoding="async" width="1600" height="1200" />
             <img className="about-photo about-photo-detail" src={detail.src} alt={detail.alt} loading="lazy" width="800" height="1000" />
           </Reveal>
 
