@@ -426,3 +426,20 @@ def test_scent_oil_restock_averages_the_price_and_import_checks_every_row(client
 
     page = client.get("/admin/materials").get_data(as_text=True)
     assert "Scent oils" in page and "scentOilEditOverlay" in page
+
+
+def test_the_old_mix_ratio_is_corrected_when_the_formulas_load(app, sql):
+    """A database still on the old 200 : 1000 default (water more than alcohol) is
+    corrected to 1000 : 200 the moment the formulas load, without a schema re-run."""
+    cur = sql.cursor()
+    cur.execute("UPDATE bulk_formula_settings SET mix_alcohol_parts = 200, mix_water_parts = 1000 WHERE id = 1")
+    sql.commit()
+    cur.close()
+    with app.app_context():
+        config = load_formula_config()
+    assert (config["alcohol_parts"], config["water_parts"]) == (1000, 200)
+    row = _rows(sql, "SELECT mix_alcohol_parts, mix_water_parts FROM bulk_formula_settings WHERE id = 1")[0]
+    assert (row["mix_alcohol_parts"], row["mix_water_parts"]) == (1000, 200)
+    # And a producing run now takes more alcohol than water.
+    alcohol_ml, water_ml = split_mix(Decimal("2800"), config["alcohol_parts"], config["water_parts"])
+    assert alcohol_ml > water_ml

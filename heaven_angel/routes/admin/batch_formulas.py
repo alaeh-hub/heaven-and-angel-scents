@@ -18,9 +18,9 @@ alcohol : water parts (1000 : 200 in the spreadsheet: 1000 mL alcohol to 200 mL 
 import decimal
 import math
 
-from flask import flash, redirect, request, url_for
+from flask import current_app, flash, redirect, request, url_for
 
-from heaven_angel.db import query, transaction
+from heaven_angel.db import execute, query, transaction
 from heaven_angel.decorators import admin_required
 from heaven_angel.services.audit import log_action
 from heaven_angel.services.scent_oils import ensure_scent_oils, load_scent_oils
@@ -59,6 +59,18 @@ def load_formula_config():
         # Not seeded (schema.sql migration 50 not run): no formulas to offer.
         return {"bottle_unit": None, "bottle_ml": None, "alcohol_parts": None, "water_parts": None,
                 "packaging": {}, "formulas": {}, "default_formula": None, "scent_formulas": {}}
+    # The mix is 1000 mL alcohol to 200 mL water. It was first seeded the other way
+    # round (200 : 1000), which put far too little alcohol in every batch. A database
+    # still on that old default is corrected here the moment the formulas load, so the
+    # fix does not wait for schema.sql to be re-run (schema.sql corrects it too).
+    if settings["mix_alcohol_parts"] == 200 and settings["mix_water_parts"] == 1000:
+        try:
+            execute("UPDATE bulk_formula_settings SET mix_alcohol_parts = 1000, mix_water_parts = 200 "
+                    "WHERE id = 1 AND mix_alcohol_parts = 200 AND mix_water_parts = 1000")
+            current_app.logger.warning("Corrected the alcohol : water mix ratio from 200 : 1000 to 1000 : 200.")
+        except Exception:
+            current_app.logger.exception("Could not correct the alcohol : water mix ratio")
+        settings["mix_alcohol_parts"], settings["mix_water_parts"] = D(1000), D(200)
     packaging = {r["role"]: r["qty_per_bottle"]
                  for r in query("SELECT role, qty_per_bottle FROM bulk_formula_packaging")}
     # Formulas in the order they were seeded; sizes largest first.
