@@ -134,3 +134,7 @@ docs/private/
 *-encrypted.zip
 backup-passphrase*
 .env.local
+
+# Reference photos of the printed price boards (local only)
+/image.png
+/image copy.png

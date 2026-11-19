@@ -1,4 +1,5 @@
 import csv
+import glob
 import io
 import os
 import uuid
@@ -110,11 +111,31 @@ def _save_product_image(file_storage):
     return f"{PRODUCT_IMAGE_SUBDIR}/{stored_name}"
 
 
+SCENT_IMAGE_DIR = "img/scents"
+
+
+def default_scent_image(base_code):
+    """The built-in bottle photo for a scent code (A1, H4...), as a path relative to
+    the static folder, or None when that scent has no render. Used when no photo is
+    uploaded, so a product shows its own scent's bottle instead of a blank."""
+    code = (base_code or "").strip().lower()
+    if not code:
+        return None
+    root = os.path.join(current_app.static_folder, *SCENT_IMAGE_DIR.split("/"))
+    for variant in ("male", "female"):
+        found = sorted(glob.glob(os.path.join(root, variant, f"{glob.escape(code)}-*-bottle-m.webp")))
+        if found:
+            return f"{SCENT_IMAGE_DIR}/{variant}/{os.path.basename(found[0])}"
+    return None
+
+
 def _delete_product_image(image_path):
     """Best-effort removal of a product image file that's being replaced
     or cleared. Never raises — a missing/already-gone file shouldn't
-    block the request that's replacing it."""
-    if not image_path:
+    block the request that's replacing it. Only files this page uploaded
+    (uploads/products/) are ever deleted: the built-in scent photos in
+    img/scents/ are shared by every size of a scent and must stay."""
+    if not image_path or not image_path.startswith(PRODUCT_IMAGE_SUBDIR + "/") or ".." in image_path:
         return
     full_path = os.path.join(current_app.static_folder, image_path)
     try:
@@ -150,7 +171,8 @@ def products():
             sku = build_sku(base_code, unit)
             # Optional — validated and saved to disk here so a bad file
             # type is caught before we touch the database at all.
-            image_path = _save_product_image(request.files.get("image"))
+            uploaded_image = _save_product_image(request.files.get("image"))
+            image_path = uploaded_image or default_scent_image(base_code)
         except ValidationError as err:
             flash(str(err), "error")
             return redirect(url_for("admin.products"))
@@ -188,8 +210,8 @@ def products():
                 "add product failed for sku=%s base_code=%s unit=%s", sku, base_code, unit)
             # Don't leave an orphaned image file behind for a product
             # row that was never created.
-            if image_path:
-                _delete_product_image(image_path)
+            if uploaded_image:
+                _delete_product_image(uploaded_image)
             flash(f"'{base_code}' already has a {unit} entry (SKU {sku}).", "error")
         return redirect(url_for("admin.products"))
 
@@ -242,7 +264,8 @@ def edit_product():
     if new_image_path:
         image_path = new_image_path
     elif remove_image:
-        image_path = None
+        # Back to the scent's built-in photo (None if it has none).
+        image_path = default_scent_image(base_code_from_sku(sku, product["unit"]))
     else:
         image_path = old_image_path
 
@@ -528,9 +551,9 @@ def import_products():
                 with transaction() as conn:
                     cur = conn.cursor()
                     cur.execute(
-                        "INSERT INTO products (sku, item_name, variant, category, unit, price) "
-                        "VALUES (%s, %s, %s, %s, %s, %s)",
-                        (sku, item_name, variant, category, unit, price),
+                        "INSERT INTO products (sku, item_name, variant, category, unit, price, image_path) "
+                        "VALUES (%s, %s, %s, %s, %s, %s, %s)",
+                        (sku, item_name, variant, category, unit, price, default_scent_image(base_code)),
                     )
                     cur.execute("SELECT branch_id FROM branches")
                     branch_ids = [r[0] for r in cur.fetchall()]

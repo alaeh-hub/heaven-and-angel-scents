@@ -205,6 +205,8 @@ The public partner portal gives distributors and resellers access to package off
 
 Its pages are a separate React app in `public-site/` (Vite + React Router + Motion, Geist type, Phosphor icons), with its own design tokens in `public-site/src/styles/tokens.css` (light and dark, following the visitor's system setting). Flask checks the slug, serves the built app at `/partner-portal/<slug>/packages[/<id>]`, and exposes the JSON API it uses under `/partner-portal/<slug>/api/` (see `heaven_angel/routes/portal.py`). Product photos, bottle renders, and video are still served from Flask's `static/`.
 
+Product photos: each catalog scent (A1-A11, H1-H16) uses its built-in bottle render from `static/img/scents/` as the default product photo, for every size, so none need uploading. `schema.sql` (section 54a) fills the default for any product with no photo on every deploy and never replaces an uploaded one; adding or importing a product, or removing its photo, falls back to the same default. A photo uploaded from the Products page always wins. Scents without a render (A12-A14, H17) stay blank until one is uploaded.
+
 The flow includes:
 
 - browsing partner package listings and viewing package details
