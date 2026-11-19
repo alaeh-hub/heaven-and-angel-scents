@@ -13,7 +13,7 @@ cost.
 
 The "Alcohol" line of a formula (e.g. 2800 ml) is already alcohol AND
 distilled water mixed together, so it is split by the formula settings'
-alcohol : water parts (200 : 1000 in the spreadsheet).
+alcohol : water parts (1000 : 200 in the spreadsheet: 1000 mL alcohol to 200 mL water).
 """
 import decimal
 import math
@@ -118,7 +118,7 @@ def load_scent_choices(config):
 
 def split_mix(mix_ml, alcohol_parts, water_parts):
     """Split a mix amount into (alcohol_ml, water_ml), e.g. 2800 ml ->
-    (466.667, 2333.333). Water is the remainder so they always add back up."""
+    (2333.333, 466.667). Water is the remainder so they always add back up."""
     alcohol_ml = (D(mix_ml) * alcohol_parts / (alcohol_parts + water_parts)).quantize(D("0.001"))
     return alcohol_ml, D(mix_ml) - alcohol_ml
 
@@ -190,7 +190,7 @@ def compute_formula(formula, size, resolved, config, stock_by_id=None):
     ]
 
     # The sheet's "mixing batches": alcohol and water are prepared in whole
-    # mixing batches (e.g. 200 ml alcohol + 1000 ml water = 1200 ml), several
+    # mixing batches (e.g. 1000 ml alcohol + 200 ml water = 1200 ml), several
     # until the formula's amount is reached; the leftover keeps for next time.
     # Only the mix actually used is costed and deducted from stock.
     mix_batch_ml = config["alcohol_parts"] + config["water_parts"]

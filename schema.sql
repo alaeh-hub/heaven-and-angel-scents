@@ -2677,8 +2677,8 @@ CREATE TABLE IF NOT EXISTS bulk_formula_sizes (
 CREATE TABLE IF NOT EXISTS bulk_formula_settings (
     id                INT PRIMARY KEY,
     bottle_unit       ENUM('85ML', '50ML', '10ML', '3ML') NOT NULL DEFAULT '85ML',
-    mix_alcohol_parts DECIMAL(10, 3) NOT NULL DEFAULT 200.000,
-    mix_water_parts   DECIMAL(10, 3) NOT NULL DEFAULT 1000.000,
+    mix_alcohol_parts DECIMAL(10, 3) NOT NULL DEFAULT 1000.000,
+    mix_water_parts   DECIMAL(10, 3) NOT NULL DEFAULT 200.000,
     CHECK (id = 1),
     CHECK (mix_alcohol_parts > 0),
     CHECK (mix_water_parts >= 0)
@@ -2758,7 +2758,19 @@ FROM (
 JOIN bulk_formulas f ON f.name = v.name;
 
 INSERT IGNORE INTO bulk_formula_settings (id, bottle_unit, mix_alcohol_parts, mix_water_parts)
-VALUES (1, '85ML', 200, 1000);
+VALUES (1, '85ML', 1000, 200);
+
+-- The mix is 1000 mL alcohol to 200 mL distilled water. It was first seeded the
+-- other way round (200 alcohol : 1000 water), which put five times too little
+-- alcohol into every formula. Correct a database that still has the old
+-- default, and fix the column defaults; a ratio an admin has since set to
+-- anything else is left alone. Safe to run on every deploy.
+ALTER TABLE bulk_formula_settings
+    ALTER COLUMN mix_alcohol_parts SET DEFAULT 1000.000,
+    ALTER COLUMN mix_water_parts SET DEFAULT 200.000;
+UPDATE bulk_formula_settings
+SET mix_alcohol_parts = 1000, mix_water_parts = 200
+WHERE id = 1 AND mix_alcohol_parts = 200 AND mix_water_parts = 1000;
 
 INSERT IGNORE INTO bulk_formula_packaging (role, qty_per_bottle) VALUES
     ('bottle', 1), ('sticker', 1), ('seal', 1);

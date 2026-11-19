@@ -5,7 +5,7 @@ split automatically.
 
 Numbers mirror Costing_Calculator_By_Formula.xlsx, Formula 15% / 500 ml:
 oil scent 500, fixative 10 g, mix 2800, moisturizer 26 -> 3336 ml,
-39 bottles of 85 ml, mix split 200 : 1000 alcohol : water.
+39 bottles of 85 ml, mix split 1000 : 200 alcohol : water.
 """
 from decimal import Decimal
 
@@ -18,7 +18,7 @@ BULK_BATCHES_URL = "/admin/bulk-batches"
 D = Decimal
 # Hand-written config for the pure-function tests (the real one is read from the DB).
 CONFIG = {
-    "bottle_unit": "85ML", "bottle_ml": D(85), "alcohol_parts": D(200), "water_parts": D(1000),
+    "bottle_unit": "85ML", "bottle_ml": D(85), "alcohol_parts": D(1000), "water_parts": D(200),
     "packaging": {role: D(1) for role in PACKAGING_ROLES},
     "formulas": {"15%": {"scents": "", "sizes": {500: (D(10), D(2800), D(26))}}},
 }
@@ -78,7 +78,7 @@ def test_formula_amounts_in_the_database_match_formula_txt(app):
     assert sizes["14%"] == {500: (10, 3000, 26), 250: (5, 1500, 13), 125: (3, 750, 7)}
     assert sizes["13%"] == {500: (10, 3300, 26), 250: (5, 1650, 13), 125: (3, 825, 7)}
     assert config["bottle_unit"] == "85ML" and config["bottle_ml"] == 85
-    assert (config["alcohol_parts"], config["water_parts"]) == (200, 1000)
+    assert (config["alcohol_parts"], config["water_parts"]) == (1000, 200)
     assert config["packaging"] == {"bottle": 1, "sticker": 1, "seal": 1}
     # The totals written in formula.txt: oil + fixative + alcohol + moisturizer.
     for formula, totals in (("15%", (3336, 1668, 835)), ("14%", (3536, 1768, 885)),
@@ -89,9 +89,9 @@ def test_formula_amounts_in_the_database_match_formula_txt(app):
 
 
 def test_split_mix_matches_the_spreadsheet():
-    alcohol_ml, water_ml = split_mix(Decimal("2800"), D(200), D(1000))
-    assert alcohol_ml == Decimal("466.667")
-    assert water_ml == Decimal("2333.333")
+    alcohol_ml, water_ml = split_mix(Decimal("2800"), D(1000), D(200))
+    assert alcohol_ml == Decimal("2333.333")
+    assert water_ml == Decimal("466.667")
     assert alcohol_ml + water_ml == Decimal("2800")
 
 
@@ -108,12 +108,12 @@ def test_compute_formula_costs_like_the_spreadsheet():
     calc = compute_formula("15%", 500, resolved, CONFIG)
     assert calc["total_ml"] == Decimal("3336")
     assert calc["bottles"] == 39
-    # Spreadsheet: liquid subtotal ₱2,123.84 (mix = ₱80.78).
-    assert abs(calc["liquid_cost"] - Decimal("2123.84")) < Decimal("0.02")
+    # Liquid subtotal ₱2,355.10: the 2800 mix is 2333.333 mL alcohol (₱308.22) + 466.667 mL water (₱3.83).
+    assert abs(calc["liquid_cost"] - Decimal("2355.10")) < Decimal("0.02")
     # 39 bottles x (15 + 3 + 1.50), worked out automatically from the bottle count.
     assert calc["packaging_cost"] == Decimal("760.50")
     assert [p["qty"] for p in calc["packaging"]] == [Decimal("39")] * 3
-    assert abs(calc["cost_per_refill_bottle"] - Decimal("54.46")) < Decimal("0.02")
+    assert abs(calc["cost_per_refill_bottle"] - Decimal("60.39")) < Decimal("0.02")
     assert compute_formula("15%", 500, {}, CONFIG) is None
 
 
@@ -149,16 +149,16 @@ def test_producing_from_a_formula_splits_the_mix_and_deducts_stock(client, sql):
         (batch["batch_id"],))}
     assert lines[m["oil"]]["qty_used"] == Decimal("500")
     assert lines[m["fixative"]]["qty_used"] == Decimal("10")
-    assert lines[m["alcohol"]]["qty_used"] == Decimal("466.667")
-    assert lines[m["water"]]["qty_used"] == Decimal("2333.333")
+    assert lines[m["alcohol"]]["qty_used"] == Decimal("2333.333")
+    assert lines[m["water"]]["qty_used"] == Decimal("466.667")
     assert lines[m["moisturizer"]]["qty_used"] == Decimal("26")
 
     # Stock is deducted in each material's own unit — water by the Liter.
-    assert get_raw_material(sql, m["alcohol"])["stock_qty"] == Decimal("10000") - Decimal("466.667")
-    assert abs(get_raw_material(sql, m["water"])["stock_qty"] - Decimal("7.667")) < Decimal("0.001")
+    assert get_raw_material(sql, m["alcohol"])["stock_qty"] == Decimal("10000") - Decimal("2333.333")
+    assert abs(get_raw_material(sql, m["water"])["stock_qty"] - Decimal("9.533")) < Decimal("0.001")
 
     liquid = sum(r["line_cost"] for r in lines.values())
-    assert abs(liquid - Decimal("2123.84")) < Decimal("0.05")
+    assert abs(liquid - Decimal("2355.10")) < Decimal("0.05")
 
     # Packaging is automatic: 39 bottles -> 39 of each, deducted and costed.
     packaging = {r["material_id"]: r for r in _rows(
@@ -234,17 +234,17 @@ def test_compute_formula_reports_which_materials_are_short():
     plenty = {i: Decimal("100000") for i in range(1, 9)}
     assert compute_formula("15%", 500, resolved, CONFIG, plenty)["enough_stock"] is True
 
-    # Oil: 500 ml needed, 400 in stock. Water is stocked in liters: 2333.333 ml
-    # needed = 2.333 L, 2 L in stock. Bottles: 39 needed, 30 in stock.
+    # Oil: 500 ml needed, 400 in stock. Alcohol: 2333.333 ml needed, 2000 in
+    # stock. Bottles: 39 needed, 30 in stock.
     stock = dict(plenty)
-    stock.update({1: Decimal("400"), 5: Decimal("2"), 6: Decimal("30")})
+    stock.update({1: Decimal("400"), 3: Decimal("2000"), 6: Decimal("30")})
     calc = compute_formula("15%", 500, resolved, CONFIG, stock)
     assert calc["enough_stock"] is False
     short = {s["name"]: s["short_by"] for s in calc["shortages"]}
     assert short["m1"] == Decimal("100")
-    assert abs(short["m5"] - Decimal("333.333")) < Decimal("0.001")   # reported in mL
+    assert abs(short["m3"] - Decimal("333.333")) < Decimal("0.001")   # reported in mL
     assert short["m6"] == Decimal("9")           # packaging: 39 bottles needed, 30 in stock
-    assert set(short) == {"m1", "m5", "m6"}
+    assert set(short) == {"m1", "m3", "m6"}
 
 
 def test_producing_with_too_little_stock_is_refused(client, sql):
