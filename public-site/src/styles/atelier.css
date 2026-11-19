@@ -746,6 +746,24 @@
 .catalog-item .product-card-ask { margin: 0; padding: 0 2px; min-height: 40px; }
 @media (hover: none) { .catalog-tile { --tile-w: 100%; } }
 
+/* All Products: the bottle stays on the tile's centre line when a tile opens.
+   The home shelf slides the whole shot (box and bottle) to the middle, which
+   leaves the bottle right of centre; in the grid the frame stays parked, so
+   the box simply appears beside the bottle, a little smaller (it sits further
+   back) and anchored at its bottle-side edge so it stays inside the tile. */
+.catalog-tile .bottle-tile[data-open] .scent-frame {
+  transform: translate3d(calc(var(--scent-centre) * -1), 0, 0);
+}
+.catalog-tile .bottle-tile[data-open] .scent-bottle { transform: none; }
+.js .catalog-tile .scent-box {
+  transform-origin: 61.6% 100%;
+  transform: translate3d(14%, 0, 0) scale(0.88);
+}
+.js .catalog-tile .bottle-tile[data-open] .scent-box { transform: scale(0.88); }
+.catalog-tile .bottle-tile[data-open] .scent-floor {
+  transform: translateX(calc((var(--scent-centre) - 59%) / 1.18)) scaleX(0.8);
+}
+
 /* ------------------------------------------------ phones: hero + shelf
    The hero's bottom fade (z-index 4) was painted over the buttons where
    the copy sits at the foot of a stacked hero; the copy goes above it. */
