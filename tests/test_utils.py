@@ -231,3 +231,11 @@ def test_portal_slug_is_cleaned_of_pasted_links():
     assert clean_portal_slug("https://x.test/partner-portal/abc_DEF-123/packages") == "abc_DEF-123"
     assert clean_portal_slug("  /abc/  ") == "abc"
     assert clean_portal_slug(None) == ""
+
+
+def test_a_gallon_is_3200_ml():
+    from heaven_angel.utils import ML_PER_BATCH_UNIT, convert_material_qty
+    assert ML_PER_BATCH_UNIT["Gallon"] == decimal.Decimal("3200")
+    assert convert_material_qty(decimal.Decimal("2"), "Gallon", "Milliliter") == decimal.Decimal("6400")
+    assert convert_material_qty(decimal.Decimal("1600"), "Milliliter", "Gallon") == decimal.Decimal("0.5")
+    assert convert_material_qty(decimal.Decimal("3.2"), "Liter", "Gallon") == decimal.Decimal("1")

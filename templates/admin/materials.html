@@ -1330,7 +1330,7 @@
     // Same mL conversion factors as ML_PER_BATCH_UNIT in utils.py — purely
     // a live sanity-check note here, nothing is actually converted/stored;
     // Liter/Gallon purchases still get stocked in their own unit as-is.
-    var ML_PER_UNIT = { Milliliter: 1, Liter: 1000, Gallon: 3785.411784 };
+    var ML_PER_UNIT = { Milliliter: 1, Liter: 1000, Gallon: 3200 };
 
     function updateVolumeEquivPreview() {
       var qty = parseFloat(packageQty.value);
@@ -1419,7 +1419,7 @@
 
     // Same mL conversion factors as ML_PER_BATCH_UNIT in utils.py — purely
     // a live sanity-check note here, nothing is actually converted/stored.
-    var ML_PER_UNIT = { Milliliter: 1, Liter: 1000, Gallon: 3785.411784 };
+    var ML_PER_UNIT = { Milliliter: 1, Liter: 1000, Gallon: 3200 };
 
     function updateEditVolumeEquivPreview() {
       var qty = parseFloat(qtyInput.value);

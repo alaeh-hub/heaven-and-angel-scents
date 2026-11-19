@@ -342,8 +342,8 @@ def test_tools_page_renders_for_admins_only(client, sql, app):
     page = resp.get_data(as_text=True)
     for title in ("Unit converter", "Alcohol and water mix", "Bottle yield", "Price per unit", "Formula cost calculator"):
         assert title in page
-    # The US gallon factor the batches use is what the converter uses.
-    assert "3785.411784" in page
+    # The gallon factor the batches use (3,200 mL) is what the converter uses.
+    assert "3200" in page
 
     anonymous = app.test_client()
     assert anonymous.get("/admin/tools").status_code in (302, 401, 403)

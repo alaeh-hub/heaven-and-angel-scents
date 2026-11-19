@@ -87,15 +87,15 @@ MATERIAL_UNITS = ("Gram", "Milliliter", "Liter", "Gallon", "Piece")
 # The units a bulk batch's own size can be entered in (see bulk_batches in
 # schema.sql) — everything gets converted to milliliters via
 # ML_PER_BATCH_UNIT so a 500ml batch and a 1-gallon batch compare and
-# deduct against each other correctly. Gallon here is the standard US
-# liquid gallon (3.785411784 L), matching how "gallon" jugs are commonly
-# sold/labeled locally.
+# deduct against each other correctly. A Gallon here is 3,200 mL: the size of
+# the gallon jugs actually bought and used, NOT the 3,785.41 mL US liquid
+# gallon.
 BATCH_VOLUME_UNITS = ("Milliliter", "Liter", "Gallon")
 
 ML_PER_BATCH_UNIT = {
     "Milliliter": decimal.Decimal("1"),
     "Liter": decimal.Decimal("1000"),
-    "Gallon": decimal.Decimal("3785.411784"),
+    "Gallon": decimal.Decimal("3200"),
 }
 
 

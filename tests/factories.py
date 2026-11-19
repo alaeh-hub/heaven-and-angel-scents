@@ -269,7 +269,7 @@ def make_bulk_batch(sql, items, input_qty="1000.000", input_unit="Milliliter", s
     raw_materials.stock_qty — tests covering that deduction go through
     create_bulk_batch() directly instead.
     """
-    ml_per_unit = {"Milliliter": 1, "Liter": 1000, "Gallon": 3785.411784}
+    ml_per_unit = {"Milliliter": 1, "Liter": 1000, "Gallon": 3200}
     total_volume_ml = float(input_qty) * ml_per_unit[input_unit]
     total_cost = sum(float(qty) * float(cost) for _, qty, cost in items)
     cost_per_ml = total_cost / total_volume_ml if total_volume_ml else 0

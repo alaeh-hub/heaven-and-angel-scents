@@ -18,7 +18,7 @@ from heaven_angel.routes.admin.batch_formulas import (
 )
 
 # How many of the base unit (mL for volume, g for weight) one of each unit is.
-# The US gallon comes from the same constant the bulk batches use.
+# The gallon (3,200 mL) comes from the same constant the bulk batches use.
 UNIT_FACTORS = {
     "volume": {
         "mL": 1.0,

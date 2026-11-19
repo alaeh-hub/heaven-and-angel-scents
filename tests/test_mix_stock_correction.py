@@ -67,3 +67,16 @@ def test_a_water_line_logged_in_liters_is_converted():
 
 def test_a_batch_missing_one_of_the_two_lines_is_ignored():
     assert fix.batch_corrections(_batch(4, "466.667", "2333.333")[:1], ALC, WAT, D(1000), D(200), to_ml) == []
+
+
+def test_gallon_correction_for_the_opening_alcohol():
+    spec = importlib.util.spec_from_file_location(
+        "gallon_stock_correction", Path(__file__).resolve().parent.parent / "scripts" / "gallon_stock_correction.py")
+    gal = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(gal)
+    # 9 gallons were stocked as 9 x 3785.411784 mL; they are 9 x 3200 = 28,800 mL.
+    assert gal.overstatement_ml(9) == D("5268.706")
+    qty, cost, stock = gal.corrected(D("34068.706"), D("4500"), D("34068.706"), 9)
+    assert qty == D("28800.000")
+    assert cost == D("0.1563")                       # 4500 / 28800 = 0.15625
+    assert stock == D("28800.000")

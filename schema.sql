@@ -3220,3 +3220,22 @@ CREATE TABLE IF NOT EXISTS scent_oil_restocks (
     CHECK (qty > 0),
     CHECK (cost >= 0)
 );
+
+-- ----------------------------------------------------------------------------
+-- 58. Migration — a gallon is 3,200 mL
+--
+--     The app converted a Gallon to mL with the US gallon (3,785.411784 mL), but
+--     the jugs in use hold 3,200 mL. Every conversion now uses 3,200 (see
+--     ML_PER_BATCH_UNIT in heaven_angel/utils.py). A bulk batch whose own size
+--     was entered in Gallons still holds the old mL figure: bring its total to
+--     input_qty x 3200 and move what is left by the same difference (what was
+--     already used stays used), and keep its liquid cost per mL consistent with
+--     the new volume. MySQL applies the SET list left to right, so total_volume_ml
+--     is last. Safe to run on every deploy: a batch already at input_qty x 3200
+--     does not match.
+-- ----------------------------------------------------------------------------
+UPDATE bulk_batches
+SET remaining_ml = GREATEST(0, remaining_ml + (input_qty * 3200 - total_volume_ml)),
+    cost_per_ml  = ROUND(cost_per_ml * total_volume_ml / (input_qty * 3200), 6),
+    total_volume_ml = input_qty * 3200
+WHERE input_unit = 'Gallon' AND total_volume_ml <> input_qty * 3200;
