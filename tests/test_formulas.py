@@ -1,10 +1,6 @@
-"""routes/admin/'s Formulas page — the Bulk/Refill rate per mL
-(save_bulk_rate(), unchanged), a flat base cost of goods per Bottled
-packaging size (save_unit_cogs(), see unit_cogs_settings in schema.sql —
-this is what production() actually charges a Bottled run). The old
-"packaging materials per bottle" reference table was removed: a built-in
-bulk batch formula now carries its own packaging (see
-tests/test_batch_formulas.py).
+"""Formulas page: Bulk/Refill rate per mL (save_bulk_rate) and the flat base cost per
+Bottled size (save_unit_cogs, what production() charges). Packaging now lives in the
+built-in batch formulas (see test_batch_formulas.py).
 """
 from decimal import Decimal
 
@@ -42,6 +38,7 @@ def _unit_cogs(sql, unit):
 
 
 def test_formulas_page_renders_and_lists_every_bottled_size(client, sql):
+    """Formulas page renders and lists every bottled size."""
     _signed_in_admin(client, sql)
     resp = client.get(FORMULAS_URL)
     assert resp.status_code == 200
@@ -50,11 +47,7 @@ def test_formulas_page_renders_and_lists_every_bottled_size(client, sql):
 
 
 def test_materials_page_no_longer_carries_cost_of_goods(client, sql):
-    """Cost of goods (and its own history) lives on the Formulas /
-    Production Log / Bulk Batches pages now — Materials is the raw
-    materials purchase list plus real stock on hand (see
-    admin.formulas()/admin.production()/admin.bulk_batches() and
-    templates/admin/materials.html)."""
+    """Cost of goods lives on Formulas / Production Log / Bulk Batches; Materials is purchases and stock."""
     _signed_in_admin(client, sql)
     resp = client.get(MATERIALS_URL)
     assert resp.status_code == 200
@@ -63,6 +56,7 @@ def test_materials_page_no_longer_carries_cost_of_goods(client, sql):
 
 
 def test_production_page_renders_with_a_bottled_product(client, sql):
+    """Production page renders with a bottled product."""
     _signed_in_admin(client, sql)
     resp = client.get(PRODUCTION_URL)
     assert resp.status_code == 200
@@ -74,6 +68,7 @@ def test_production_page_renders_with_a_bottled_product(client, sql):
 
 
 def test_save_unit_cogs_sets_and_replaces_the_base_cost(client, sql):
+    """Save unit cogs sets and replaces the base cost."""
     _signed_in_admin(client, sql)
 
     resp = client.post(SAVE_UNIT_COGS_URL, data={
@@ -95,6 +90,7 @@ def test_save_unit_cogs_sets_and_replaces_the_base_cost(client, sql):
 
 
 def test_save_unit_cogs_rejects_an_invalid_unit(client, sql):
+    """Save unit cogs rejects an invalid unit."""
     _signed_in_admin(client, sql)
     resp = client.post(SAVE_UNIT_COGS_URL, data={
         "unit": "BULK",  # Bulk/Refill has its own rate, not a base cost
@@ -105,6 +101,7 @@ def test_save_unit_cogs_rejects_an_invalid_unit(client, sql):
 
 
 def test_save_bulk_rate_updates_the_shared_rate(client, sql):
+    """Save bulk rate updates the shared rate."""
     _signed_in_admin(client, sql)
     resp = client.post(SAVE_BULK_RATE_URL, data={"rate_per_ml": "2.5000"})
     assert resp.status_code == 302
@@ -117,6 +114,7 @@ def test_save_bulk_rate_updates_the_shared_rate(client, sql):
 
 
 def test_dashboard_and_reports_pages_render(client, sql):
+    """Dashboard and reports pages render."""
     _signed_in_admin(client, sql)
     assert client.get("/admin/").status_code == 200
     assert client.get("/admin/reports").status_code == 200

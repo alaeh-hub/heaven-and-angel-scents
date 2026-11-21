@@ -13,6 +13,7 @@ from heaven_angel.routes.branch._common import _branch_id, bp
 
 
 # ---------------------------------------------------------------- reports
+# Branch Reports page, scoped to this branch.
 @bp.route("/reports")
 @branch_required
 def reports():
@@ -89,9 +90,7 @@ def reports_data():
     """
     bid = _branch_id()
 
-    # Unit figures below count bottles only: a bulk product's qty_sold
-    # (and stock_qty) is mL, which would swamp the bottle counts if added
-    # in. Bulk volume is reported separately as bulk_ml where it matters.
+    # Unit figures count bottles only; bulk mL is reported separately as bulk_ml.
     by_variant = query(
         """SELECT p.variant, COALESCE(SUM(s.qty_sold), 0) AS units_sold
            FROM products p
@@ -101,9 +100,7 @@ def reports_data():
         (bid,),
     )
 
-    # Daily units sold for the last 14 days — the branch-scoped stand-in
-    # for the admin page's "units sold by branch" chart, which doesn't
-    # make sense when there's only one branch to look at.
+    # Daily units sold, last 14 days (branch stand-in for the admin chart).
     sales_trend = query(
         """SELECT DATE(s.sold_at) AS day, COALESCE(SUM(CASE WHEN p.unit <> 'BULK' THEN s.qty_sold ELSE 0 END), 0) AS units_sold,
                   COALESCE(SUM(s.qty_sold * s.unit_price), 0) AS revenue
@@ -133,9 +130,7 @@ def reports_data():
     granularity = request.args.get("granularity", "daily")
     trend_bucket = TREND_GRANULARITIES.get(
         granularity, TREND_GRANULARITIES["daily"])
-    # Bottles and bulk mL are different units — kept apart the same way
-    # sales/stock totals are split elsewhere, rather than summed into
-    # one meaningless number (see admin.reports_data()'s movement_trend).
+    # Bottles and bulk mL are kept apart, never summed.
     movement_trend = query(
         f"""SELECT {trend_bucket['trunc']} AS day, sml.movement_type,
                    COALESCE(SUM(CASE WHEN p.unit <> 'BULK' THEN ABS(sml.change_qty) ELSE 0 END), 0) AS units,
@@ -147,8 +142,7 @@ def reports_data():
         (bid,),
     )
 
-    # Cash sales vs. employee purchases deducted from salary, and plain
-    # sales vs. refills — both scoped to this branch only.
+    # Cash vs employee-salary purchases, and sales vs refills (this branch).
     payment_breakdown = query(
         """SELECT s.payment_method, COALESCE(SUM(CASE WHEN p.unit <> 'BULK' THEN s.qty_sold ELSE 0 END), 0) AS units_sold, COALESCE(SUM(CASE WHEN p.unit = 'BULK' THEN s.qty_sold ELSE 0 END), 0) AS bulk_ml,
                   COALESCE(SUM(s.qty_sold * s.unit_price), 0) AS revenue

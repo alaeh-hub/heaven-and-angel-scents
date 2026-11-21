@@ -16,14 +16,9 @@ from heaven_angel.utils import (
 from heaven_angel.routes.admin._common import HQ_BRANCH_ID, bp
 
 
-# ---------------------------------------------------------------- stock requests
-#
-# A stock request is now a *delivery* — one branch-submitted cart that can
-# carry any number of different SKUs (see stock_requests + the new
-# stock_request_items table in schema.sql). The Requests list therefore
-# shows one row per delivery (Delivery #, item count, total value) rather
-# than one row per product; the actual line items only ever show up on
-# the delivery's own review/dispatch page and on its receipt PDF.
+# A stock request is a delivery: one branch cart with any number of SKUs. The list shows
+# one row per delivery; line items appear on its review page and receipt PDF.
+# Requests page: one row per delivery, filterable by status.
 @bp.route("/requests")
 @admin_required
 def requests_list():
@@ -50,11 +45,7 @@ def requests_list():
 @bp.route("/requests/<int:request_id>")
 @admin_required
 def review_request(request_id):
-    """Line-item breakdown of one delivery — the only place its individual
-    products/quantities/prices are shown on the admin side (besides the
-    receipt, once Fulfilled). Pending deliveries get an editable dispatch
-    quantity per item; every other status is a read-only breakdown.
-    """
+    """Line items of one delivery; Pending ones get an editable dispatch qty, others are read-only."""
     req = query(
         """SELECT sr.*, b.branch_name
            FROM stock_requests sr JOIN branches b ON sr.branch_id = b.branch_id
@@ -87,12 +78,9 @@ def review_request(request_id):
 @bp.route("/requests/<int:request_id>/dispatch", methods=["POST"])
 @admin_required
 def dispatch_request(request_id):
-    """Create a shipment for some or all of the request's outstanding items.
+    """Create a shipment for some or all outstanding items.
 
-    Comes from the per-item quantity inputs on request_detail.html —
-    item_id[] / dispatched_qty[] pairs, one per request line. The page
-    defaults each line to its outstanding quantity; zero leaves that line
-    out of this shipment.
+    Reads item_id[] / dispatched_qty[] pairs from request_detail.html; zero skips a line.
     """
     item_ids = request.form.getlist("item_id[]")
     raw_qtys = request.form.getlist("dispatched_qty[]")
@@ -119,23 +107,14 @@ def dispatch_request(request_id):
     try:
         with transaction() as conn:
             cur = conn.cursor(dictionary=True)
-            # Lock the request row, then every one of its line items, then
-            # every HQ stock row they touch — all for the rest of this
-            # transaction — so two admins dispatching the same delivery (or
-            # two deliveries that both draw on the same SKU) at the same
-            # moment can't jointly over-dispatch HQ stock below zero.
+            # Lock the request, its items and the HQ stock rows so concurrent dispatches
+            # can't over-dispatch HQ stock below zero.
             cur.execute(
                 "SELECT * FROM stock_requests WHERE request_id = %s FOR UPDATE", (request_id,))
             req = cur.fetchone()
             if not req or req["status"] not in ("Pending", "Partially Fulfilled"):
-                # Safe as a plain return — this is the very first check
-                # after locking the header row, before any writes have
-                # happened in this transaction, so there's nothing partial
-                # for transaction()'s commit() to prematurely lock in.
-                # It also redirects somewhere different (the list, not
-                # this delivery's own review page) than every other abort
-                # below, so it doesn't fit the shared TransactionAborted
-                # handler anyway.
+                # Plain return is safe here: first check after locking, before any writes. It also
+                # redirects to the list, unlike the shared TransactionAborted handler.
                 cur.close()
                 flash("This request can no longer be dispatched.", "error")
                 return redirect(url_for("admin.requests_list"))
@@ -167,14 +146,8 @@ def dispatch_request(request_id):
             shipment_id = cur.lastrowid
 
             dispatched_any = False
-            # Unlike the validation loop above, THIS loop writes as it
-            # goes (branch_inventory + stock_request_items + a movement
-            # log row per item). Aborting a later iteration with a plain
-            # `return` would still let transaction() commit() the earlier
-            # iterations' writes — a `return` isn't an exception, so it
-            # doesn't take the except/rollback path. Every abort in here
-            # must `raise TransactionAborted(...)` instead — see its
-            # docstring in db.py.
+            # This loop writes as it goes, so aborts must raise TransactionAborted (a plain return
+            # would let transaction() commit earlier writes; see db.py).
             # SKU order, so two overlapping deliveries lock stock rows in the same order.
             for item_id, qty in sorted(requested_dispatch.items(), key=lambda kv: items_by_id[kv[0]]["sku"]):
                 item = items_by_id[item_id]
@@ -243,10 +216,7 @@ def dispatch_request(request_id):
 @bp.route("/requests/<int:request_id>/receipt")
 @admin_required
 def request_receipt(request_id):
-    """Downloadable PDF for any branch's Fulfilled request — see receipts.py.
-
-    No branch_id scoping here since HQ Admin can see every branch.
-    """
+    """Downloadable PDF for any branch's Fulfilled request (receipts.py)."""
     pdf_buffer, req = build_receipt_pdf(request_id)
     if pdf_buffer is None:
         abort(404)
@@ -256,6 +226,7 @@ def request_receipt(request_id):
     )
 
 
+# POST: reject a Pending request.
 @bp.route("/requests/<int:request_id>/reject", methods=["POST"])
 @admin_required
 def reject_request(request_id):
@@ -265,12 +236,7 @@ def reject_request(request_id):
         flash("That request no longer exists.", "error")
         return redirect(url_for("admin.requests_list"))
 
-    # The WHERE clause only actually rejects a request that's still
-    # Pending — but execute()'s result was previously discarded, so a
-    # double-submit, a race with another admin, or a request that had
-    # already moved to In Transit/Fulfilled/Rejected would silently no-op
-    # while still flashing "rejected" as if it had worked. Checking
-    # rowcount tells the two cases apart.
+    # rowcount tells a real reject (only Pending qualifies) from a double-submit or race.
     _, rowcount = execute(
         "UPDATE stock_requests SET status = 'Rejected' WHERE request_id = %s AND status = 'Pending'",
         (request_id,),

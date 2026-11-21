@@ -6,11 +6,7 @@ const WORD = {
   show: { opacity: 1, y: 0, filter: 'blur(0px)', transition: { duration: 0.7, ease: [0.215, 0.61, 0.355, 1] } },
 };
 
-/**
- * Text whose words sharpen in one after another the first time it
- * scrolls into view. Screen readers get the plain sentence (aria-label);
- * under reduced motion it's just the text.
- */
+/** Words sharpen in one by one on first view; plain text for screen readers. */
 export default function BlurText({ as = 'h2', text, className, delay = 0, stagger = 0.035, amount = 0.6 }) {
   const reduce = useReducedMotion();
   const Tag = motion[as];

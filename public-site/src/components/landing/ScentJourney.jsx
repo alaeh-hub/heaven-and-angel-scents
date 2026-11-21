@@ -4,10 +4,8 @@ const TITLE = 'How our scents unfold.';
 const LEDE = 'Uriel H1 and Raphael A3 evolve on the skin, hour by hour.';
 
 /**
- * "How our scents unfold": the three layers of Uriel H1 and Raphael A3 as
- * one gold timeline, no cards and no numerals (the process section above
- * already uses them). Static markup and CSS only, so nothing runs on a
- * phone. Copy lives in content/notes.js.
+ * "How our scents unfold": three note layers per bottle as one gold
+ * timeline. Static markup and CSS only; copy in content/notes.js.
  */
 export default function ScentJourney() {
   return (

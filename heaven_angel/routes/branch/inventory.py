@@ -11,6 +11,7 @@ from heaven_angel.routes.branch._common import _branch_id, bp
 
 
 # ---------------------------------------------------------------- inventory
+# This branch's stock list (bottles only).
 @bp.route("/inventory")
 @branch_required
 def inventory():
@@ -23,9 +24,7 @@ def inventory():
            ORDER BY p.item_name""",
         (bid,),
     )
-    # Bottles only: branches never stock BULK (Bulk/Refill) — they can't
-    # request it, and a refill doesn't deduct branch stock — so a BULK
-    # row here would only ever read as a meaningless low-stock alert.
+    # Bottles only: branches never stock BULK, so a row would be a false alert.
     return render_template("branch/inventory.html", rows=rows, unit_choices=BOTTLE_UNITS)
 
 

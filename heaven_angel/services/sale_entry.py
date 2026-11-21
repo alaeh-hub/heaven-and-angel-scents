@@ -1,11 +1,4 @@
-"""Recording a sale from the Record Sale form — shared by HQ (routes/admin/sales.py)
-and branches (routes/branch/sales.py), which differ only in wording, whether a
-Refill is allowed, and which branch's stock is used.
-
-parse_sale_form() validates in a fixed order (the first problem found is the one
-the person is told about); record_sale() inserts the row and moves the stock in
-one transaction.
-"""
+"""Record a sale from the Record Sale form, shared by HQ and branches."""
 import decimal
 from dataclasses import dataclass
 
@@ -25,6 +18,7 @@ class SaleFormError(Exception):
 
 @dataclass(frozen=True)
 class SaleInput:
+    """One validated sale line from the Record Sale form."""
     sku: str
     qty: int
     unit_price: decimal.Decimal
@@ -46,11 +40,7 @@ def parse_sale_form(form, *, qty_label, sale_type_prompt, product_prompt,
 
     try:
         qty = parse_positive_int(form.get("qty_sold"), qty_label)
-        # Strictly positive for Sale/Refill: a ₱0 "Sale" would otherwise be a
-        # way to move stock out with no revenue and nothing marking it as a
-        # giveaway. Freebie is the explicit way to log that — always ₱0,
-        # whatever was actually typed (the field is read-only client-side, but
-        # that is never trusted alone).
+        # Sale/Refill price must be above 0; Freebie is always 0 (the form's read-only price is not trusted).
         if sale_type == "Freebie":
             unit_price = decimal.Decimal("0")
         else:
@@ -150,9 +140,7 @@ def _record_line(cur, sale, *, branch_id, user_id, note_suffix):
         notes = "Point-of-sale" + note_suffix
     else:
         notes = f"Credit — {sale.buyer_name}"
-    # Sale/Freebie take the bottle(s) from this branch's stock; a Refill
-    # takes the scent's bulk mL instead (see sale_stock.py). Row-locks the
-    # SKU's stock so a concurrent sale of it waits, and blocks if short.
+    # Sale/Freebie take bottles from branch stock; Refill takes bulk mL (see sale_stock.py). Row-locked.
     apply_sale_stock(cur, sale_id=sale_id, branch_id=branch_id, product=product,
                      qty=sale.qty, sale_type=sale.sale_type, notes=notes, user_id=user_id)
     return sale_id
@@ -167,9 +155,7 @@ def record_sale_order(sales, *, branch_id, user_id, note_suffix=""):
     """
     with transaction() as conn:
         cur = conn.cursor(dictionary=True)
-        # Lock this branch's stock rows in SKU order first, so two orders listing the
-        # same scents in opposite order can't deadlock. The lines themselves are still
-        # recorded in the order they were entered (receipt order, ids[0] = first line).
+        # Lock stock rows in SKU order first so opposite-order orders cannot deadlock.
         for sku in sorted({sale.sku for sale in sales}):
             cur.execute(
                 "SELECT stock_qty FROM branch_inventory WHERE branch_id = %s AND sku = %s FOR UPDATE",

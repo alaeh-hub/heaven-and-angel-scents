@@ -1,9 +1,4 @@
-{# Several scents on one receipt. Shared by the branch and HQ Record Sale forms.
-   The form's own product / quantity / price fields stay the "current line":
-   "Add to receipt" moves it into this list and clears the fields for the next
-   scent. The list is submitted as cart_sku / cart_qty / cart_price (see
-   sale_entry.parse_sale_order_form). Whatever is still filled in on the form
-   when it is submitted counts as one more product. #}
+{# Multi-scent receipt basket, shared by branch and HQ Record Sale forms. #}
 <style>
   .ob { margin-top: var(--space-xs); }
   .ob-note { margin-top: 4px; font-size: var(--text-xs); color: var(--ink-faint); }

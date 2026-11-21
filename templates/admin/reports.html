@@ -1,4 +1,5 @@
-{% extends "base.html" %}
+{% extends "base.html" %}
+{# Reports page with the report builder #}
 {% import "_empty.html" as empty %}
 {% import "_macros.html" as m %}
 {% block title %}Reports{% endblock %}
@@ -136,10 +137,7 @@
     <div class="kpi-meta"></div>
     <div class="kpi-spark"></div>
   </div>
-  <!-- Capital (cost of goods produced) and raw materials bought sit side by
-       side deliberately — the whole point of splitting them is to compare
-       what's gone into produced goods against what's been spent buying the
-       ingredients for them. Both are all-time, so no sparkline/chip. -->
+  {# Capital and raw materials side by side to compare; both all-time. #}
   <div class="card kpi-tile">
     <div class="kpi-label">Total capital (cost of goods)</div>
     <div class="kpi-value" id="totalCapital">-</div>
@@ -161,8 +159,7 @@
         <h2>Sales, cost and net profit</h2>
         <p class="insight-sub" id="trendWindowLabel">last 14 days, hover the chart for exact values</p>
       </div>
-      <!-- Granularity switch drives this chart, the KPI tiles' window and
-           the Ledger movement chart below. -->
+      {# Granularity switch drives this chart, the KPI window and the ledger chart. #}
       <div class="rb-mode" id="trendGranularitySwitch">
         <button type="button" class="rb-mode-opt active" data-granularity="daily">Daily</button>
         <button type="button" class="rb-mode-opt" data-granularity="weekly">Weekly</button>

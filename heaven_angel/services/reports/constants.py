@@ -6,24 +6,14 @@ from heaven_angel.utils import (
 )
 
 
-# Units behind a delivery discrepancy log row (DAMAGE or ADJUSTMENT,
-# reference_type='STOCK_REQUEST'). receive_stock() logs these with
-# change_qty was 0 before shipment tracking and now carries a negative
-# discrepancy quantity on new rows (the units never entered branch stock),
-# so the unit count uses that event value when present and falls back to
-# the delivery line for legacy rows. A request holds
-# one line per SKU (request_stock() merges duplicates), so joining on
-# (request_id, sku) matches exactly one line. Falls back to
-# -change_qty for any row with no matching line.
+# Units behind a discrepancy log row: event change_qty if set, else the delivery line (legacy), else -change_qty.
 DISCREPANCY_ITEM_JOIN = (
     "LEFT JOIN stock_request_items sri "
     "ON sri.request_id = sml.reference_id AND sri.sku = sml.sku"
 )
 
 
-# The one "low stock" rule — Low Stock page, dashboards, the Low Stock /
-# Branch Stock reports and the AI assistant all use it. Bulk/Refill stock
-# (mL) has no reorder level, so it's never "low".
+# The single "low stock" rule used by pages, reports and the AI; bulk mL is never low.
 LOW_STOCK_WHERE = "bi.stock_qty <= bi.reorder_level AND p.unit <> 'BULK'"
 
 
@@ -68,9 +58,7 @@ PAYMENT_METHOD_CHOICES = PAYMENT_METHODS
 PARTNER_TYPE_CHOICES = PARTNER_TYPES
 
 
-# Mirrors packages.partner_scope's ENUM ('Both' plus each PARTNER_TYPES
-# value) — kept separate from PARTNER_TYPE_CHOICES since a package can
-# also be scoped to "Both", which a partner itself never is.
+# Mirrors packages.partner_scope: "Both" plus each partner type.
 PACKAGE_SCOPE_CHOICES = ("Both",) + PARTNER_TYPES
 
 

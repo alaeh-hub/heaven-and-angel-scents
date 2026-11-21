@@ -36,11 +36,8 @@ function DetailSkeleton() {
 }
 
 /**
- * The price card. Under the price, what the package is worth to a
- * reseller: what it sells for at our list price and the profit left
- * after paying the partner price (rolled in, see AnimatedNumber).
- * `onCtaVisible` reports whether its Inquire button is on screen, so the
- * mobile bar knows when it has scrolled away.
+ * Price card: reseller sell price and profit at the partner price.
+ * `onCtaVisible` reports whether the Inquire button is on screen.
  */
 function Summary({ pkg, onInquire, onCtaVisible }) {
   const profit = pkg.reference_total - pkg.discounted_total;
@@ -86,11 +83,8 @@ function Summary({ pkg, onInquire, onCtaVisible }) {
 }
 
 /**
- * Phones and tablets: once the price card's Inquire button has scrolled
- * out of view, a bar with the price and the button slides up from the
- * bottom edge, so the next step is always one tap away. Hidden while the
- * form itself is open. (Desktop keeps the price card pinned beside the
- * content instead, so the bar is CSS-hidden there.)
+ * Phone/tablet bar with price and button, shown once the price card's
+ * Inquire button scrolls away and the form is closed (CSS-hidden on desktop).
  */
 function InquireBar({ pkg, show, onInquire }) {
   return (
@@ -117,11 +111,8 @@ function InquireBar({ pkg, show, onInquire }) {
 }
 
 /**
- * One package's full detail and inquiry form. Used standalone at the
- * package's own URL (PackageDetailPage) and inside the package sheet
- * over the list (DetailDialog), where `inDialog` keeps "More packages"
- * links inside the sheet. `onMissing` runs when the package is gone
- * (deactivated or deleted), after the visitor has been told so.
+ * A package's detail and inquiry form, standalone or in the sheet
+ * (`inDialog`). `onMissing` runs when the package is gone.
  */
 export default function PackageDetail({ slug, packageId, inDialog = false, linkState, onMissing }) {
   const showToast = useToast();
@@ -152,7 +143,7 @@ export default function PackageDetail({ slug, packageId, inDialog = false, linkS
         else setFailed(true);
       });
     return () => controller.abort();
-    // onMissing is a fresh closure per render; only a new package refetches.
+    // onMissing changes every render; only a new package refetches.
   }, [slug, packageId, attempt, showToast]);
 
   useEffect(() => {

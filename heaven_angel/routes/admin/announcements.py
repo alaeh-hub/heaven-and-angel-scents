@@ -20,20 +20,7 @@ from heaven_angel.routes.admin._common import bp
 @bp.route("/announcements", methods=["GET", "POST"])
 @admin_required
 def announcements():
-    """Push a one-line message to every signed-in branch tab (or one
-    specific branch) via the notification bell — see sockets.py's
-    notify_bell(). Unlike the notify_admin/notify_branch scope pushes
-    used everywhere else in this app, notify_bell carries an actual
-    human-readable message meant to be read directly in the bell
-    dropdown, not acted on programmatically.
-
-    This is fire-and-forget over Socket.IO: nothing is persisted to the
-    database, so only branches with a tab open right now will see it —
-    there's no inbox to check later. What IS kept is a trace in the
-    Admin Log (see audit.log_action below), so there's still a record
-    of who sent what, to whom, and when, even though the notification
-    itself is ephemeral.
-    """
+    """Send a one-line bell message to all branches or one (not stored; logged)."""
     branch_list = query(
         "SELECT branch_id, branch_name FROM branches ORDER BY branch_name")
 

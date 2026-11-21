@@ -74,9 +74,7 @@ def request_stock():
             flash("Add at least one product to the delivery.", "error")
             return redirect(url_for("branch.request_stock"))
 
-        # Merge duplicate SKUs (defensive against a tampered/duplicated
-        # submission — the cart UI itself never produces duplicates) and
-        # validate every quantity before touching the database.
+        # Merge duplicate SKUs and validate quantities before touching the DB.
         line_qty = {}
         try:
             for sku, raw_qty in zip(skus, raw_qtys):
@@ -93,10 +91,7 @@ def request_stock():
             flash("Add at least one product to the delivery.", "error")
             return redirect(url_for("branch.request_stock"))
 
-        # Only bottled products can be requested — BULK (Bulk/Refill)
-        # stock isn't shipped to branches this way. Enforced here, not
-        # just by the product dropdown, so a tampered form can't slip a
-        # BULK SKU through; it reads as "not available to request".
+        # Bottled products only; enforced here so a tampered form can't add BULK.
         skus_list = list(line_qty.keys())
         placeholders = ", ".join(["%s"] * len(skus_list))
         unit_placeholders = ", ".join(["%s"] * len(BOTTLE_UNITS))
@@ -115,11 +110,7 @@ def request_stock():
         try:
             with transaction() as conn:
                 cur = conn.cursor(dictionary=True)
-                # delivery_number is UNIQUE + NOT NULL but its real value
-                # (DR-<request_id>) depends on the row's own auto-increment
-                # id, which only exists after the insert. A random
-                # placeholder here satisfies the constraint for the instant
-                # before it's overwritten below, without weakening it.
+                # Temporary unique delivery_number; the real DR-<request_id> is set after insert.
                 cur.execute(
                     "INSERT INTO stock_requests (branch_id, delivery_number) VALUES (%s, %s)",
                     (bid, uuid.uuid4().hex[:20]),
@@ -159,9 +150,7 @@ def request_stock():
             ORDER BY item_name""",
         BOTTLE_UNITS,
     )
-    # Only requests still in play, so whoever is filling in a new request
-    # can see what's already on its way and avoid asking twice. The full
-    # record lives on the History tab (branch.requests_list).
+    # Requests still in play, so staff don't ask twice (full list is on History).
     open_statuses = ("Pending", "Partially Fulfilled", "In Transit")
     open_requests = query(
         """SELECT sr.request_id, sr.delivery_number, sr.status, sr.requested_at,
@@ -268,8 +257,7 @@ def _post_item_receipt(cur, *, bid, user_id, shipment, item, received_qty, damag
 
     shortfall = dispatched - received_qty - damaged_qty
     if shortfall > 0:
-        # The audit-trail entry the Receive Shipment page promises HQ will
-        # see — written to the ledger, not just flashed to the screen.
+        # Audit-trail entry for HQ, written to the ledger.
         cur.execute(
             """INSERT INTO stock_movement_logs
                (branch_id, sku, change_qty, movement_type, notes,
@@ -316,11 +304,7 @@ def _confirm_shipment_receipt(bid, user_id, shipment_id, item_ids, received_by_i
             cur.close()
             raise TransactionAborted("That shipment's items don't match — please refresh and try again.")
 
-        # Every per-item check MUST raise rather than `return` — see
-        # TransactionAborted's docstring in db.py. A `return` after an
-        # earlier item in this loop has already had its writes run would
-        # still let transaction() commit those partial writes, since a bare
-        # return doesn't count as an exceptional exit from the `with` block.
+        # Raise, never return, per item: a return would commit partial writes (see db.py).
         for item_id, item in item_rows.items():
             total_shortfall += _post_item_receipt(
                 cur, bid=bid, user_id=user_id, shipment=shipment, item=item,

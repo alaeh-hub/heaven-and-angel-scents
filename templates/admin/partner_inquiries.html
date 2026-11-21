@@ -1,4 +1,5 @@
-{% extends "base.html" %}
+{% extends "base.html" %}
+{# Admin: partner inquiries from the public site #}
 {% import "_empty.html" as empty %}
 {% import "_macros.html" as m %}
 {% block title %}Partner Inquiries{% endblock %}
@@ -297,10 +298,7 @@
                 </button>
               </div>
             </td>
-            <!-- Mobile-only — see .mobile-toggle-row/.row-toggle-btn in
-                 style.css, and this page's own .pi-table.table-collapsible
-                 overrides above. Hidden on desktop, where every cell
-                 above is already visible in the real table row. -->
+            {# Mobile-only: .row-toggle-btn expands the cells hidden in the card layout. #}
             <td data-label="" class="mobile-toggle-row">
               <button type="button" class="row-toggle-btn" aria-expanded="false">
                 <span>Details</span>

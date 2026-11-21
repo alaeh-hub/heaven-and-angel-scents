@@ -1,38 +1,17 @@
-"""Full demo data: fills every part of the system so it can be tested end to end.
+"""Fill a freshly seeded database with demo data so every page can be tested.
 
-    python scripts/demo_data.py              # fill an empty (freshly applied) database
-    python scripts/demo_data.py --sales 900  # same, with more sales (default 380)
+    python scripts/demo_data.py              # fill an empty database
+    python scripts/demo_data.py --sales 900  # more sales (default 380)
 
-Start from a clean database, then run this:
+Steps: drop the database, re-apply schema.sql, then run this. It refuses to run
+when business records exist or APP_ENV=production, and invents no materials or
+products (schema.sql seeds those). Stock moves go through the app's own functions,
+so costs and ledgers match the real pages; only dates are back-dated (about 80 days).
 
-    1. drop the database and apply schema.sql again (it seeds the 8 materials,
-       the 4 suppliers, the 31 products and HQ + Balayan Branch);
-    2. python scripts/demo_data.py
-
-The script refuses to run when business records already exist, and when
-APP_ENV=production. It never invents materials or products: everything comes from
-schema.sql. Everything that moves stock goes through the same functions the app
-itself uses (bulk batches, production runs, delivery receipts, Record Sale, void),
-so costs, stock levels and ledger rows are exactly what the pages would have made;
-only the dates are moved back in time.
-
-What it creates (all back-dated over about 80 days):
-  - Logins (admin + branch accounts, one inactive), two more branches.
-  - Supplier details, the purchase history of every material (restocks at rising,
-    falling and flat prices, with receipt numbers), unit costs and formulas, bulk rate.
-  - Oil stocked per scent (its own price and stock, with a dated purchase), then bulk
-    batches for most scents (15% / 14% / 13% formulas, 500 and 250 mL) that use it,
-    bottled production runs, and three scents deliberately left with no oil or stock.
-  - Deliveries HQ -> branches: Fulfilled (incl. one with 28 lines, one with damage and
-    a missing unit finished by a second shipment), Partially Fulfilled, In Transit,
-    Pending and Rejected, so every receipt and status shows up.
-  - Sales at every branch: bottles, bulk by the mL, refills, freebies, cash and credit
-    (some credit settled), named customers, voids, plus a handful of receipt stress
-    cases (very long names / addresses) dated today.
-  - Partners, their investments, packages, inquiries in every status (some fulfilled),
-    AI stock drafts, login activity, the admin log and backup settings.
-
-The login passwords are printed at the end (development only).
+Creates: logins and branches, suppliers and purchase history, formulas, bulk
+batches and production, deliveries in every status, sales of every kind (with
+voids and receipt stress cases), partners, packages, inquiries, AI drafts, logs.
+Login passwords are printed at the end (development only).
 """
 import argparse
 import decimal
@@ -185,8 +164,7 @@ def add_suppliers_and_settings():
 # ---------------------------------------------------------------------------
 # 3. bulk batches: plan, buy the materials, make them
 # ---------------------------------------------------------------------------
-# material -> (stock left over as a share of what the batches need, price story)
-# a price story is [(days ago, share of the total bought, price multiplier)]
+# material -> (leftover stock share, price story); story = [(days ago, share bought, price x)]
 STOCK_MARGIN = {"Oil Scent": 1.03, "Fixative": 1.25, "Moisturizer": 1.5, "Perfume Alcohol": 1.2,
                 "Frosted 85 ml Bottle": 1.12, "Distilled Water": 1.3, "Sticker": 1.25, "Plastic Seal": 1.04}
 PRICE_STORY = {
@@ -743,8 +721,7 @@ def receipt_stress_sales(branches):
     if hq_left:
         hq_sku = max(hq_left, key=lambda s: len(names[s]))
         cases.append((HQ, "admin", hq_sku, 2, D("60"), "Refill", "Credit", "Boss Rey", "Kuya Boy", None))
-    # Orders of several scents: 10 products (one full slip), 11 (a second slip with one line)
-    # and 23 (three slips), the last with a long name and address.
+    # Multi-scent orders of 10, 11 and 23 products (1, 2 and 3 slips); the last has a long name.
     def stocked(loc, minimum=1):
         have = {r["sku"]: r["stock_qty"] for r in query(
             "SELECT sku, stock_qty FROM branch_inventory WHERE branch_id = %s", (loc,))}

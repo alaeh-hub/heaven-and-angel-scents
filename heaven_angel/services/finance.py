@@ -25,9 +25,8 @@ UNIT_COST_SQL = """(SELECT sku, SUM(total_cogs) / NULLIF(SUM(qty_produced), 0) A
 # inquiry came in for rows that predate partner_inquiries.closed_at.
 PACKAGE_DATE_SQL = "COALESCE(pi.closed_at, pi.created_at)"
 
-# What a bulk sale or refill cost: the mL it took from each bulk batch times that
-# batch's cost per mL (see sale_batch_usage). Every other sale has no such rows and
-# costs its SKU's average production cost per unit instead.
+# Bulk sale/refill cost: mL taken per batch x batch cost per mL (sale_batch_usage).
+# Other sales use the SKU's average production cost instead.
 SALE_BATCH_COST_SQL = """(SELECT sale_id, SUM(ml * cost_per_ml) AS cost
                           FROM sale_batch_usage GROUP BY sale_id)"""
 

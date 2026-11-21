@@ -13,12 +13,8 @@ import './styles/atelier.css';
 import './styles/square.css';
 import './styles/reveal.css';
 
-// On a reload the browser's own scroll restoration jumps back to the old
-// scroll position before the videos/marquee/images have re-established
-// their final size, landing mid-reflow (which some mobile browsers show
-// as the page zoomed out until it settles). Start at the top instead.
-// Hover-revealed details hide only once this script is running, so nothing
-// is left invisible if it never does (landing.css scopes them under .js).
+// Start at the top on reload (restored scroll lands mid-reflow).
+// The `js` class lets hover-revealed details hide only when scripts run.
 document.documentElement.classList.add('js', 'dark');
 
 if ('scrollRestoration' in window.history) {
@@ -27,8 +23,7 @@ if ('scrollRestoration' in window.history) {
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
-    {/* reducedMotion="user": for visitors who ask their OS for less motion,
-        every Motion animation keeps its fade but drops the movement. */}
+    {/* Reduced-motion visitors keep fades but lose movement. */}
     <MotionConfig reducedMotion="user">
       <BrowserRouter>
         <App />

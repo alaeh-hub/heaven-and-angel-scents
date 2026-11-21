@@ -1,20 +1,8 @@
-"""routes/admin/'s bulk batch feature — the step between raw materials
-and bottling: mix specific raw materials at specific quantities into a
-bulk batch (e.g. 500ml or 1 gallon — see bulk_batches/bulk_batch_materials
-in schema.sql), which becomes its own real bit of mL inventory. Bottling
-an 85ML/50ML/10ML/3ML SKU on the Production Log page now draws down a
-specific batch's remaining mL — that's what enforces materials going into
-a batch before they're bottled — but the cost of goods logged is a flat
-base price set per packaging size (see unit_cogs_settings/
-save_unit_cogs() and tests/test_formulas.py), not derived from the
-batch's own real cost/mL; a batch already accounted for its real
-materials cost when it was made, so re-deriving a per-bottle cost from it
-would just be double bookkeeping.
+"""Bulk batches: mixing raw materials into mL inventory, then bottling from it.
 
-Also covers restock_material() — real stock on hand for raw materials,
-genuinely deducted by a bulk batch and genuinely added to by a restock,
-unlike the abandoned earlier attempt at raw_materials.stock_qty (see that
-column's own migration history in schema.sql).
+Bottling draws down a batch's remaining mL, but the cost logged is the flat
+base price per size (unit_cogs_settings), not the batch's own cost/mL.
+Also covers restock_material(): real raw-material stock, deducted by a batch.
 """
 import json
 import re
@@ -48,6 +36,7 @@ def _bulk_batches_by_scent(sql, scent_name):
 
 
 def test_bulk_batches_page_renders(client, sql):
+    """Bulk batches page renders."""
     _signed_in_admin(client, sql)
     resp = client.get(BULK_BATCHES_URL)
     assert resp.status_code == 200
@@ -60,6 +49,7 @@ def test_bulk_batches_page_renders(client, sql):
 
 
 def test_create_bulk_batch_deducts_stock_and_computes_cost(client, sql):
+    """Create bulk batch deducts stock and computes cost."""
     _signed_in_admin(client, sql)
     # ₱2.00/gram, 100g in stock
     mat_a = make_raw_material(
@@ -97,12 +87,10 @@ def test_create_bulk_batch_deducts_stock_and_computes_cost(client, sql):
 
 
 def test_create_bulk_batch_supports_material_logged_in_a_different_unit(client, sql):
-    """The bug this feature exists to fix: a material bought by the
-    Gallon (raw_materials.unit) but used a few mL at a time per batch
-    used to have no way to say so — typing '0.31' meant 0.31 *gallons*,
-    not 0.31 mL, wildly overcharging the batch. qty_unit[] lets the admin
-    say which unit each line's amount is actually in (see
-    utils.compatible_material_units/convert_material_qty).
+    """A material bought by the Gallon but used in mL per batch.
+
+    qty_unit[] lets each line say its unit; before, '0.31' meant 0.31 gallons
+    and wildly overcharged the batch.
     """
     _signed_in_admin(client, sql)
     # cost_per_unit = 3200 pesos/gallon == exactly 1.00 peso/mL (a gallon is 3,200 mL)
@@ -123,12 +111,10 @@ def test_create_bulk_batch_supports_material_logged_in_a_different_unit(client, 
 
     batches = _bulk_batches_by_scent(sql, "Tiny Dose")
     assert len(batches) == 1
-    # 0.31 mL x ~1.00 peso/mL = ~0.31 pesos -- NOT 0.31 gallons x 3200
-    # pesos/gallon (which would have been 992 pesos).
+    # 0.31 mL x ~1.00 peso/mL = ~0.31 pesos (not 0.31 gallons x 3200 = 992).
     assert Decimal(batches[0]["total_cost"]) == Decimal("0.31")
 
-    # Stock is deducted in the material's own unit (gallons) by the
-    # converted amount, not a straight 0.31 taken off the top.
+    # Stock is deducted in the material's own unit (gallons), converted.
     mat_a_row = get_raw_material(sql, mat_a)
     expected_gallons_used = Decimal("0.31") / Decimal("3200")
     expected_stock = (Decimal("1.000000") -
@@ -137,6 +123,7 @@ def test_create_bulk_batch_supports_material_logged_in_a_different_unit(client, 
 
 
 def test_create_bulk_batch_rejects_insufficient_stock(client, sql):
+    """Create bulk batch rejects insufficient stock."""
     _signed_in_admin(client, sql)
     mat_a = make_raw_material(
         sql, unit="Gram", package_qty="5.000", package_cost="50.00")
@@ -161,6 +148,7 @@ def test_create_bulk_batch_rejects_insufficient_stock(client, sql):
 
 
 def test_restock_material_adds_stock_and_averages_cost(client, sql):
+    """Restock material adds stock and averages cost."""
     _signed_in_admin(client, sql)
     # 100g for ₱100 -> ₱1.00/gram, 100g in stock
     mat_a = make_raw_material(
@@ -203,8 +191,7 @@ def test_production_run_against_batch_deducts_remaining_ml_and_computes_cogs(cli
     assert log["bulk_batch_id"] == batch_id
 
     batch = get_bulk_batch(sql, batch_id)
-    # 4 bottles x 85 mL = 340 mL drawn down from 1000 mL — unaffected by
-    # the batch's own cost_per_ml (0.10), which stays informational only.
+    # 4 x 85 mL = 340 mL drawn from 1000 mL; cost_per_ml is informational only.
     assert Decimal(batch["remaining_ml"]) == Decimal("660.000")
     assert get_inventory_qty(sql, HQ_BRANCH_ID, sku) == 4
 
@@ -248,6 +235,7 @@ def test_production_run_requires_a_bulk_batch_for_bottled_sizes(client, sql):
 
 
 def test_production_run_rejects_batch_with_insufficient_remaining_ml(client, sql):
+    """Production run rejects batch with insufficient remaining ml."""
     _signed_in_admin(client, sql)
     sku = make_product(sql, unit="85ML")
     mat_a = make_raw_material(sql)
@@ -264,12 +252,7 @@ def test_production_run_rejects_batch_with_insufficient_remaining_ml(client, sql
 
 
 def test_dashboard_capital_is_cogs_not_raw_material_purchases(client, sql):
-    """Fleet-wide sums (financials.capital / raw_materials_purchased) can
-    already carry rows from other tests sharing this session's database
-    (see conftest.py — nothing is cleaned up between tests), so this
-    asserts on the *delta* this test's own actions caused, never an
-    absolute total.
-    """
+    """Assert on deltas only: fleet-wide sums include rows from other tests sharing the DB."""
     _signed_in_admin(client, sql)
     before = client.get("/admin/api/reports-data").get_json()["financials"]
 
@@ -277,9 +260,7 @@ def test_dashboard_capital_is_cogs_not_raw_material_purchases(client, sql):
     mat_a = make_raw_material(
         sql, package_qty="100.000", package_cost="1000.00")
 
-    # Buying the material alone moves "raw materials bought" but not
-    # "capital" — only logging a production run against a batch should
-    # move capital.
+    # Buying material moves "raw materials bought", not capital; a production run does.
     after_purchase = client.get(
         "/admin/api/reports-data").get_json()["financials"]
     assert Decimal(str(after_purchase["capital"])) == Decimal(
@@ -287,9 +268,7 @@ def test_dashboard_capital_is_cogs_not_raw_material_purchases(client, sql):
     assert Decimal(str(after_purchase["raw_materials_purchased"])) - Decimal(
         str(before["raw_materials_purchased"])) == Decimal("1000.00")
 
-    # Flat base cost of ₱10.00 for a 10ML bottle (see unit_cogs_settings)
-    # — independent of whatever this batch's own real cost/mL happens to
-    # be.
+    # Flat base cost of 10.00 for a 10ML bottle (unit_cogs_settings), not the batch cost/mL.
     set_unit_cogs(sql, "10ML", "10.00")
     batch_id = make_bulk_batch(sql, [(mat_a, "100", "1.00")],
                                 input_qty="100", input_unit="Milliliter")
@@ -299,18 +278,16 @@ def test_dashboard_capital_is_cogs_not_raw_material_purchases(client, sql):
     after_batch = client.get("/admin/api/reports-data").get_json()["financials"]
     assert Decimal(str(after_batch["capital"])) - Decimal(
         str(before["capital"])) == Decimal("30.00")
-    # Raw materials bought is unchanged by logging a production run — the
-    # two figures move independently.
+    # Raw materials bought is unchanged by a production run.
     assert Decimal(str(after_batch["raw_materials_purchased"])) == Decimal(
         str(after_purchase["raw_materials_purchased"]))
 
 
 def test_bulk_batch_yields_show_a_liquid_only_reference_cost(client, sql):
-    """Each yield's total_cost_per_bottle is this batch's own liquid
-    cost/mL x the size's mL — purely a reference figure, never what
-    production() actually charges (that's still the flat base cost on
-    unit_cogs_settings). Packaging isn't folded in here any more; a
-    formula batch shows its real cost per bottle in the formula summary."""
+    """Yield cost per bottle is the batch's liquid cost/mL x the size's mL, reference only.
+
+    production() still charges the flat base cost; packaging is not included here.
+    """
     _signed_in_admin(client, sql)
     mat_a = make_raw_material(sql)
     # ₱0.10/mL over 1000 mL -> cost_per_ml = 0.10
@@ -348,6 +325,7 @@ def _write_off_url(batch_id):
 
 
 def test_write_off_zeroes_remaining_but_keeps_cost_and_logs_it(client, sql):
+    """Write off zeroes remaining but keeps cost and logs it."""
     _signed_in_admin(client, sql)
     mat_a = make_raw_material(sql)
     batch_id = make_bulk_batch(sql, [(mat_a, "100", "0.50")], scent_name="Leftover Scent",
@@ -377,6 +355,7 @@ def test_write_off_zeroes_remaining_but_keeps_cost_and_logs_it(client, sql):
 
 
 def test_write_off_rejects_unknown_reason_and_leaves_batch_alone(client, sql):
+    """Write off rejects unknown reason and leaves batch alone."""
     _signed_in_admin(client, sql)
     mat_a = make_raw_material(sql)
     batch_id = make_bulk_batch(sql, [(mat_a, "100", "0.50")], input_qty="1000",
@@ -390,6 +369,7 @@ def test_write_off_rejects_unknown_reason_and_leaves_batch_alone(client, sql):
 
 
 def test_write_off_of_an_empty_or_missing_batch_is_refused(client, sql):
+    """Write off of an empty or missing batch is refused."""
     _signed_in_admin(client, sql)
     mat_a = make_raw_material(sql)
     batch_id = make_bulk_batch(sql, [(mat_a, "100", "0.50")], scent_name="Already Empty",
@@ -407,6 +387,7 @@ def test_write_off_of_an_empty_or_missing_batch_is_refused(client, sql):
 
 
 def test_bulk_batches_page_offers_write_off_form(client, sql):
+    """Bulk batches page offers write off form."""
     _signed_in_admin(client, sql)
     resp = client.get(BULK_BATCHES_URL)
     assert resp.status_code == 200

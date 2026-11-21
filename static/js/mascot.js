@@ -1,19 +1,9 @@
-// The mascot: a sprite-sheet character whose head turns toward the
-// pointer and who reacts when clicked.
-//
-// This is a vanilla port of the `page-mascot` React component. The
-// partner portal (public-site/) could have used the npm package
-// directly, but the signed-in app is Jinja + plain scripts with no
-// React anywhere, and pulling a framework in for one ornament isn't a
-// trade worth making. The behaviour below is the same: nine head
-// directions and nine expressions, each sheet a 3x3 grid, swapped by
-// moving `background-position` rather than by running an animation —
-// so a mascot sitting idle costs nothing per frame.
-//
-// Both sheets live in static/mascots/. They are drawn as a matched
-// pair: the body is the same pixels in the same place in all eighteen
-// cells, which is what lets the two swap on click without the
-// character appearing to jump.
+// The mascot: a sprite-sheet character whose head turns toward the pointer and reacts
+// to clicks. Vanilla port of the `page-mascot` React component (this app has no React).
+// Nine head directions and nine expressions, each a 3x3 sheet swapped by moving
+// `background-position` (no per-frame cost when idle).
+// Both sheets live in static/mascots/ as a matched pair (same body pixels in all 18
+// cells), so they swap on click without a visible jump.
 (function () {
     'use strict';
 
@@ -24,19 +14,15 @@
     // Clockwise from the right, matching atan2 with y pointing down.
     const CLOCKWISE = ['right', 'down-right', 'down', 'down-left', 'left', 'up-left', 'up', 'up-right'];
     const SECTOR = (Math.PI * 2) / CLOCKWISE.length;
-    // Holding a sector slightly past its own edge stops the head
-    // flickering between two cells when the pointer sits on a boundary.
+    // Hold a sector slightly past its edge so the head doesn't flicker on a boundary.
     const HYSTERESIS = 0.12;
-    // Inside this many pixels of the mascot's centre there's no
-    // meaningful direction left to point, so it looks straight out.
+    // Within this many pixels of the centre there is no direction; look straight out.
     const DEAD_ZONE = 70;
-    // How far (as a fraction of the mascot's size) the whole figure leans
-    // toward the pointer, and how quickly it eases there. The head is
-    // nine fixed drawings, so the lean is what makes turning feel fluid.
+    // How far the figure leans toward the pointer (fraction of size) and how fast it eases;
+    // the lean makes the nine fixed head drawings feel fluid.
     const LEAN = 0.035;
     const LEAN_EASE = 0.16;
-    // On touch there is no pointer to follow, so a tap is looked at for
-    // this long and then forgotten.
+    // On touch there is no pointer: a tap is looked at briefly, then forgotten.
     const TAP_LOOK_MS = 1800;
 
     const BOOP_PAYOFF = 120;
@@ -47,9 +33,7 @@
     const DIZZY_WINDOW = 1600;
     const DIZZY_END = 1100;
 
-    // `tilt` is a few degrees away from where the mascot was poked, so a
-    // click on its left cheek rocks it right instead of squashing it
-    // identically every time.
+    // `tilt` is a few degrees away from the poke, so a click rocks it instead of squashing.
     function squashFrames(tilt) {
         return [
             { transform: 'rotate(0deg) scale(1, 1)', easing: 'ease-in' },
@@ -60,8 +44,7 @@
         ];
     }
 
-    // Faces for the first three pokes, each a flinch then a payoff; the
-    // fourth in a row tips it over into dizzy.
+    // Faces for the first three pokes (flinch then payoff); the fourth in a row is dizzy.
     const STAGES = [['blink', 'heart'], ['blink', 'sparkle'], ['surprised', 'delighted']];
 
     const BUBBLE_MS = 4800;
@@ -74,9 +57,7 @@
     const FINE_POINTER = window.matchMedia('(hover: hover) and (pointer: fine)');
     const REDUCED_MOTION = window.matchMedia('(prefers-reduced-motion: reduce)');
 
-    // Every mounted mascot on the page. One pointermove listener drives
-    // all of them: binding per instance would mean Halo's avatar and its
-    // greeting each doing their own hit-testing on every mouse move.
+    // Every mounted mascot; one pointermove listener drives all of them.
     const live = new Set();
 
     // background-size 300% makes each cell a clean 0/50/100% step on both axes.
@@ -109,10 +90,7 @@
         const button = document.createElement('button');
         button.type = 'button';
         button.className = 'mascot';
-        // It's an ornament, so it stays out of the tab order: a keyboard
-        // user tabbing through the sign-in form or Halo's panel should
-        // not have to pass through a decoration to reach the next
-        // control. Pointer users can still click it.
+        // An ornament: kept out of the tab order so keyboard users don't tab through it.
         button.tabIndex = -1;
         button.setAttribute('aria-hidden', 'true');
 
@@ -122,13 +100,10 @@
         const dirLayer = document.createElement('span');
         dirLayer.className = 'mascot-layer';
         dirLayer.style.backgroundImage = 'url("' + (opts.directions || SHEETS.directions) + '")';
-        // Explicitly centred: with no background-position of its own it
-        // would sit at 0% 0%, which is the up-left cell — so a mascot
-        // would start out looking away until the pointer first moved.
+        // Explicitly centred: the default 0% 0% is the up-left cell (looking away).
         dirLayer.style.backgroundPosition = cellPosition(DIRECTIONS.indexOf('center'));
 
-        // Mounted from the start, not created on the first click, so the
-        // reactions sheet is already fetched by the time anyone pokes it.
+        // Mounted from the start so the reactions sheet is fetched before the first poke.
         const reactLayer = document.createElement('span');
         reactLayer.className = 'mascot-layer mascot-layer-react';
         reactLayer.style.backgroundImage = 'url("' + (opts.reactions || SHEETS.reactions) + '")';
@@ -174,8 +149,7 @@
         }
 
         this.aim = function (pointer) {
-            // A mascot in a closed panel has a zero-size box; aiming
-            // from that gives a meaningless angle.
+            // A mascot in a closed panel has a zero-size box; aiming from it is meaningless.
             const box = button.getBoundingClientRect();
             if (!box.width || !box.height) return;
 
@@ -192,8 +166,7 @@
             const dy = pointer.y - (box.top + box.height / 2);
 
             const distance = Math.hypot(dx, dy);
-            // Lean grows with distance and tops out, so a far-off pointer
-            // nudges rather than drags.
+            // Lean grows with distance and tops out.
             const pull = Math.min(1, distance / 240) * LEAN * box.width;
             leanTo(distance ? dx / distance * pull : 0, distance ? dy / distance * pull : 0);
 
@@ -213,9 +186,8 @@
             dirLayer.style.backgroundPosition = cellPosition(DIRECTIONS.indexOf(CLOCKWISE[sector]));
         };
 
-        // An expression held until released, for as long as something on
-        // the page calls for it (eyes shut while a password is typed).
-        // Timed reactions fall back to it rather than to the pointer.
+        // Expression held until released (e.g. eyes shut while typing a password); timed
+        // reactions fall back to it, not to the pointer.
         let held = null;
 
         function setReaction(name) {
@@ -238,9 +210,7 @@
             }
             window.clearTimeout(bubbleTimer);
             bubble.textContent = text;
-            // Two frames, not one: the element has to be laid out in its
-            // hidden state before the class that transitions it in lands,
-            // or the browser coalesces both and nothing animates.
+            // Two frames: lay out the hidden state first, or the browser coalesces and nothing animates.
             bubble.classList.remove('is-shown');
             requestAnimationFrame(function () {
                 requestAnimationFrame(function () {
@@ -255,12 +225,7 @@
             }
         };
 
-        /**
-         * Hold one named expression for `ms`, then drop back to
-         * following the pointer. Lets a page react to something that
-         * isn't a click — a wrong password, a field left empty — with
-         * the face rather than only with words.
-         */
+        /** Hold one named expression for `ms`, then follow the pointer again (e.g. wrong password). */
         this.react = function (name, ms) {
             if (REACTIONS.indexOf(name) === -1) return;
             timers.forEach(window.clearTimeout);
@@ -309,24 +274,19 @@
                 later(BOOP_END, null);
             }
 
-            // Lets the page answer with a line that fits how many pokes
-            // this is, instead of a random one.
+            // Lets the page answer with a line that fits the poke count.
             host.dispatchEvent(new CustomEvent('mascot:boop', { detail: { count: count, dizzy: dizzy } }));
 
             if (REDUCED_MOTION.matches) return;
             const box = button.getBoundingClientRect();
-            // Away from the poke; a keyboard or scripted boop has no
-            // origin, so it rocks to the right.
+            // Away from the poke; a keyboard or scripted boop rocks right.
             const side = originX === undefined || !box.width ? 1 : (originX < box.left + box.width / 2 ? 1 : -1);
             const tilt = side * (dizzy ? 9 : 4 + count);
-            // Per-keyframe easing with the effect itself linear: an easing
-            // on the effect would reinterpret every offset and front-load
-            // the whole bounce.
+            // Per-keyframe easing, effect linear: effect easing would reinterpret the offsets.
             if (squash.animate) squash.animate(squashFrames(tilt), { duration: dizzy ? SQUASH_MS * 1.6 : SQUASH_MS, easing: 'linear' });
         };
 
-        // Pressed-in feedback the instant the pointer lands, before the
-        // click completes, so it feels like it is being pushed.
+        // Pressed-in feedback the instant the pointer lands.
         const release = function () { host.classList.remove('is-pressed'); };
         button.addEventListener('pointerdown', function () { host.classList.add('is-pressed'); });
         ['pointerup', 'pointerleave', 'pointercancel'].forEach(function (name) {
@@ -335,8 +295,7 @@
 
         const self = this;
         button.addEventListener('click', function (event) {
-            // Halo's avatar sits in a panel header beside real controls
-            // — a boop shouldn't also trip whatever it's nested in.
+            // Halo's avatar sits beside real controls; a boop shouldn't trip the parent.
             event.preventDefault();
             event.stopPropagation();
             self.boop(event.clientX);
@@ -367,11 +326,9 @@
             pointer = { x: event.clientX, y: event.clientY };
             aimAll();
         }, { passive: true });
-        // The pointer can sit still while the page moves under it, which
-        // changes the angle just as much as moving the pointer does.
+        // A still pointer over a scrolling page changes the angle too.
         window.addEventListener('scroll', function () { if (pointer) aimAll(); }, { passive: true });
-        // Leaving the window leaves the last position behind, which would
-        // keep it staring at the edge. Face front instead.
+        // Leaving the window leaves a stale position; face front instead.
         document.documentElement.addEventListener('mouseleave', function () {
             pointer = null;
             aimAll();
@@ -390,11 +347,7 @@
         }, { passive: true });
     }
 
-    /**
-     * Put a mascot inside `host`. Returns the instance, or the one
-     * already there — mounting is idempotent so a re-init after a
-     * soft-nav content swap can't stack two mascots in one slot.
-     */
+    /** Mount a mascot in `host`; idempotent, so a soft-nav re-init can't stack two. */
     function mount(host, options) {
         if (!host) return null;
         if (host.dataset.mascotMounted) return null;
@@ -403,19 +356,11 @@
     }
 
     /**
-     * Mount every [data-mascot] on the page, reading its options off the
-     * element so templates stay declarative:
-     *
-     *     <div data-mascot data-mascot-size="120" data-mascot-say="auto"></div>
-     *
-     * `data-mascot-say="auto"` greets by time of day; any other value is
-     * said verbatim. `data-mascot-say-name` adds a name to an auto
-     * greeting ("Good morning, Ana").
-     *
-     * `data-mascot-replace` clears whatever the host already contains
-     * first. The markup it replaces — Halo's own glyph — is left in the
-     * template on purpose: it is what shows if this script fails to load
-     * or throws, which is a better panel header than a blank circle.
+     * Mount every [data-mascot], reading options off the element:
+     *   <div data-mascot data-mascot-size="120" data-mascot-say="auto"></div>
+     * say="auto" greets by time of day (data-mascot-say-name adds a name); other values
+     * are said verbatim. data-mascot-replace clears the host first; the replaced markup
+     * (Halo's glyph) stays in the template as the fallback if this script fails.
      */
     function initAll(root) {
         const scope = root || document;
@@ -434,8 +379,7 @@
                 const name = host.dataset.mascotSayName;
                 text = timeGreeting() + (name ? ', ' + name : '');
             }
-            // A beat after the page settles, so it reads as the mascot
-            // noticing you rather than as part of the page load.
+            // A beat after the page settles, so it reads as the mascot noticing you.
             window.setTimeout(function () { mascot.say(text); }, 600);
         });
     }

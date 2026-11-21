@@ -1,4 +1,5 @@
-{% extends "base.html" %}
+{% extends "base.html" %}
+{# Admin: one package and its items #}
 {% import "_empty.html" as empty %}
 {% import "_macros.html" as m %}
 {% block title %}{{ pkg.package_name }}{% endblock %}
@@ -84,14 +85,7 @@
           <td class="num mono" data-label="Ref. price">{{ item.price|peso }}</td>
           <td class="num mono" data-label="Line total">{{ (item.qty * item.price)|peso }}</td>
           <td data-label="" class="mobile-inline-action">
-            <!-- Unified confirm pattern: form[data-confirm] is picked up
-                 by main.js's delegated submit handler, same as
-                 requests.html / request_detail.html / users.html. The
-                 message itself still needs to vary per-row (last item
-                 in the package vs. a normal removal), so it's built in
-                 Jinja same as before — just written straight into a
-                 plain (auto-escaped) HTML attribute now instead of a
-                 |tojson'd JS string inside an onsubmit handler. -->
+            {# form[data-confirm] gets a confirm() prompt from main.js. #}
             <form method="POST" action="{{ url_for('admin.remove_package_item', package_id=pkg.package_id) }}"
               data-preserve-scroll
               data-confirm="{{ ('This is the last product in \"' ~ pkg.package_name ~ '\". Removing it will delete the whole package. Are you sure?') if items|length == 1 else ('Remove ' ~ item.item_name ~ ' from this package?') }}">
@@ -131,10 +125,7 @@
     <div class="form-row">
       <div class="field">
         <label for="productSearch">Product</label>
-        {# Type to filter by name or SKU, or open the list and pick. Each
-           option is one exact size (bottled only, see package_detail()),
-           so choosing it fills in the SKU below; the form won't submit
-           until the text matches a real option. #}
+        {# Pick one exact size by name or SKU; submit needs a matching option. #}
         <div class="ac-combo" id="packageProductCombo" data-products='{{ available_products | tojson }}'>
           <input type="text" id="productSearch" required autocomplete="off"
             placeholder="Search by name or SKU, or pick from the list…"

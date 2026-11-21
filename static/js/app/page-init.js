@@ -15,9 +15,8 @@ function initThemeToggle() {
 
         }
 
-        // The new theme spreads out in a circle from the button. One
-        // snapshot is clipped on the compositor, which is far cheaper than
-        // transitioning the colours of every element on the page.
+        // The new theme spreads in a circle from the button (one clipped snapshot is much
+        // cheaper than transitioning every element's colours).
         if (typeof document.startViewTransition === 'function' && !PREFERS_REDUCED_MOTION.matches) {
             const r = btn.getBoundingClientRect();
             const x = r.left + r.width / 2;
@@ -55,13 +54,8 @@ function initThemeToggle() {
     });
 }
 
-// Sets each fill-bar to its data-pct width so the CSS transition on
-// .fill-bar (see style.css) actually animates it filling in, instead of
-// the bar just appearing at its final width. Setting width to 0% first
-// and waiting a frame (rather than jumping straight to the target
-// width) is what gives the transition a "from" state to animate out of
-// — without it, the browser has nothing to interpolate between and the
-// bar would still just snap into place.
+// Sets each fill-bar to its data-pct width; starts at 0% and waits a frame so the
+// .fill-bar CSS transition has a "from" state to animate.
 function initFillBars() {
     document.querySelectorAll('.fill-bar[data-pct]').forEach((el) => {
         const pct = parseFloat(el.dataset.pct) || 0;
@@ -74,15 +68,9 @@ function initFillBars() {
     });
 }
 
-// Counts a stat-tile's number up from 0 to its rendered value instead
-// of it just sitting there static — a state-transition cue that a
-// dashboard value has landed, not decoration. Only touches values that
-// are a plain integer with no other characters (branch/request/alert
-// counts): anything with a currency symbol, comma, or decimal (peso-
-// formatted totals) is left alone rather than risk re-formatting it
-// wrong. Runs once per element (data-countup-done) since revealContent()
-// re-fires on every soft nav and would otherwise re-count a tile that
-// never actually changed value.
+// Counts a stat tile up from 0 to its value. Only plain integers (counts); currency,
+// comma or decimal values are left alone. Once per element (data-countup-done), since
+// revealContent() re-fires on every soft nav.
 function initStatCountUp() {
     if (!window.anime || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
 
@@ -105,24 +93,16 @@ function initStatCountUp() {
     });
 }
 
-// Stat tiles spring up one after another and table rows slide in down the
-// page, so a freshly loaded screen builds top to bottom instead of
-// appearing all at once (state transition: new data just landed).
-// Inline transform/opacity are cleared when each finishes so the tiles'
-// and rows' own CSS hover lift keeps working. Capped at the first 14 rows
-// (anything below the fold is never seen animating) and, like
-// initStatCountUp(), skipped under reduced motion and on tab-style soft
-// navs (refreshDynamicContent's skipReveal).
+// Stat tiles spring up and table rows slide in so a new screen builds top to bottom.
+// Inline transform/opacity are cleared after so CSS hover lift still works. Capped to
+// the first 14 rows; skipped under reduced motion and on tab-style soft navs (skipReveal).
 function initEntranceStagger() {
-    // Intentionally empty. Tiles and rows used to slide in one by one on top of
-    // the page transition and the content reveal, so a freshly opened table
-    // moved three ways at once. One reveal per page now (see revealContent).
+    // Intentionally empty: one reveal per page now (see revealContent).
 }
 
 function revealContent() {
-    // Soft navigations already cross-fade through the browser's view transition
-    // (style.css), so the content must not animate a second time. Browsers
-    // without view transitions get a plain opacity fade, no movement.
+    // Soft navs already cross-fade via the view transition (style.css); no second animation.
+    // Browsers without it get a plain opacity fade.
     if (typeof document.startViewTransition === 'function') return;
     if (!window.Motion || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
 
@@ -135,18 +115,11 @@ function revealContent() {
     }
 }
 
-// Holds #loginSplash (see base.html, shown once right after a
-// successful sign-in) on screen briefly, then fades it out via the
-// .login-splash-exit CSS class and removes it from the DOM entirely
-// — not just hidden — so it doesn't linger as dead markup sitting on
-// top of nothing. Plain CSS animation + setTimeout, same reasoning as
-// showLoadingOverlay() above: nothing here needs a promise-based
-// animation library, and remove() after a fixed delay is simpler.
-//
-// When motion is allowed, the logo-reveal video plays first and the
-// splash exits when it ends. Clicking or pressing any key skips it,
-// and a hard cap guarantees the app is never stuck behind a stalled
-// video. If autoplay is refused, it falls back to the static wordmark.
+// Holds #loginSplash (shown once after sign-in) briefly, fades it out via
+// .login-splash-exit, then removes it from the DOM. Plain CSS + setTimeout.
+// With motion allowed the logo video plays first and the splash exits when it ends.
+// Click or any key skips it; a hard cap covers a stalled video; if autoplay is
+// refused it falls back to the static wordmark.
 const LOGIN_SPLASH_HOLD_MS = 2400;
 const LOGIN_SPLASH_REDUCED_HOLD_MS = 600;
 const LOGIN_SPLASH_EXIT_MS = 350;
@@ -164,37 +137,22 @@ function initLoginSplash() {
         setTimeout(() => el.remove(), LOGIN_SPLASH_EXIT_MS);
     };
 
-    // Clicking or pressing any key skips it; otherwise it leaves on its own
-    // once the reveal has played and held for a beat.
+    // Click or any key skips it; otherwise it leaves once the reveal has played.
     el.addEventListener('click', dismiss);
     document.addEventListener('keydown', dismiss);
     const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     setTimeout(dismiss, reduceMotion ? LOGIN_SPLASH_REDUCED_HOLD_MS : LOGIN_SPLASH_HOLD_MS);
 }
 
-// Runs `fn`, logging and swallowing any exception instead of letting it
-// propagate. Every init below is called from one synchronous
-// DOMContentLoaded listener (and, via refreshDynamicContent(), from
-// every soft-nav content swap) — without this, a single page-specific
-// widget throwing (a report page's own table markup tripping up
-// initSmartTables(), say) would abort every init call still queued
-// after it, including initSoftNav() itself. That doesn't just break
-// the widget that threw — it silently leaves click/submit interception
-// never registered for the rest of that page load, so every link and
-// form on it (tabs very much included) falls back to the browser's
-// own real, full-reload navigation instead of a soft one. Isolating
-// each init this way means one broken widget stays broken on its own,
-// instead of quietly taking soft nav down with it.
-// The mascot (static/js/mascot.js). Both of its slots — Halo's avatar
-// and Halo's greeting — are [data-mascot] elements in the shell rather
-// than in .content, so they survive a soft navigation untouched and
-// this only needs to run on a real page load. (The sign-in screen
-// mounts its own, in login.html; it is not part of this shell.)
+// Mascot (js/mascot.js): its [data-mascot] slots live in the shell, outside .content,
+// so this only needs to run on a real page load (login mounts its own).
 function initMascots() {
     if (!window.Mascot) return;
     window.Mascot.initAll();
 }
 
+// Runs `fn`, logging and swallowing errors, so one broken widget can't skip the
+// remaining inits (initSoftNav() included, which would fall back to full reloads).
 function safeInit(fn, label) {
     try {
         return fn();
@@ -241,18 +199,9 @@ document.addEventListener('DOMContentLoaded', () => {
     safeInit(initCustomSelects, 'customSelects');
     safeInit(initDatePickers, 'datePickers');
     safeInit(watchForNewFormControls, 'watchFormControls');
-    // Registered BEFORE initSoftNav() — both are delegated on
-    // `document` in the bubble phase, and listeners on the same node
-    // fire in registration order, so this must run first. initSoftNav()'s
-    // own submit handler calls e.preventDefault() on every soft-nav-
-    // eligible form (i.e. nearly every form in the app) to take over
-    // with its own fetch — that's a legitimate interception, not a
-    // cancelled submission, but e.defaultPrevented can't tell the two
-    // apart. Running first means this only ever sees defaultPrevented
-    // from something that actually meant to cancel the submit (a
-    // capture-phase confirm() dialog, a form's own validation
-    // listener) by the time it checks, never from initSoftNav()'s own
-    // preventDefault() a moment later.
+    // Register BEFORE initSoftNav(): both are bubble-phase delegated listeners and fire in
+    // registration order. initSoftNav() preventDefault()s nearly every form, which
+    // e.defaultPrevented can't tell from a real cancel (confirm dialog, validation).
     safeInit(initSubmitLoadingState, 'submitLoadingState');
     safeInit(initGenerateFileFeedback, 'generateFileFeedback');
     safeInit(initSoftNav, 'softNav');
@@ -261,8 +210,7 @@ document.addEventListener('DOMContentLoaded', () => {
     safeInit(initHaloWidget, 'haloWidget');
 });
 
-// Phones: the floating assistant button tucks away while the page scrolls down (so it is not parked on
-// top of a row's buttons) and returns when you scroll up, near the top, or at the end of the page.
+// Phones: the floating assistant button tucks away on scroll down, returns on scroll up/top/end.
 (function initHaloTuck() {
     const widget = document.querySelector('.halo-widget');
     if (!widget) return;

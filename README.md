@@ -119,7 +119,7 @@ The platform uses:
 - Google's Gemini API for the internal AI assistant
 - A separate React + Vite front end (`public-site/`) for the public partner portal
 
-The back-office visual system is documented in [`docs/design.md`](./docs/design.md). Its shared theme tokens live in `static/css/tokens.css`, global foundations in `static/css/base.css`, and application styles in `static/css/style.css` and `static/css/themes.css`.
+The back-office visual system is summarised in [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md). Its shared theme tokens live in `static/css/tokens.css`, global foundations in `static/css/base.css`, and application styles in `static/css/style.css` and `static/css/themes.css`.
 
 ---
 
@@ -275,8 +275,7 @@ In Docker Compose deployments, the pre-restore safety copy is stored in the
 persistent `appbackups` volume so it survives container rebuilds. This volume is
 not a substitute for the separate, off-server backup routine.
 
-For off-server scheduled backups, retention, secrets, and restore drills, see
-[BACKUP.md](./docs/BACKUP.md). In-app email backups complement rather than replace an
+Plan an off-server copy, retention and restore drills of your own. In-app email backups complement rather than replace an
 independent off-server copy. Docker Compose deployments can also enable the
 optional `offsite` profile to copy local backup archives to an rclone remote
 every six hours; set `OFFSITE_DEST` and the relevant `RCLONE_CONFIG_OFFSITE_*`
@@ -411,7 +410,7 @@ under `static/img/scents/` (including the `-s` and `-m` thumbnail copies the
 site loads), with the H1 and A3 hero label textures under
 `static/img/scene/`. Commit and deploy those folders with the site; the
 product list lives in `public-site/src/content/scents.js`. The full-size
-source renders in `assets/scent-renders/` are excluded by `.gitignore`.
+source renders are kept outside the repository.
 
 ---
 
@@ -429,8 +428,9 @@ source renders in `assets/scent-renders/` are excluded by `.gitignore`.
 ├── schema.sql
 ├── requirements.txt
 ├── README.md
-├── docs/                 # design (visual system), BACKUP, DEPLOY, DOCKER_DEPLOY, HOSTINGER_DEPLOY, QA pack
-│                         # (local-only notes such as OPENING_DATA_IMPORT and OPEN_QUESTION_* are git-ignored)
+├── CLAUDE.md             # keep-in-sync checklist for the AI
+├── docs/                 # PRODUCTION, BUSINESS_RULES, ARCHITECTURE, DECISIONS notes
+│   └── private/          # local-only PDFs (git-ignored)
 ├── public-site/          # partner portal front end (React + Vite)
 │   └── src/
 │       ├── components/

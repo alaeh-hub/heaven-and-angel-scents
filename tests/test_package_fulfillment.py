@@ -1,9 +1,8 @@
-"""Package orders: order -> produce -> fulfill.
+"""Package orders: order -> produce -> fulfill (admin.fulfill_inquiry()).
 
-A portal inquiry snapshots its package's items; Closed is the confirmed
-deal (stock untouched); Fulfill takes the items out of HQ stock — blocked
-with the shortfall until enough is produced; moving a fulfilled order off
-Closed puts the stock back. See admin.fulfill_inquiry().
+An inquiry snapshots its package's items; Closed confirms the deal without touching
+stock. Fulfill takes items from HQ stock (blocked with the shortfall); moving a
+fulfilled order off Closed puts the stock back.
 """
 import os
 
@@ -77,6 +76,7 @@ def _set_status(client, inquiry_id, status):
 
 
 def test_inquiry_snapshots_package_items(client, app, sql):
+    """Inquiry snapshots package items."""
     inquiry_id, package_id, a, b = _submit_inquiry(client, app, sql)
     # Editing the package afterwards doesn't change what was quoted.
     _add_package_item(sql, package_id, make_product(sql), 5)
@@ -88,6 +88,7 @@ def test_inquiry_snapshots_package_items(client, app, sql):
 
 
 def test_closing_does_not_touch_stock_and_fulfill_is_blocked_until_produced(client, app, sql):
+    """Closing does not touch stock and fulfill is blocked until produced."""
     inquiry_id, _, a, b = _submit_inquiry(client, app, sql)
     _set_hq_stock(sql, a, 1)
     _set_hq_stock(sql, b, 5)
@@ -106,6 +107,7 @@ def test_closing_does_not_touch_stock_and_fulfill_is_blocked_until_produced(clie
 
 
 def test_fulfill_deducts_hq_stock_and_reopening_returns_it(client, app, sql):
+    """Fulfill deducts hq stock and reopening returns it."""
     inquiry_id, _, a, b = _submit_inquiry(client, app, sql)
     _set_hq_stock(sql, a, 10)
     _set_hq_stock(sql, b, 10)
@@ -138,6 +140,7 @@ def test_fulfill_deducts_hq_stock_and_reopening_returns_it(client, app, sql):
 
 
 def test_only_closed_inquiries_can_be_fulfilled(client, app, sql):
+    """Only closed inquiries can be fulfilled."""
     inquiry_id, _, a, _ = _submit_inquiry(client, app, sql)
     _set_hq_stock(sql, a, 10)
     _admin(client, sql)
@@ -148,6 +151,7 @@ def test_only_closed_inquiries_can_be_fulfilled(client, app, sql):
 
 
 def test_inquiries_page_shows_fulfill_with_shortfall(client, app, sql):
+    """Inquiries page shows fulfill with shortfall."""
     inquiry_id, _, a, b = _submit_inquiry(client, app, sql)
     _set_hq_stock(sql, a, 0)
     _set_hq_stock(sql, b, 5)

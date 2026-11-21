@@ -62,6 +62,7 @@ def built_site(app, tmp_path):
 
 @pytest.mark.parametrize("path", ["/packages", "/packages/123"])
 def test_page_urls_serve_the_built_app(client, slug, built_site, path):
+    """Page urls serve the built app."""
     resp = client.get(f"/partner-portal/{slug}{path}")
 
     assert resp.status_code == 200
@@ -70,6 +71,7 @@ def test_page_urls_serve_the_built_app(client, slug, built_site, path):
 
 
 def test_page_url_explains_a_missing_build(client, slug, app, tmp_path):
+    """Page url explains a missing build."""
     original = app.static_folder
     app.static_folder = str(tmp_path)
     try:
@@ -81,14 +83,16 @@ def test_page_url_explains_a_missing_build(client, slug, app, tmp_path):
     assert "npm run build" in resp.get_data(as_text=True)
 
 
-@pytest.mark.parametrize("path", ["/packages", "/packages/1", "/products", "/api/packages", "/api/packages/1", "/api/products"])
+@pytest.mark.parametrize("path", ["/packages", "/packages/1", "/products", "/api/packages", "/api/packages/1"])
 def test_wrong_slug_is_a_plain_404(client, path):
+    """Wrong slug is a plain 404."""
     assert client.get(f"/partner-portal/not-the-slug{path}").status_code == 404
 
 
 # ------------------------------------------------------------ list API
 
 def test_package_list_includes_discounted_totals(client, sql, slug):
+    """Package list includes discounted totals."""
     package_id = make_filled_package(sql, discount_percent="10.00")
 
     resp = client.get(f"/partner-portal/{slug}/api/packages")
@@ -108,6 +112,7 @@ def test_package_list_includes_discounted_totals(client, sql, slug):
 
 
 def test_package_list_scope_filter_keeps_both_scoped_packages(client, sql, slug):
+    """Package list scope filter keeps both scoped packages."""
     distributor = make_filled_package(sql, partner_scope="Distributor")
     reseller = make_filled_package(sql, partner_scope="Reseller")
     both = make_filled_package(sql, partner_scope="Both")
@@ -121,6 +126,7 @@ def test_package_list_scope_filter_keeps_both_scoped_packages(client, sql, slug)
 
 
 def test_package_list_ignores_an_unknown_scope(client, sql, slug):
+    """Package list ignores an unknown scope."""
     body = client.get(f"/partner-portal/{slug}/api/packages?scope=Nonsense").get_json()
     assert body["scope"] == "all"
 
@@ -128,6 +134,7 @@ def test_package_list_ignores_an_unknown_scope(client, sql, slug):
 # ---------------------------------------------------------- detail API
 
 def test_package_detail_lists_items_and_a_csrf_token(client, sql, slug):
+    """Package detail lists items and a csrf token."""
     package_id = make_filled_package(sql, discount_percent="20.00")
 
     resp = client.get(f"/partner-portal/{slug}/api/packages/{package_id}")
@@ -146,6 +153,7 @@ def test_package_detail_lists_items_and_a_csrf_token(client, sql, slug):
 
 
 def test_package_detail_of_an_inactive_package_is_a_json_404(client, sql, slug):
+    """Package detail of an inactive package is a json 404."""
     package_id = make_filled_package(sql)
     cur = sql.cursor()
     cur.execute("UPDATE packages SET is_active = FALSE WHERE package_id = %s", (package_id,))
@@ -160,6 +168,7 @@ def test_package_detail_of_an_inactive_package_is_a_json_404(client, sql, slug):
 # --------------------------------------------------------- inquiry API
 
 def test_inquiry_is_saved_with_a_server_computed_order_amount(client, sql, slug):
+    """Inquiry is saved with a server computed order amount."""
     package_id = make_filled_package(sql, discount_percent="10.00")
     payload = inquiry_payload()
 
@@ -180,6 +189,7 @@ def test_inquiry_is_saved_with_a_server_computed_order_amount(client, sql, slug)
 
 
 def test_inquiry_saves_the_preferred_contact_method(client, sql, slug):
+    """Inquiry saves the preferred contact method."""
     package_id = make_filled_package(sql)
     payload = inquiry_payload(preferred_contact="Viber")
 
@@ -194,6 +204,7 @@ def test_inquiry_saves_the_preferred_contact_method(client, sql, slug):
 
 
 def test_inquiry_rejects_an_unknown_contact_method(client, sql, slug):
+    """Inquiry rejects an unknown contact method."""
     package_id = make_filled_package(sql)
 
     resp = client.post(
@@ -206,6 +217,7 @@ def test_inquiry_rejects_an_unknown_contact_method(client, sql, slug):
 
 
 def test_general_inquiry_is_saved_without_a_package(client, sql, slug):
+    """General inquiry is saved without a package."""
     payload = inquiry_payload(partner_type="Reseller", preferred_contact="SMS")
 
     resp = client.post(f"/partner-portal/{slug}/api/inquire", json=payload)
@@ -224,12 +236,14 @@ def test_general_inquiry_is_saved_without_a_package(client, sql, slug):
 
 
 def test_general_inquiry_validates_like_a_package_inquiry(client, slug):
+    """General inquiry validates like a package inquiry."""
     resp = client.post(f"/partner-portal/{slug}/api/inquire", json=inquiry_payload(email="not-an-email"))
     assert resp.status_code == 400
     assert "error" in resp.get_json()
 
 
 def test_general_inquiry_wrong_slug_is_a_404(client):
+    """General inquiry wrong slug is a 404."""
     resp = client.post("/partner-portal/not-the-slug/api/inquire", json=inquiry_payload())
     assert resp.status_code == 404
 
@@ -237,6 +251,7 @@ def test_general_inquiry_wrong_slug_is_a_404(client):
 # --------------------------------------------------------- site API
 
 def test_site_facts_hide_unset_contact_details(client, app, sql, slug, monkeypatch):
+    """Site facts hide unset contact details."""
     make_filled_package(sql)
     monkeypatch.setitem(app.config, "PORTAL_CONTACT_PHONE", "0917 555 0199")
     monkeypatch.setitem(app.config, "PORTAL_CONTACT_EMAIL", "")
@@ -253,6 +268,7 @@ def test_site_facts_hide_unset_contact_details(client, app, sql, slug, monkeypat
 
 
 def test_inquiry_validation_error_comes_back_as_json(client, sql, slug):
+    """Inquiry validation error comes back as json."""
     package_id = make_filled_package(sql)
 
     resp = client.post(
@@ -265,6 +281,7 @@ def test_inquiry_validation_error_comes_back_as_json(client, sql, slug):
 
 
 def test_inquiry_requires_a_known_partner_type(client, sql, slug):
+    """Inquiry requires a known partner type."""
     package_id = make_filled_package(sql)
 
     resp = client.post(
@@ -277,6 +294,7 @@ def test_inquiry_requires_a_known_partner_type(client, sql, slug):
 
 
 def test_inquiry_rejects_a_non_json_body(client, sql, slug):
+    """Inquiry rejects a non json body."""
     package_id = make_filled_package(sql)
 
     resp = client.post(
@@ -289,70 +307,15 @@ def test_inquiry_rejects_a_non_json_body(client, sql, slug):
 
 
 def test_inquiry_for_an_unavailable_package_is_a_404(client, slug):
+    """Inquiry for an unavailable package is a 404."""
     resp = client.post(f"/partner-portal/{slug}/api/packages/999999/inquire", json=inquiry_payload())
     assert resp.status_code == 404
 
 
-# --------------------------------------------------------- catalog API
-
-def make_named_product(sql, name, variant, unit, image_path=None):
-    sku = f"CAT-{unique_suffix().upper()}"
-    cur = sql.cursor()
-    cur.execute(
-        """INSERT INTO products (sku, item_name, variant, unit, price, image_path)
-           VALUES (%s, %s, %s, %s, %s, %s)""",
-        (sku, name, variant, unit, "100.00", image_path),
-    )
-    sql.commit()
-    cur.close()
-    return sku
-
-
-def test_catalog_groups_sizes_under_one_product(client, sql, slug):
-    name = f"Catalog Scent {unique_suffix()}"
-    make_named_product(sql, name, "Female", "85ML")
-    make_named_product(sql, name, "Female", "10ML", image_path="uploads/products/x.jpg")
-
-    body = client.get(f"/partner-portal/{slug}/api/products?gender=Female&page=1").get_json()
-    pages = [body]
-    while body["page"] < body["pages"]:
-        body = client.get(f"/partner-portal/{slug}/api/products?gender=Female&page={body['page'] + 1}").get_json()
-        pages.append(body)
-    entry = next(p for page in pages for p in page["products"] if p["item_name"] == name)
-
-    assert entry["variant"] == "Female"
-    assert entry["sizes"] == ["10ML", "85ML"]  # smallest first
-    assert entry["image_url"].endswith("/static/uploads/products/x.jpg")
-
-
-def test_catalog_gender_filter_and_counts(client, sql, slug):
-    make_named_product(sql, f"Catalog Male {unique_suffix()}", "Male", "50ML")
-
-    everything = client.get(f"/partner-portal/{slug}/api/products").get_json()
-    men = client.get(f"/partner-portal/{slug}/api/products?gender=Male").get_json()
-
-    assert everything["gender"] == "all"
-    assert everything["counts"]["all"] == sum(everything["counts"][g] for g in ("Male", "Female"))
-    assert men["gender"] == "Male"
-    assert men["total"] == everything["counts"]["Male"]
-    assert all(p["variant"] == "Male" for p in men["products"])
-
-
-def test_catalog_paginates_and_clamps_the_page(client, sql, slug):
-    for _ in range(13):
-        make_named_product(sql, f"Catalog Page {unique_suffix()}", "Male", "50ML")
-
-    first = client.get(f"/partner-portal/{slug}/api/products?gender=Male").get_json()
-    beyond = client.get(f"/partner-portal/{slug}/api/products?gender=Male&page=999").get_json()
-
-    assert first["per_page"] == 12
-    assert len(first["products"]) == 12
-    assert first["pages"] >= 2
-    assert beyond["page"] == beyond["pages"]
-    assert beyond["products"]
-
+# --------------------------------------------------------- catalog page
 
 def test_catalog_page_url_serves_the_app(client, slug, built_site):
+    """Catalog page url serves the app."""
     resp = client.get(f"/partner-portal/{slug}/products")
     assert resp.status_code == 200
     assert "test build" in resp.get_data(as_text=True)
@@ -369,6 +332,7 @@ def _count_inquiries(sql, email):
 
 
 def test_double_submit_saves_one_inquiry_and_returns_the_same_reference(client, sql, slug):
+    """Double submit saves one inquiry and returns the same reference."""
     package_id = make_filled_package(sql)
     payload = inquiry_payload()
     url = f"/partner-portal/{slug}/api/packages/{package_id}/inquire"
@@ -382,6 +346,7 @@ def test_double_submit_saves_one_inquiry_and_returns_the_same_reference(client, 
 
 
 def test_same_email_with_a_different_message_is_a_new_inquiry(client, sql, slug):
+    """Same email with a different message is a new inquiry."""
     payload = inquiry_payload()
 
     client.post(f"/partner-portal/{slug}/api/inquire", json=payload)
@@ -391,6 +356,7 @@ def test_same_email_with_a_different_message_is_a_new_inquiry(client, sql, slug)
 
 
 def test_filled_honeypot_looks_like_success_but_saves_nothing(client, sql, slug):
+    """Filled honeypot looks like success but saves nothing."""
     payload = inquiry_payload(website="http://spam.example")
 
     resp = client.post(f"/partner-portal/{slug}/api/inquire", json=payload)
@@ -399,14 +365,16 @@ def test_filled_honeypot_looks_like_success_but_saves_nothing(client, sql, slug)
     assert _count_inquiries(sql, payload["email"]) == 0
 
 
-def test_package_and_catalog_lists_are_briefly_cacheable_but_site_is_not(client, slug):
-    for path in ("/api/packages", "/api/products"):
+def test_package_list_is_briefly_cacheable_but_site_is_not(client, slug):
+    """Package list is briefly cacheable but site is not."""
+    for path in ("/api/packages",):
         cc = client.get(f"/partner-portal/{slug}{path}").headers["Cache-Control"]
         assert cc.startswith("private") and "max-age=30" in cc
     assert "max-age" not in client.get(f"/partner-portal/{slug}/api/site").headers.get("Cache-Control", "")
 
 
 def test_unsent_inquiry_emails_are_retried(client, sql, app, slug, monkeypatch):
+    """Unsent inquiry emails are retried."""
     import heaven_angel.routes.portal.email_retry as portal
     payload = inquiry_payload()
     client.post(f"/partner-portal/{slug}/api/inquire", json=payload)

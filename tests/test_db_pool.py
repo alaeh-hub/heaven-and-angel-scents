@@ -22,6 +22,7 @@ def _app_ctx(app, wait):
 
 
 def test_checkout_waits_for_a_free_connection(app, monkeypatch):
+    """Checkout waits for a free connection."""
     pool = _FakePool(failures=3)
     monkeypatch.setattr(db, "_get_pool", lambda: pool)
     with _app_ctx(app, 5):
@@ -30,6 +31,7 @@ def test_checkout_waits_for_a_free_connection(app, monkeypatch):
 
 
 def test_checkout_raises_after_deadline(app, monkeypatch):
+    """Checkout raises after deadline."""
     pool = _FakePool(failures=10**9)
     monkeypatch.setattr(db, "_get_pool", lambda: pool)
     with _app_ctx(app, 0.2), pytest.raises(mysql.connector.errors.PoolError):

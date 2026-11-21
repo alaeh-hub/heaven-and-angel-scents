@@ -4,15 +4,9 @@ const MIN_THUMB = 44; // px, so the thumb stays easy to grab on a very long page
 const IDLE_MS = 900; // how long the thumb stays bright after the last scroll
 
 /**
- * A scrollbar drawn by the page, for one scrolling element (the package
- * dialog's body). The browser's own scrollbar is hidden on that element
- * (see `.sheet-scroll`); this one stays in sync with it:
- *   - the thumb's size and place follow the content and the scroll
- *   - drag the thumb, or click the track to jump there
- *   - it brightens while scrolling or hovered and rests quietly otherwise
- * Touch devices keep their normal momentum scrolling; the thumb is then a
- * thin position indicator that ignores touches. The scrolling element
- * itself is untouched, so keyboard, wheel and screen readers work as before.
+ * Page-drawn scrollbar synced to one scrolling element (the package
+ * dialog body, native bar hidden via `.sheet-scroll`). Thumb drags, track
+ * click jumps; on touch it is a passive indicator.
  */
 export default function CustomScrollbar({ target }) {
   const trackRef = useRef(null);
@@ -43,8 +37,7 @@ export default function CustomScrollbar({ target }) {
     idle.current = window.setTimeout(() => setAwake(false), IDLE_MS);
   }, []);
 
-  // Follow the element: its scroll, its own size, and its content's size
-  // (the package loads after the sheet opens, so the height changes).
+    // Follow scroll, element size and content size (content loads late).
   useEffect(() => {
     const el = target.current;
     if (!el) return undefined;
@@ -54,8 +47,7 @@ export default function CustomScrollbar({ target }) {
     const ro = new ResizeObserver(measure);
     ro.observe(el);
     if (el.firstElementChild) ro.observe(el.firstElementChild);
-    // A child that replaces the first one (a different package opened
-    // from inside the sheet) is picked up here.
+    // Pick up a replaced first child (another package opened in the sheet).
     const mo = new MutationObserver(() => {
       if (el.firstElementChild) ro.observe(el.firstElementChild);
       measure();

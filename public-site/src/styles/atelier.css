@@ -1,9 +1,6 @@
-/* Atelier: the editorial layer over the landing page.
-   Direction: a fragrance house's printed lookbook rather than a product
-   page. Instrument Serif for display type, Geist for everything read,
-   numbered chapters, hairline structure instead of soft cards, a bento
-   package grid, one gold accent. Loaded last, so it wins over
-   landing.css where the two disagree. */
+/* Atelier: the editorial layer over the landing page (printed-lookbook look:
+   Instrument Serif display, Geist text, numbered chapters, hairlines, bento
+   package grid, one gold accent). Loaded last, so it wins over landing.css. */
 
 @import '@fontsource/instrument-serif/400.css';
 @import '@fontsource/instrument-serif/400-italic.css';
@@ -191,10 +188,7 @@
 .earn-row dd { font-variant-numeric: tabular-nums; flex: none; white-space: nowrap; }
 .earn-row dt { flex: 1 1 auto; min-width: 0; }
 .earn-profit dd { font-family: var(--font-display); font-weight: 400; font-size: clamp(48px, 6vw, 96px); line-height: 1; letter-spacing: -0.02em; color: var(--gold-ink); }
-/* The profit figure changes width as the slider moves. As a wrapping row it
-   dropped under its label whenever it got wide and jumped back when it
-   shrank, resizing the whole panel (and shifting the slider) mid-drag. Stacked
-   and non-wrapping, the panel's height no longer depends on the number. */
+/* Profit figure width changes with the slider; stacked, non-wrapping so the panel height does not jump. */
 .earn-row.earn-profit { flex-direction: column; flex-wrap: nowrap; align-items: flex-start; gap: 10px; }
 .earn-profit dd { min-height: 1em; max-width: 100%; }
 .earn-note { min-height: 3em; }
@@ -348,9 +342,7 @@
   .hero-title { font-size: clamp(42px, 12vw, 64px); }
 }
 
-/* Step numerals: SVG text, outline only. Round joins keep the serifs and
-   curves smooth where a CSS text-stroke would spike. Width is explicit
-   (the viewBox ratio) so no browser has to guess it. */
+/* Step numerals: outline SVG text (round joins stay smooth); explicit width from the viewBox ratio. */
 .step-n {
   display: block;
   height: clamp(100px, 11vw, 150px);
@@ -387,9 +379,7 @@
 .house > .section { border-top: 0; }
 
 /* ======================================== section shades
-   Sections alternate between two blacks so each one reads as its own
-   room. The hero (pure black stage) and the collection (its dot grid)
-   keep their own grounds. */
+   Sections alternate between two blacks; hero and collection keep their own. */
 :root { --shade-a: #101012; --shade-b: #050506; }
 
 .hero-pin::after { background: linear-gradient(var(--stage), var(--shade-a)); }
@@ -404,10 +394,7 @@
 .footer-cover, .closing { background: var(--shade-a); }
 .footer { background: var(--shade-b); }
 
-/* The hero's lower edge: as the pinned stage unpins, its bottom edge rose
-   toward the bottles as a hard line (an opaque black band under the gold
-   glow, cutting the reflections). It is now a fade from clear to the next
-   section's black, over the stage, so nothing has an edge to see. */
+/* Hero lower edge: a fade from clear to the next section's black over the stage, so no hard line shows. */
 .hero-pin::after {
   z-index: 4;
   height: clamp(180px, 26svh, 260px);
@@ -423,9 +410,7 @@
 }
 
 /* ===================================================== phone type scale
-   The serif display sizes above are tuned for desktop; on a phone they
-   read too large. Everything here is smaller, in the same proportions,
-   and loaded last so it replaces the earlier phone sizes. */
+   Smaller serif display sizes on phones, same proportions; loaded last. */
 @media (max-width: 600px) {
   .hero-title { font-size: clamp(30px, 8.6vw, 38px); line-height: 1; }
   .chapter-title { font-size: clamp(30px, 8.2vw, 38px); }
@@ -478,9 +463,7 @@
   .cursor-card-title { font-size: 22px; }
 }
 
-/* Phones: the collection buttons sit inside a chapter column whose items
-   hug their content, so "For him" and "For her" were squeezed. They go
-   back to the full-width layout landing.css intends. */
+/* Phones: collection buttons go back to the full-width layout landing.css intends. */
 @media (max-width: 640px) {
   .chapter-side .collection-ctas { justify-self: stretch; width: 100%; display: grid; gap: 10px; align-items: stretch; }
   .collection-ctas .btn { width: 100%; }
@@ -615,9 +598,7 @@
 }
 
 /* ===================================================== catalog page
-   "View all products": the same house look as the landing page. A
-   chapter header, a hairline grid of tiles (no floating cards), and the
-   brand's own renders (gift box behind the bottle) on a gold-lit stage. */
+   "View all products": chapter header, hairline tile grid, renders on a gold-lit stage. */
 
 .catalog { background: var(--shade-b); padding: clamp(48px, 7vw, 96px) 0 clamp(80px, 10vw, 140px); }
 .catalog .chapter { margin-bottom: clamp(24px, 4vw, 44px); }
@@ -725,9 +706,7 @@
 }
 
 /* ========================================================= performance
-   The marquees fade at their edges with a mask instead of a stack of
-   backdrop-filter blur layers (sixteen of them were re-blurred every
-   frame over moving content). */
+   Marquee edges fade with a mask, not stacked backdrop-filter blurs (re-blurred every frame). */
 .scent-rail .logo-slider__container,
 .word-rail .logo-slider__container {
   -webkit-mask-image: linear-gradient(90deg, transparent, var(--black) 12%, var(--black) 88%, transparent);
@@ -735,8 +714,7 @@
 }
 
 /* ======================== catalog: the home collection's own tiles
-   The catalog shows the same tiles as the home page collection (bottle
-   alone, box slides out on hover), filling grid cells instead of a row. */
+   Same tiles as the home collection, filling grid cells instead of a row. */
 .catalog-grid { gap: clamp(14px, 2vw, 24px); border-radius: 0; overflow: visible; }
 .catalog-item { display: grid; gap: 6px; align-content: start; }
 .catalog-tile { --tile-w: 100%; }
@@ -744,23 +722,17 @@
 .catalog-item .product-card-ask { margin: 0; padding: 0 2px; min-height: 40px; }
 @media (hover: none) { .catalog-tile { --tile-w: 100%; } }
 
-/* Same hover as the home loop, but the grid's tiles are narrower, so the label
-   (code, name, size, about 70px) needs its own strip: a taller tile, and the
-   shot sized to what is left above it, so the code never touches the box. */
+/* Same hover as the home loop; narrower tiles need a taller tile and smaller shot so the label never touches the box. */
 .catalog-tile .bottle-tile { aspect-ratio: 4 / 5.5; }
 .catalog-tile .scent-frame { top: 14px; height: calc(100% - 104px); }
 
 /* ------------------------------------------------ phones: hero + shelf
-   The hero's bottom fade (z-index 4) was painted over the buttons where
-   the copy sits at the foot of a stacked hero; the copy goes above it. */
+   Copy goes above the hero's bottom fade (z-index 4), which covered the buttons. */
 @media (max-width: 900px) {
   .hero-copy-wrap { z-index: 5; }
 }
 
-/* Tapping a shelf tile on a touch screen: only compositor-friendly
-   properties (transform, opacity) animate, and a little quicker. The
-   outer box-shadow, the blurred floor and the 0.85 s eases made every
-   tap repaint a big area for most of a second. */
+/* Shelf tap on touch: only transform and opacity animate, a little quicker (shadow/blur eases repainted a big area). */
 @media (hover: none) {
   .bottle-tile { transition: border-color 0.3s ease; }
   .bottle-tile[data-open] { box-shadow: none; }
@@ -789,9 +761,7 @@
    stacking context so nothing else on the page can intercept its clicks. */
 .footer-zone { position: relative; isolation: isolate; }
 
-/* Phones: a headline that wraps onto several lines needs room between
-   its lines (the flip-text wrapper forces line-height 1, which let the
-   lines and the lede touch), and some air before the lede. */
+/* Phones: multi-line headlines need line spacing (flip-text forces line-height 1) and air before the lede. */
 @media (max-width: 860px) {
   .chapter-title .flip-text-wrapper { line-height: 1.14; }
   .chapter-body { gap: 22px; }

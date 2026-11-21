@@ -1,4 +1,5 @@
-{% extends "base.html" %}
+{% extends "base.html" %}
+{# Scan a receipt #}
 {% block title %}Scan Receipt{% endblock %}
 {% block eyebrow %}{{ 'Organization' if session.role == 'Admin' else session.branch_name }}{% endblock %}
 {% block heading %}Scan Receipt{% endblock %}

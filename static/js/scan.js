@@ -37,10 +37,7 @@
         return !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
     }
 
-    // Fully releases the camera (stops every track, so the browser/OS
-    // camera-in-use indicator turns off too) rather than just pausing
-    // frame scanning — that's what the on/off button now does; see
-    // toggleBtn's click handler below.
+    // Fully releases the camera (stops every track, so the OS in-use indicator turns off).
     function stopCamera() {
         if (rafId) {
             cancelAnimationFrame(rafId);
@@ -192,9 +189,7 @@
 
     // ---- Shared verify call + result rendering ----
     function verifyCode(code) {
-        // getCsrfToken() is main.js's shared helper (reads the same
-        // meta[name="csrf-token"] tag base.html renders) — main.js loads
-        // before this script, see base.html's script order.
+        // getCsrfToken() is the shared helper from core.js (loaded before this script).
         fetch("/scan/verify", {
             method: "POST",
             headers: {
@@ -235,9 +230,7 @@
 
     function popResult(ok) {
         resultCard.classList.remove("scan-pop-ok", "scan-pop-bad");
-        // Force a reflow so re-adding the class restarts the CSS
-        // animation even when the card was already open from a
-        // previous scan (back-to-back camera hits, for example).
+        // Force a reflow so re-adding the class restarts the CSS animation (back-to-back scans).
         void resultCard.offsetWidth;
         resultCard.classList.add(ok ? "scan-pop-ok" : "scan-pop-bad");
     }
@@ -412,10 +405,7 @@
     }
 
     // ---- Lifecycle ----
-    // The camera no longer starts on page load (see below) — it only
-    // ever turns on when the person taps "Start camera". So on tab
-    // refocus, only resume it if it was actually left on before the tab
-    // was hidden; a fresh/never-started page should stay off.
+    // On tab refocus, resume the camera only if it was on before the tab was hidden.
     var wasOnBeforeHidden = false;
     document.addEventListener("visibilitychange", function () {
         if (document.hidden) {
@@ -426,7 +416,6 @@
         }
     });
 
-    // Deliberately no startCamera() call here — the camera stays off
-    // until the person explicitly presses "Start camera" above.
+    // No startCamera() here: the camera stays off until "Start camera" is pressed.
     stopCamera();
 })();

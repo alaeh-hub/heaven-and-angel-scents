@@ -1,10 +1,7 @@
-"""scripts/demo_data.py: its built-in tables must stay in step with what schema.sql seeds.
+"""scripts/demo_data.py's built-in tables must stay in step with schema.sql seeds.
 
-The script itself needs an empty, freshly seeded database (it refuses to run on
-one that already holds records), so the test session's shared database, full of
-other tests' rows, can't run it end to end. These checks catch the ways it
-quietly goes stale: a material renamed or added in schema.sql, or a price story
-that no longer adds up to the whole amount bought.
+The script needs an empty database, so it cannot run end to end here. These
+checks catch a renamed/added material or a price story that no longer sums up.
 """
 import importlib.util
 import re
@@ -30,6 +27,7 @@ def _seeded_material_names():
 
 
 def test_every_seeded_material_has_a_price_story_and_margin():
+    """Every seeded material has a price story and margin."""
     script = _load_script()
     names = _seeded_material_names()
     assert len(names) == 8
@@ -39,6 +37,7 @@ def test_every_seeded_material_has_a_price_story_and_margin():
 
 
 def test_price_stories_add_up_to_everything_bought():
+    """Price stories add up to everything bought."""
     script = _load_script()
     for name, story in script.PRICE_STORY.items():
         assert sum(Decimal(str(share)) for _days, share, _mult in story) == Decimal("1"), name

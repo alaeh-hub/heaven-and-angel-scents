@@ -24,13 +24,9 @@ const GAP = 18; // distance between the pointer and the card
 const EDGE = 12; // never closer than this to the window edge
 
 /**
- * A link with a preview card that follows the pointer.
- *
- * The card stays inside the window: it flips to the left of the pointer
- * near the right edge and above it near the bottom, using its measured
- * size. The link itself is not draggable (a drag across it used to pick
- * up the link and leave the card stranded), the card follows the pointer
- * on a soft spring, and on devices without hover nothing is shown.
+ * Link with a preview card that follows the pointer on a soft spring.
+ * The card flips to stay inside the window; the link is not draggable;
+ * nothing shows without hover.
  */
 export function CursorCard({ children, image, imageCentre = 0.5, title, description, hint, href = "#", className }: CursorCardProps) {
   const [isHovered, setIsHovered] = useState(false);

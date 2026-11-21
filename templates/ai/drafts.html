@@ -1,4 +1,5 @@
-{% extends "base.html" %}
+{% extends "base.html" %}
+{# Halo drafts to review (admin) #}
 {% import "_empty.html" as empty %}
 {% block title %}AI Drafts{% endblock %}
 {% block eyebrow %}{{ 'Organization' if session.role == 'Admin' else session.branch_name }}{% endblock %}
@@ -250,9 +251,7 @@
               <span class="text-faint dr-none">No action</span>
               {% endif %}
             </td>
-            <!-- Mobile-only — see .mobile-toggle-row/.row-toggle-btn in
-                 style.css. Hidden on desktop, where every cell above is
-                 already visible in the real table row. -->
+            {# Mobile-only: .row-toggle-btn expands the cells hidden in the card layout. #}
             <td data-label="" class="mobile-toggle-row">
               <button type="button" class="row-toggle-btn" aria-expanded="false">
                 <span>Details</span>

@@ -1,6 +1,4 @@
-"""Material purchase and price history: what each purchase cost per unit, and how the
-blended cost per unit moved. Shared by the Materials page's price trends chart,
-the Material Price Changes report and the AI assistant, so all three agree."""
+"""Material purchase and price history, shared by the Materials chart, report and AI."""
 from heaven_angel.db import query
 
 

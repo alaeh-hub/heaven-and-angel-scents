@@ -13,17 +13,8 @@ from heaven_angel.routes.admin._common import HQ_BRANCH_ID, bp
 
 
 # ---------------------------------------------------------------- partner inquiries
-# History of every inquiry a distributor/reseller has submitted through
-# the public partner portal (see routes/portal.py + partner_inquiries in
-# schema.sql). This is the "Partner Inquiries" page referenced in
-# portal.py's module docstring — read-only except for two admin-only
-# fields layered on top of the permanent record: `status`, a triage
-# pipeline an admin can move through while following up, and `remarks`,
-# a free-text internal note (e.g. "on hold, still deciding" or "follow
-# up next week") that's independent of status and never shown to the
-# partner. Nothing about what was actually *submitted* is ever edited;
-# see the note on partner_inquiries in schema.sql for why — it's a
-# permanent record.
+# Partner inquiries from the public portal (see routes/portal). Read-only except two
+# admin fields: `status` (triage) and `remarks` (internal note). Submissions are never edited.
 INQUIRY_STATUSES = ("New", "Contacted", "Follow-up",
                     "On Hold", "Closed", "Declined")
 
@@ -40,19 +31,13 @@ def partner_inquiries():
     sql += " ORDER BY created_at DESC LIMIT 300"
     inquiries = query(sql, params)
 
-    # Each inquiry's snapshotted package contents next to what HQ has on
-    # hand right now — what the Fulfill dialog shows (and what still needs
-    # producing before a Closed order can ship).
+    # Each inquiry's package items next to HQ stock now (for the Fulfill dialog).
     items_by_inquiry = _inquiry_items_with_stock([i["inquiry_id"] for i in inquiries])
     for inq in inquiries:
         inq["items"] = items_by_inquiry.get(inq["inquiry_id"], [])
         inq["short_count"] = sum(1 for it in inq["items"] if it["short"] > 0)
 
-    # in_progress_count groups Follow-up and On Hold together for the
-    # stat tile — both mean "not new, not decided yet", just for a
-    # different reason (needs a nudge vs. the partner asked to wait).
-    # declined_count doesn't get its own tile; it's called out in the
-    # Closed tile's footer instead so the row of tiles stays at four.
+    # in_progress groups Follow-up and On Hold for one tile; declined shows in the Closed footer.
     counts = query(
         """SELECT
                COUNT(*) AS total_count,
@@ -79,6 +64,7 @@ def partner_inquiries():
     )
 
 
+# POST: move an inquiry through the triage statuses.
 @bp.route("/partners/inquiries/<int:inquiry_id>/status", methods=["POST"])
 @admin_required
 def update_inquiry_status(inquiry_id):
@@ -95,9 +81,7 @@ def update_inquiry_status(inquiry_id):
         with transaction() as conn:
             cur = conn.cursor(dictionary=True)
             try:
-                # Serialize status changes with fulfillment and other
-                # status changes. The fulfilled check must use this locked
-                # row, or two requests can both return the same stock.
+                # Lock the row so status changes and fulfillment can't both return stock.
                 cur.execute(
                     """SELECT company_name, fulfilled_at FROM partner_inquiries
                        WHERE inquiry_id = %s FOR UPDATE""",
@@ -150,9 +134,7 @@ def update_inquiry_status(inquiry_id):
 
 
 def _inquiry_items_with_stock(inquiry_ids):
-    """{inquiry_id: [item, ...]} — each inquiry's snapshotted package
-    contents (partner_inquiry_items) with HQ's current stock and how many
-    are still short (need - on hand, never below 0)."""
+    """{inquiry_id: [item, ...]} with HQ stock and the shortfall (never below 0)."""
     if not inquiry_ids:
         return {}
     placeholders = ",".join(["%s"] * len(inquiry_ids))
@@ -174,8 +156,7 @@ def _inquiry_items_with_stock(inquiry_ids):
 
 
 def _return_inquiry_stock(cur, inquiry_id, company_name):
-    """Put a fulfilled inquiry's items back into HQ stock (PACKAGE_RETURN).
-    Runs inside the caller's transaction, on its cursor."""
+    """Put a fulfilled inquiry's items back in HQ stock (PACKAGE_RETURN); caller's transaction."""
     cur.execute(
         "SELECT sku, qty FROM partner_inquiry_items WHERE inquiry_id = %s", (inquiry_id,))
     for item in cur.fetchall():
@@ -203,10 +184,7 @@ def _return_inquiry_stock(cur, inquiry_id, company_name):
 @bp.route("/partners/inquiries/<int:inquiry_id>/fulfill", methods=["POST"])
 @admin_required
 def fulfill_inquiry(inquiry_id):
-    """Ship a Closed package order: take its snapshotted items out of HQ
-    stock (PACKAGE_ORDER). Order -> produce -> fulfill — blocked, with
-    the exact shortfall per item, until Production has made enough, so
-    HQ stock never goes negative."""
+    """Ship a Closed order: take its items from HQ stock (PACKAGE_ORDER), or list shortfalls."""
     return_status = request.form.get("return_status", "all")
     back = redirect(url_for("admin.partner_inquiries", status=return_status))
     try:
@@ -230,8 +208,7 @@ def fulfill_inquiry(inquiry_id):
             if not items:
                 raise TransactionAborted("This inquiry has no package items to fulfill.")
 
-            # Lock and check every line first, so the message lists every
-            # shortfall at once instead of one per attempt.
+            # Lock and check every line first so the message lists all shortfalls.
             stock, short = {}, []
             for item in items:
                 cur.execute(
@@ -291,14 +268,7 @@ def fulfill_inquiry(inquiry_id):
 @bp.route("/partners/inquiries/<int:inquiry_id>/remarks", methods=["POST"])
 @admin_required
 def update_inquiry_remarks(inquiry_id):
-    """Save (or clear) an admin's internal note on one inquiry.
-
-    Independent of `status` — a note like "on hold, still comparing
-    packages" can sit alongside any status and gets edited in place
-    (no history of past remarks is kept, unlike the inquiry's own
-    submitted fields). Never shown to the partner; this only ever
-    appears inside the signed-in admin app.
-    """
+    """Save or clear the admin's internal note on an inquiry (never shown to the partner)."""
     return_status = request.form.get("return_status", "all")
     remarks = request.form.get("remarks", "").strip()
 

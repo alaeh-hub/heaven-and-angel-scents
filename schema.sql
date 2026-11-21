@@ -28,9 +28,7 @@ CREATE TABLE IF NOT EXISTS users (
     role                 ENUM('Admin', 'Branch') NOT NULL,
     branch_id            INT NULL,                -- NULL for Admin, set for Branch users
     is_active            BOOLEAN NOT NULL DEFAULT TRUE,
-    -- Forces a password change on next login. Set TRUE for freshly
-    -- seeded/reset accounts so a known temp/starter password can't
-    -- linger indefinitely.
+    -- Forces a password change at next login (temp passwords).
     must_change_password BOOLEAN NOT NULL DEFAULT FALSE,
     created_at            TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (branch_id) REFERENCES branches(branch_id) ON DELETE SET NULL
@@ -38,28 +36,8 @@ CREATE TABLE IF NOT EXISTS users (
 
 -- ----------------------------------------------------------------------------
 -- 3. Master Products Catalog
---
---    `price` is now the ONLY price the catalog carries — the single HQ /
---    original price for the item. There is no per-branch price override
---    anymore (see branch_inventory below): every branch sells at this
---    price by default, but the actual amount charged is captured per
---    transaction on the `sales` row itself (see section 7), because in
---    practice branches don't always charge exactly this — a bit of
---    negotiation, a loyal customer discount, etc. `price` stays as the
---    reference/"should be" price shown everywhere in the app; it is not
---    recalculated from sales.
---
---    `unit` is the packaging size for this specific SKU (e.g. two
---    different bottle sizes of the same scent are two different rows/
---    SKUs, each with its own `unit`).
---
---    `category` splits the catalog in two: a 'Bottled' product is a
---    fixed size (unit is one of utils.BOTTLE_UNITS) priced/costed off a
---    shared formula (see unit_formula_items below). A 'Bulk/Refill'
---    product's unit is always 'BULK' — it has no fixed size or formula;
---    it's produced and sold at whatever custom mL amount is typed in on
---    Production/Record Sale, at the single shared rate on
---    bulk_rate_settings.rate_per_ml (see that table's own comment).
+-- price is the HQ reference price; the amount charged is stored on sales.
+-- Bottled = fixed sizes; Bulk/Refill = custom mL at bulk_rate_settings.
 -- ----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS products (
     sku         VARCHAR(50) PRIMARY KEY,
@@ -68,27 +46,15 @@ CREATE TABLE IF NOT EXISTS products (
     category    ENUM('Bottled', 'Bulk/Refill') NOT NULL DEFAULT 'Bottled',
     unit        ENUM('85ML', '50ML', '10ML', '3ML', 'BULK') NOT NULL DEFAULT '50ML',
     price       DECIMAL(10, 2) NOT NULL DEFAULT 0.00,
-    -- Path to the uploaded product photo, relative to the Flask app's
-    -- static folder (e.g. 'uploads/products/<uuid>.jpg'), so it can be
-    -- rendered anywhere with url_for('static', filename=image_path).
-    -- NULL means no image has been uploaded for this SKU yet.
+    -- Photo path relative to static/; NULL = no image yet.
     image_path  VARCHAR(255) NULL,
     created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    -- No is_active column anymore: products are edited in place from the
-    -- admin Products page rather than discontinued/reactivated. See the
-    -- migration block below for the DROP COLUMN that removes it from an
-    -- existing database.
+    -- No is_active: products are edited in place (see migration block).
     CHECK (price >= 0)
 );
 
 -- ----------------------------------------------------------------------------
 -- 3a. Suppliers
---
---    Vendors raw materials are purchased from. Kept separate from
---    raw_materials (rather than a free-text field on it) so the same
---    supplier can be reused across many materials and edited in one
---    place. supplier_id on raw_materials is nullable — a material
---    doesn't have to have a supplier on record yet.
 -- ----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS suppliers (
     supplier_id     INT AUTO_INCREMENT PRIMARY KEY,
@@ -103,51 +69,17 @@ CREATE TABLE IF NOT EXISTS suppliers (
 
 -- ----------------------------------------------------------------------------
 -- 3b. Raw Materials
---
---    Tracked the way it's actually purchased (package_qty of `unit` for
---    package_cost), with cost_per_unit worked out from that at insert
---    time. No is_active column: materials are edited in place from the
---    admin Materials page rather than deactivated/reactivated. See the
---    migration block below for the DROP COLUMN that removes it from an
---    existing database.
---
---    package_cost is the figure "money spent buying raw materials" is
---    computed from — see routes/admin.py's materials()/dashboard()/
---    reports_data(), which do SUM(package_cost) over this table for the
---    "Raw materials bought" figure. This is now a *comparison* figure
---    only, shown alongside "Total Capital" — it no longer feeds capital/
---    profit itself; see cogs_logs above for where that comes from
---    instead (a batch's cost, computed from unit_formula_items ×
---    cost_per_unit at the moment usage is logged, not from anything on
---    this table). This whole table is purely a purchase log now — adding
---    or editing a row records what was bought and for how much, nothing
---    more; it has no stock/on-hand quantity and formula usage never
---    writes back to it (see material_usage_logs and cogs_logs below —
---    both read cost_per_unit from here but never deduct from it).
---
---    supplier_id is nullable — a material can exist before its supplier
---    is on record — and set to NULL (not cascaded) if its supplier is
---    ever removed, so a material never disappears because of that.
+-- Purchase log: cost_per_unit is worked out from package_cost / package_qty.
 -- ----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS raw_materials (
     material_id    INT AUTO_INCREMENT PRIMARY KEY,
     material_name  VARCHAR(100) NOT NULL UNIQUE,
     unit           ENUM('Gram', 'Milliliter', 'Liter', 'Gallon', 'Piece') NOT NULL DEFAULT 'Piece',
-    -- purchase_mode is purely how the purchase is described on the Materials
-    -- page ("Package (bulk)" vs "Individual unit") — it no longer implies
-    -- package_qty = 1. Buying 5 pieces one at a time (not as a bulk deal)
-    -- is Individual with package_qty = 5; buying a 140g bulk bag is Package.
-    -- Before this column existed, "Individual" was inferred purely from
-    -- package_qty == 1, which made it impossible to record "5 individually
-    -- purchased pieces" — see migration 19 below for the backfill that
-    -- preserves that old inference for existing rows.
+    -- How the purchase is described (Package vs Individual); does not imply package_qty = 1.
     purchase_mode  ENUM('Package', 'Individual') NOT NULL DEFAULT 'Package',
     package_qty    DECIMAL(10, 3) NOT NULL DEFAULT 1.000,
     package_cost   DECIMAL(10, 2) NOT NULL DEFAULT 0.00,
-    -- Receipt / OR number for this purchase, so a material row can be
-    -- traced back to the physical receipt it came from. Free text (some
-    -- receipts are numeric, some are alphanumeric) and optional — older
-    -- purchases logged before this existed won't have one on file.
+    -- Optional receipt number for tracing the purchase.
     receipt_number VARCHAR(60) NULL,
     cost_per_unit  DECIMAL(10, 4) NOT NULL DEFAULT 0.0000,
     supplier_id    INT NULL,
@@ -159,10 +91,6 @@ CREATE TABLE IF NOT EXISTS raw_materials (
 
 -- ----------------------------------------------------------------------------
 -- 4. Branch Inventory Levels
---
---    No per-branch price column anymore — every branch (including HQ's
---    own warehouse, branch_id=1) sells at products.price. Only stock
---    levels and reorder thresholds are branch-specific now.
 -- ----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS branch_inventory (
     inventory_id   INT AUTO_INCREMENT PRIMARY KEY,
@@ -192,48 +120,8 @@ CREATE TABLE IF NOT EXISTS production_logs (
 );
 
 -- ----------------------------------------------------------------------------
--- 5a. Unit Formulas (Packaging Cost Reference) — the recipe of packaging
---     materials (bottle, cap, sprayer, label, box, ...) that go into
---     producing ONE unit of a given PACKAGING SIZE (see
---     utils.PRODUCT_UNITS — the same fixed list as products.unit).
---
---     Deliberately keyed by `unit`, not by sku: every product of the same
---     packaging size (e.g. every 85ML scent) shares one formula — there's
---     no separate recipe per scent/variant, only per size. One row per
---     material in a unit's formula — there's no separate header table
---     since a unit has at most one formula, and its full set of rows
---     here IS that formula, the same "the rows themselves are the
---     record" shape stock_request_items uses for its own header.
---
---     qty_per_unit is how much of `material_id` (in raw_materials.unit)
---     goes into producing exactly ONE bottle/piece of this packaging
---     size — e.g. 2.5 grams of Fixative per 85ML bottle — hand-entered on
---     the Formulas page (see add_formula_item() in routes/admin.py).
---
---     line_cost IS computed — qty_per_unit × raw_materials.cost_per_unit
---     at the moment the line is saved — but is also re-derived LIVE from
---     the material's current cost_per_unit every time it's displayed
---     (formulas()/bulk_batches() in routes/admin.py), rather than trusted
---     from this column, so editing a material's cost is reflected
---     immediately instead of only on the next save. This whole table is
---     deliberately a REFERENCE figure only, not a source of truth for
---     cost of goods: production() still charges whatever flat number is
---     hand-typed on unit_cogs_settings for a Bottled run's actual
---     cogs_per_unit, completely unaffected by this table. What this table
---     answers is "what would one 85ML bottle's packaging cost right now,
---     materials-wise" — the admin decides separately whether/when to
---     update unit_cogs_settings to match. Added to a bulk batch's own
---     cost_per_ml × that size's mL (the liquid share), it also gives a
---     reference "all-in cost per bottle" on the Bulk Batches page, where
---     a specific batch's real cost_per_ml is known (see bulk_batches()).
---
---     qty_per_unit carries no upper bound tied to raw_materials — that
---     table is just a purchase log now (see its own comment above), with
---     nothing on it to check a recipe amount against.
---
---     BULK (the Bulk/Refill category's packaging size — see products'
---     own comment above) never appears here: it has no fixed-size
---     formula, only bulk_rate_settings.rate_per_ml.
+-- 5a. Unit Formulas (Packaging Cost Reference): packaging recipe per size
+-- One shared recipe per packaging size (not per scent); BULK has none.
 -- ----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS unit_formula_items (
     formula_item_id INT AUTO_INCREMENT PRIMARY KEY,
@@ -251,18 +139,7 @@ CREATE TABLE IF NOT EXISTS unit_formula_items (
 );
 
 -- ----------------------------------------------------------------------------
--- 5a-bis. Bulk Rate Settings — the single shared ₱-per-mL rate every
---     Bulk/Refill-category product (see products' own comment above) is
---     produced and sold at, in place of a formula. One row, always
---     id = 1 — there's no per-product or per-scent rate, just the one
---     figure set on the Formulas page (see admin.py's save_bulk_rate()).
---
---     Production reads it only as a starting suggestion (rate_per_ml is
---     still freely retyped per batch there, since material costs
---     fluctuate) and freezes whatever was actually typed into that
---     batch's cogs_logs row, same as a bottled formula's cost per unit.
---     Record Sale reads it live and uses it as-is — a Bulk/Refill sale's
---     price per mL is never retyped by hand.
+-- 5a-bis. Bulk Rate Settings: the one shared per-mL rate for Bulk/Refill (row id = 1)
 -- ----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS bulk_rate_settings (
     id            TINYINT PRIMARY KEY DEFAULT 1,
@@ -276,34 +153,7 @@ INSERT IGNORE INTO bulk_rate_settings (id, rate_per_ml) VALUES (1, 0.0000);
 
 -- ----------------------------------------------------------------------------
 -- 5b. Cost of Goods (COGS) Logs — one row per "Log material usage" batch
---
---     Log material usage no longer picks raw materials one at a time —
---     it now runs off the formula for the SKU's packaging size (see
---     unit_formula_items above): pick a SKU (its `unit` decides which
---     formula applies), say how many units were produced, and this
---     table records the result. Each formula line still gets its own
---     material_usage_logs row (see that table's cogs_log_id column
---     below) as a per-ingredient audit trail of what the batch was
---     costed from — but nothing on raw_materials is touched by this;
---     that table is purchase-only (see its own comment above).
---
---     cogs_per_unit is that unit's total cost per unit AT THE MOMENT
---     this batch was logged (plain SUM of line_cost across every
---     unit_formula_items row for that unit — hand-entered on the
---     Formulas page, see that table's own comment; no multiplication
---     involved) — frozen here the same "snapshot, don't recompute later" way
---     stock_request_items.unit_price is, so a later material price
---     change never rewrites the value of a past batch. total_cogs =
---     cogs_per_unit × qty_produced, rounded to centavos — this is the
---     figure the business calls "capital" now (see routes/admin.py's
---     dashboard()/reports_data(), which sum this column instead of
---     raw_materials.package_cost).
---
---     This is deliberately separate from what's spent buying raw
---     material packages (raw_materials.package_cost) — that figure is
---     still tracked and still shown (dashboard's "Raw materials bought"
---     tile) purely so it can be compared against this one, not because
---     it still feeds into capital/profit.
+-- cogs_per_unit is frozen at log time, so later price changes never rewrite it.
 -- ----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS cogs_logs (
     cogs_log_id         BIGINT AUTO_INCREMENT PRIMARY KEY,
@@ -326,24 +176,6 @@ CREATE TABLE IF NOT EXISTS cogs_logs (
 
 -- ----------------------------------------------------------------------------
 -- 5c. Material Usage Logs
---
---    A plain quantity log at the per-material level — no cost of its
---    own (see raw_materials above for why: money spent on materials is
---    tracked purely at purchase time, SUM(package_cost), a separate
---    figure from what usage actually costs). Logging usage inserts one
---    row per formula ingredient purely as an audit trail of what a
---    cogs_logs batch was costed from — it does NOT touch
---    raw_materials in any way; that table has no stock/on-hand quantity
---    to move (see its own comment above). production_log_id is optional
---    — usage doesn't have to be tied to a specific run. See the
---    migration block below for the DROP COLUMN that removes
---    unit_cost_snapshot/line_cost from an existing database.
---
---    cogs_log_id links this row back to the cogs_logs batch it was
---    written as part of (see cogs_logs above) — nullable and ON DELETE
---    SET NULL, same "kept for traceability" pattern as
---    production_log_id, so this row's own qty_used/stock-deduction
---    history survives even if its batch header is ever removed.
 -- ----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS material_usage_logs (
     usage_id            INT AUTO_INCREMENT PRIMARY KEY,
@@ -366,20 +198,7 @@ CREATE TABLE IF NOT EXISTS material_usage_logs (
 
 -- ----------------------------------------------------------------------------
 -- 6. Stock Requests (Requisitions) — delivery header
---
---    A stock request now represents one delivery from HQ to a branch,
---    which can carry any number of different products. The line-item
---    detail (which SKUs, how many, at what price) lives in
---    stock_request_items below; this table is just the header — who
---    requested it, its delivery number, and its overall status.
---
---    delivery_number is the human-facing identifier shown throughout the
---    app instead of listing every item inline (e.g. on the Stock
---    Requests and Inventory Log pages) — the full item breakdown is
---    always one click away on the goods-received receipt (see
---    receipts.py). It's generated right after insert as
---    DR-<request_id zero-padded to 6 digits>, mirroring the existing
---    GR-<request_id> receipt numbering already used by receipts.py.
+-- delivery_number is DR-<request_id padded to 6 digits>.
 -- ----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS stock_requests (
     request_id      INT AUTO_INCREMENT PRIMARY KEY,
@@ -393,13 +212,7 @@ CREATE TABLE IF NOT EXISTS stock_requests (
 
 -- ----------------------------------------------------------------------------
 -- 6b. Stock Request Items — one row per product on a delivery
---
---     unit_price is snapshotted from products.price the moment the
---     branch submits the request — same philosophy as
---     material_usage_logs.cost_per_unit: it's what the line was worth
---     at request time, fixed permanently, so a later HQ price change
---     never rewrites the value of a past delivery. The line total
---     (qty * unit_price) is always computed on read, never stored.
+-- unit_price is snapshotted from products.price when the request is submitted.
 -- ----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS stock_request_items (
     item_id         INT AUTO_INCREMENT PRIMARY KEY,
@@ -413,11 +226,7 @@ CREATE TABLE IF NOT EXISTS stock_request_items (
     FOREIGN KEY (request_id) REFERENCES stock_requests(request_id) ON DELETE CASCADE,
     FOREIGN KEY (sku) REFERENCES products(sku) ON DELETE CASCADE,
     INDEX idx_sri_request (request_id),
-    -- dispatched_qty/received_qty are nullable (not yet dispatched/
-    -- received) — a CHECK is only evaluated (and only blocks the row)
-    -- when the expression is actually FALSE; NULL counts as "unknown"
-    -- and passes, same as SQL's usual NULL-is-not-a-value handling, so
-    -- these don't need an explicit "OR ... IS NULL" to allow that.
+    -- Nullable until dispatched/received; a CHECK passes on NULL.
     CHECK (requested_qty > 0),
     CHECK (unit_price >= 0),
     CHECK (dispatched_qty >= 0),
@@ -427,39 +236,8 @@ CREATE TABLE IF NOT EXISTS stock_request_items (
 
 -- ----------------------------------------------------------------------------
 -- 7. Sales — completes the inventory lifecycle at the point of customer sale
---
---    sale_type: a plain 'Sale' (customer buys with a bottle) vs. a
---    'Refill' (customer brings back a bottle and only pays for product) —
---    both consume stock and both carry a manually-entered unit_price,
---    since refills are usually charged a different amount than a full
---    sale of the same SKU. 'Freebie' is a giveaway/comp/sample — it
---    consumes stock the same way a Sale does, but unit_price is always
---    0 for it (every other sale_type requires unit_price > 0 at the
---    application layer — see routes/branch.py's and routes/admin.py's
---    record_sale() — specifically so a giveaway can't be quietly
---    disguised as a ₱0 "Sale" with nothing marking it as one).
---
---    payment_method + buyer_name: covers anyone — an employee taking
---    product against their own pay, or a customer buying on store
---    credit ("utang") — taking product now without paying cash at the
---    register. buyer_name is free text (whatever name the person
---    recording the sale types in) and is only set when payment_method =
---    'Credit' — it is NOT tied to a login account, so it does not have
---    to match any real username.
---    buyer_user_id is legacy: kept only so sales recorded before this
---    change still show who the credit was against.
---
---    customer_name / customer_address: the walk-in customer a sale is
---    for — both optional (a lot of cash sales are anonymous), free
---    text, and unrelated to buyer_user_id/buyer_name above (which are
---    only ever about who a *Credit* sale is charged to, not a paying
---    customer). customer_name is what the Record Sale page's
---    autocomplete suggests from and groups by; customer_address is
---    what gets auto-filled when a suggested name is picked, sourced
---    from that customer's earliest sale row (see routes' customer
---    lookup query — ORDER BY sold_at ASC LIMIT 1 per name), so a
---    customer's address on file always reflects the first time it was
---    entered rather than whatever the most recent typo left behind.
+-- Freebie sales always have unit_price 0; every other type needs a price > 0.
+-- buyer_name is free text, only used for Credit sales.
 -- ----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS sales (
     sale_id          INT AUTO_INCREMENT PRIMARY KEY,
@@ -473,8 +251,7 @@ CREATE TABLE IF NOT EXISTS sales (
     customer_name    VARCHAR(120) NULL,
     customer_address VARCHAR(255) NULL,
     sold_at          TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    -- When the row was entered (sold_at can be back-dated). Branch staff
-    -- may void only sales recorded today — see migration 42.
+    -- Entry time (sold_at can be back-dated); branch staff void only today's sales.
     recorded_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (branch_id) REFERENCES branches(branch_id) ON DELETE CASCADE,
     FOREIGN KEY (sku) REFERENCES products(sku) ON DELETE CASCADE,
@@ -488,12 +265,7 @@ CREATE TABLE IF NOT EXISTS sales (
 
 -- ----------------------------------------------------------------------------
 -- 8. Universal Stock Movement Logs (Audit Trail / Ledger)
---
---    FREEBIE is its own movement_type (not just SALE with a note) for
---    the same reason sales.sale_type has its own 'Freebie' value — see
---    that table's comment above — so a giveaway is easy to spot and
---    filter for on its own in the Movement Logs / Reports pages instead
---    of blending into ordinary sale traffic.
+-- FREEBIE is its own movement_type so giveaways are easy to filter.
 -- ----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS stock_movement_logs (
     log_id             INT AUTO_INCREMENT PRIMARY KEY,
@@ -503,9 +275,7 @@ CREATE TABLE IF NOT EXISTS stock_movement_logs (
     movement_type      ENUM('PRODUCTION', 'DISPATCH', 'RECEIPT', 'SALE', 'REFILL', 'FREEBIE', 'ADJUSTMENT', 'DAMAGE',
                             'PACKAGE_ORDER', 'PACKAGE_RETURN', 'SALE_VOID') NOT NULL,
     notes              VARCHAR(255),
-    -- Who/what caused this entry, and the stock level immediately
-    -- before/after it, so disputes ("where did these units go?") can
-    -- be traced without cross-referencing other tables by timestamp.
+    -- Actor and stock before/after, so movements can be traced.
     created_by_user_id INT NULL,
     reference_type     VARCHAR(30) NULL,           -- e.g. 'STOCK_REQUEST', 'PRODUCTION_LOG', 'SALE'
     reference_id       INT NULL,
@@ -519,17 +289,7 @@ CREATE TABLE IF NOT EXISTS stock_movement_logs (
 );
 
 -- ----------------------------------------------------------------------------
--- 9. Admin Actions (Audit Trail) — non-inventory admin activity: creating
---    or deactivating a login account, resetting a password, adding or
---    discontinuing a product, adding a branch. Inventory/stock events have
---    their own, more detailed ledger in stock_movement_logs above; this
---    table covers everything else that used to leave no record beyond a
---    flash message that vanished after a few seconds.
---
---    See audit.py — its ensure_table() is only a defensive fallback for a
---    database that hasn't picked up this table yet; on a database that
---    already has it (the normal case, once this file has been applied),
---    it's a single cheap existence check and does nothing further.
+-- 9. Admin Actions (Audit Trail): non-inventory admin activity (stock has its own ledger)
 -- ----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS admin_actions (
     action_id      BIGINT AUTO_INCREMENT PRIMARY KEY,
@@ -556,31 +316,12 @@ CREATE TABLE IF NOT EXISTS app_settings (
 
 -- ----------------------------------------------------------------------------
 -- 10. Capital — no longer its own table.
---
---     There used to be a capital_contributions ledger here that an admin
---     logged entries into by hand, then later a phase where "Total
---     Capital" was simply SUM(package_cost) over raw_materials (what's
---     been spent buying material packages). It's a derived number again
---     now, but from a different rollup: SUM(total_cogs) over cogs_logs —
---     i.e. capital equals the cost of goods actually produced (each
---     batch's packaging-size formula cost × how many units were logged
---     as produced against it), computed on the fly wherever it's shown (dashboard,
---     reports), same as any other rollup in this schema. See cogs_logs'
---     own comment above for the full reasoning, and raw_materials above
---     for the separate "money spent buying packages" figure that's kept
---     alongside capital purely for comparison, not as its source anymore.
---     See the migration block below for the DROP TABLE that removes the
---     old capital_contributions table from an existing database.
+-- Capital is derived (SUM of cogs_logs.total_cogs), so there is no table.
 -- ----------------------------------------------------------------------------
 
 -- ----------------------------------------------------------------------------
 -- 10b. Partners (Distributors &amp; Resellers)
---
---      A distributor/reseller is a bulk buyer outside the retail branch
---      network — they don't get a branch_inventory row or a login of
---      their own here, they're just a record of who they are. Ordering
---      (what they can buy, at what package discount) is separate — see
---      package_orders in a later migration.
+-- Partners have no branch_inventory row or login.
 -- ----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS partners (
     partner_id      INT AUTO_INCREMENT PRIMARY KEY,
@@ -591,16 +332,8 @@ CREATE TABLE IF NOT EXISTS partners (
     email           VARCHAR(120) NULL,
     address         VARCHAR(255) NULL,
     notes           VARCHAR(255) NULL,
-    -- Denormalized rollup of partner_inquiries, NOT a separate source of
-    -- truth — both are recomputed/maintained by routes/portal.py every
-    -- time a new inquiry comes in (see _find_or_create_partner()), purely
-    -- so the Partners list can show "last heard from" / "X inquiries"
-    -- without a join+GROUP BY on every page load. The real, permanent,
-    -- never-overwritten history of what was submitted each time lives in
-    -- partner_inquiries itself (see 10f below) — on a repeat inquiry from
-    -- an already-known email/phone, THESE columns above (partner_name,
-    -- contact_person, phone, email, address) are deliberately left
-    -- alone; only last_inquiry_at/inquiry_count move.
+    -- Rollup of partner_inquiries (the real history lives there); only
+    -- last_inquiry_at/inquiry_count change on a repeat inquiry.
     last_inquiry_at TIMESTAMP NULL,
     inquiry_count   INT NOT NULL DEFAULT 0,
     created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -609,13 +342,7 @@ CREATE TABLE IF NOT EXISTS partners (
 
 -- ----------------------------------------------------------------------------
 -- 10c. Partner Investments
---
---      What a distributor/reseller has put in — a running ledger: an
---      admin logs a new entry any time (an initial buy-in, a later
---      top-up), a partner's
---      "total invested" is always SUM(amount) over their own rows, and
---      nothing here is ever edited or deleted — a correction is logged
---      as its own entry so the ledger stays an honest history.
+-- Append-only ledger: corrections are new entries.
 -- ----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS partner_investments (
     investment_id      INT AUTO_INCREMENT PRIMARY KEY,
@@ -631,20 +358,7 @@ CREATE TABLE IF NOT EXISTS partner_investments (
 
 -- ----------------------------------------------------------------------------
 -- 10d. Packages
---
---      A curated bundle of products that HQ offers to distributors and/or
---      resellers at a discount off the reference price. discount_percent
---      is a plain admin-editable number (0–100), applied to the sum of
---      each item's products.price * qty at order time — see
---      package_orders in a later migration for how an order snapshots
---      this the same way stock_request_items snapshots unit_price, so a
---      later change to a package's discount or a product's price never
---      rewrites the value of a past order.
---
---      partner_scope restricts who can see/order it: 'Both' (default),
---      or locked to just 'Distributor' or just 'Reseller' pricing tiers.
---      is_active lets HQ retire a package from the order screen without
---      deleting its history.
+-- Orders snapshot the discount, so later changes never rewrite them.
 -- ----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS packages (
     package_id       INT AUTO_INCREMENT PRIMARY KEY,
@@ -675,46 +389,8 @@ CREATE TABLE IF NOT EXISTS package_items (
 
 -- ----------------------------------------------------------------------------
 -- 10f. Partner Inquiries — leads from the public partner portal
---
---      Anyone can submit one of these without logging in (see
---      routes/portal.py) — a distributor/reseller browsing the public
---      packages page and asking about one. This is the "history" of
---      that pipeline: every inquiry ever submitted, kept permanently,
---      never edited except for `status` (an admin-side triage field —
---      New -> Contacted -> Closed — that doesn't affect anything else).
---
---      package_name_snapshot freezes what the package was called and
---      discounted at the moment of inquiry — same "snapshot, don't
---      recompute later" philosophy as stock_request_items.unit_price —
---      so a later package rename or discount change never rewrites the
---      story of a past inquiry. package_id/partner_id are both
---      nullable + ON DELETE SET NULL for the same reason: deleting a
---      package or partner later should never erase inquiry history,
---      only the live link to it.
---
---      partner_id is filled in automatically at submit time — the
---      portal matches an existing partner by email/phone, or creates a
---      new one, and links it here. See routes/portal.py's inquire().
---
---      email_sent records whether the HQ notification email actually
---      went out (mail can be unconfigured or fail) — the inquiry
---      itself is always saved either way, so a broken mailer never
---      loses a lead, just the immediate notification.
---
---      order_amount snapshots what the partner would actually pay for
---      this package — reference price minus the package's discount at
---      the moment of inquiry (same "freeze it, don't recompute later"
---      philosophy as package_name_snapshot and
---      stock_request_items.unit_price). This is what package-sales
---      figures (top package, top partner, partner "total invested",
---      and the revenue/profit totals on the dashboard) are computed
---      from — but ONLY once status = 'Closed', since that's the point
---      an inquiry represents money actually received rather than just
---      a lead. New/Contacted inquiries are not counted as sales.
---      Nullable so older rows created before this column existed don't
---      silently read as ₱0 — see the migration block below, which
---      backfills what it safely can and leaves the rest NULL (treated
---      as "unknown", not "zero", everywhere this is summed).
+-- Snapshot columns (package_name_snapshot, order_amount) are frozen at inquiry time.
+-- order_amount counts as a sale only once status = 'Closed'; NULL means unknown.
 -- ----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS partner_inquiries (
     inquiry_id             INT AUTO_INCREMENT PRIMARY KEY,
@@ -734,8 +410,7 @@ CREATE TABLE IF NOT EXISTS partner_inquiries (
     status                    ENUM('New', 'Contacted', 'Follow-up', 'On Hold', 'Closed', 'Declined')
                                   NOT NULL DEFAULT 'New',
     email_sent                BOOLEAN NOT NULL DEFAULT FALSE,
-    -- Set by Fulfill (see migration 41): when the package's items left
-    -- HQ stock. NULL = not shipped yet. Closed is still "deal confirmed".
+    -- Set by Fulfill (migration 41): when items left HQ stock; NULL = not shipped.
     fulfilled_at              DATETIME NULL,
     fulfilled_by_user_id      INT NULL,
     created_at                TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -748,15 +423,7 @@ CREATE TABLE IF NOT EXISTS partner_inquiries (
 );
 
 -- ----------------------------------------------------------------------------
--- 11. Migration block — safe to run against a database created by an
---     earlier version of this file. Every step here first checks
---     information_schema before touching anything, so re-running this
---     whole script (fresh install or upgrade) is always safe: on a
---     database that's already current, every step below is a no-op.
---
---     If you're setting up a brand-new database, this block simply does
---     nothing (all the checks find "already present") — you don't need
---     to do anything differently.
+-- 11. Migration block: every step checks information_schema first, so re-running is safe.
 -- ----------------------------------------------------------------------------
 DELIMITER $$
 
@@ -783,8 +450,7 @@ BEGIN
             ADD COLUMN image_path VARCHAR(255) NULL AFTER price;
     END IF;
 
-    -- branch_inventory.branch_price — removed; per-branch price
-    -- overrides no longer exist, every branch sells at products.price.
+    -- branch_inventory.branch_price removed (all branches use products.price).
     IF EXISTS (
         SELECT 1 FROM information_schema.columns
         WHERE table_schema = DATABASE() AND table_name = 'branch_inventory' AND column_name = 'branch_price'
@@ -792,9 +458,7 @@ BEGIN
         ALTER TABLE branch_inventory DROP COLUMN branch_price;
     END IF;
 
-    -- products.is_active — removed; products are now edited in place
-    -- from the admin Products page instead of being discontinued /
-    -- reactivated, so the soft-delete flag no longer applies.
+    -- products.is_active removed (products are edited in place).
     IF EXISTS (
         SELECT 1 FROM information_schema.columns
         WHERE table_schema = DATABASE() AND table_name = 'products' AND column_name = 'is_active'
@@ -802,9 +466,7 @@ BEGIN
         ALTER TABLE products DROP COLUMN is_active;
     END IF;
 
-    -- raw_materials.is_active — removed for the same reason: materials
-    -- are edited in place from the admin Materials page instead of being
-    -- deactivated / reactivated.
+    -- raw_materials.is_active removed (edited in place).
     IF EXISTS (
         SELECT 1 FROM information_schema.columns
         WHERE table_schema = DATABASE() AND table_name = 'raw_materials' AND column_name = 'is_active'
@@ -812,11 +474,7 @@ BEGIN
         ALTER TABLE raw_materials DROP COLUMN is_active;
     END IF;
 
-    -- raw_materials.supplier_id -------------------------------------------
-    -- Added alongside the new suppliers table (see section 3a above,
-    -- which is always created earlier in this script, so the FK target
-    -- exists by the time this ALTER runs on either a fresh install or
-    -- an upgrade).
+    -- raw_materials.supplier_id (suppliers table is created earlier).
     IF NOT EXISTS (
         SELECT 1 FROM information_schema.columns
         WHERE table_schema = DATABASE() AND table_name = 'raw_materials' AND column_name = 'supplier_id'
@@ -845,12 +503,7 @@ BEGIN
             ADD COLUMN payment_method ENUM('Cash', 'Credit') NOT NULL DEFAULT 'Cash' AFTER sale_type;
     END IF;
 
-    -- sales.payment_method: rename the 'Salary Deduction' enum value to
-    -- the more general 'Credit' — this payment method now also covers a
-    -- customer buying on store credit ("utang"), not just an employee
-    -- against their own pay. Widen the enum first so both the old and
-    -- new value are valid, move existing rows over, then narrow back
-    -- down to just the final two values.
+    -- Rename 'Salary Deduction' to 'Credit': widen enum, move rows, narrow again.
     IF EXISTS (
         SELECT 1 FROM information_schema.columns
         WHERE table_schema = DATABASE() AND table_name = 'sales' AND column_name = 'payment_method'
@@ -880,11 +533,7 @@ BEGIN
         ALTER TABLE sales ADD COLUMN buyer_name VARCHAR(120) NULL AFTER buyer_user_id;
     END IF;
 
-    -- sales.customer_name / customer_address -------------------------------
-    -- The walk-in customer a sale is for — see the CREATE TABLE comment
-    -- above. Added together since neither is useful without the other
-    -- (a name with no address just means the autofill has nothing to
-    -- offer next time).
+    -- sales.customer_name / customer_address: optional walk-in customer, added together.
     IF NOT EXISTS (
         SELECT 1 FROM information_schema.columns
         WHERE table_schema = DATABASE() AND table_name = 'sales' AND column_name = 'customer_name'
@@ -913,29 +562,7 @@ DROP PROCEDURE _has_migrations_applied;
 
 -- ----------------------------------------------------------------------------
 -- 12. Migration — stock_requests: single item -> delivery header + items
---
---     Only runs anything if it finds the OLD stock_requests shape (a
---     'sku' column directly on the table). On a database that's already
---     current, or a brand-new one where the CREATE TABLE above already
---     made the new shape, this is a single cheap existence check and a
---     no-op — same "safe to re-run" contract as the block above.
---
---     What it does, in order, entirely inside one transaction-safe
---     procedure:
---       1. Copies every existing request row into stock_request_items
---          (one row each, since every old request was already exactly
---          one product), pricing it at that product's current price —
---          the closest available stand-in for "what it was worth then",
---          since the old schema never recorded that separately.
---       2. Drops the old sku -> products FK (name looked up rather than
---          hardcoded, since MySQL auto-generates it and it can differ
---          between installs).
---       3. Adds delivery_number, backfills it as DR-<request_id>, then
---          makes it NOT NULL + UNIQUE.
---       4. Drops the now-migrated single-item columns from the header
---          table (sku, requested_qty, dispatched_qty, received_qty,
---          damaged_qty), leaving it as the header-only shape defined
---          above.
+-- Runs only if the old shape (sku column on stock_requests) is found.
 -- ----------------------------------------------------------------------------
 DELIMITER $$
 
@@ -995,17 +622,7 @@ DROP PROCEDURE _migrate_stock_requests_to_multi_item;
 
 -- ----------------------------------------------------------------------------
 -- 13. Migration — partners: inquiry history rollup columns
---
---     Adds last_inquiry_at / inquiry_count to an existing `partners`
---     table that predates them (a fresh install already has both, from
---     the CREATE TABLE above). Guarded the same way as every other step
---     in this file — safe to re-run, no-op once applied.
---
---     Also backfills both columns from partner_inquiries for partners
---     that already have inquiries on file, so existing data shows
---     correct values immediately instead of sitting at 0/NULL until
---     their next new inquiry. This is a plain recompute (COUNT/MAX
---     grouped by partner_id), safe to re-run any time.
+-- Also backfills both columns from partner_inquiries.
 -- ----------------------------------------------------------------------------
 DELIMITER $$
 
@@ -1045,22 +662,7 @@ SET p.inquiry_count = COALESCE(agg.cnt, 0),
 
 -- ----------------------------------------------------------------------------
 -- 14. Migration — partner_inquiries.order_amount
---
---     Adds the column to an existing database that predates it (a fresh
---     install already has it from the CREATE TABLE above). Guarded and
---     re-run-safe like every other step in this file.
---
---     Backfill for rows that already exist: their order_amount is
---     computed from package_items joined through package_id at CURRENT
---     product prices/discount — the closest available stand-in for
---     "what it was worth then", same limitation the stock_requests
---     migration above already documents (the old schema never recorded
---     this separately, so this is a best-effort reconstruction, not a
---     true historical value). Only rows whose package still exists (and
---     still has products in it) can be backfilled this way; anything
---     else — package_id IS NULL, or the package/its items were deleted
---     since — is left NULL rather than guessed at, so it's excluded
---     from sums instead of silently contributing ₱0 or a wrong figure.
+-- Backfill uses current prices (best effort); unknown rows stay NULL.
 -- ----------------------------------------------------------------------------
 DELIMITER $$
 
@@ -1094,17 +696,7 @@ WHERE pinq.order_amount IS NULL;
 
 -- ----------------------------------------------------------------------------
 -- 15. Migration — raw_materials.stock_qty
---
---     Adds the column to an existing database that predates it (a fresh
---     install already has it from the CREATE TABLE above). Guarded and
---     re-run-safe like every other step in this file.
---
---     Backfill: stock_qty starts at package_qty (what's on hand at the
---     package's current definition) minus whatever has already been
---     logged as used against that material in material_usage_logs, i.e.
---     "however much of the package is left after existing usage
---     history", floored at 0 so a material that was over-logged in the
---     old cost-only model doesn't backfill to a negative number.
+-- Backfill: package_qty minus logged usage, floored at 0.
 -- ----------------------------------------------------------------------------
 DELIMITER $$
 
@@ -1135,10 +727,6 @@ DROP PROCEDURE _migrate_raw_materials_stock_qty;
 
 -- ----------------------------------------------------------------------------
 -- 16. Migration — material_usage_logs: drop cost columns
---
---     Removes unit_cost_snapshot/line_cost from an existing database —
---     usage is now a plain quantity log (see the table's comment above).
---     Guarded and re-run-safe like every other step in this file.
 -- ----------------------------------------------------------------------------
 DELIMITER $$
 
@@ -1163,30 +751,13 @@ DROP PROCEDURE _migrate_drop_material_usage_cost_columns;
 
 -- ----------------------------------------------------------------------------
 -- 17. Migration — drop capital_contributions
---
---     Removes the old manual capital ledger from an existing database.
---     "Total Capital" is now derived from raw_materials.package_cost
---     instead — see section 10's comment above. This intentionally
---     drops the table (and its logged history) rather than leaving it
---     around unused, since nothing in the app reads from it anymore.
+-- Intentionally drops the old ledger table and its history.
 -- ----------------------------------------------------------------------------
 DROP TABLE IF EXISTS capital_contributions;
 
 -- ----------------------------------------------------------------------------
 -- 18. Migration — partner_inquiries: remarks + expanded status pipeline
---
---     Adds a free-text `remarks` column an admin can use to leave an
---     internal note on an inquiry independent of its status (e.g. "on
---     hold, distributor still deciding" or "call back next week"), and
---     widens the `status` ENUM past the original New/Contacted/Closed
---     triage into a fuller pipeline: New -> Contacted -> Follow-up /
---     On Hold -> Closed / Declined. Existing rows keep whatever status
---     they already have — this only adds new allowed values, it never
---     changes a stored one. Nothing here touches the "Closed only"
---     revenue rule used elsewhere (see order_amount's note above and
---     routes/admin.py's dashboard/partners queries) since 'Closed'
---     itself is untouched. Guarded and re-run-safe like every other
---     step in this file.
+-- Only adds allowed status values; stored values are unchanged.
 -- ----------------------------------------------------------------------------
 DELIMITER $$
 
@@ -1221,15 +792,7 @@ DROP PROCEDURE _migrate_partner_inquiries_remarks_and_status;
 
 -- ----------------------------------------------------------------------------
 -- 19. Migration — raw_materials: purchase_mode + receipt_number
---
---     Adds an explicit purchase_mode column instead of the old "package_qty
---     == 1 means Individual unit" inference (see raw_materials's comment
---     above), and a free-text receipt_number for tracing a material row
---     back to its physical receipt. Backfill preserves the exact same
---     Package/Individual split existing rows already displayed as, so
---     nothing on the Materials page changes for data logged before this
---     migration — only new/edited rows can now have package_qty > 1 while
---     still being marked Individual.
+-- Backfill keeps the old Package/Individual split.
 -- ----------------------------------------------------------------------------
 DELIMITER $$
 
@@ -1262,32 +825,7 @@ DROP PROCEDURE _migrate_raw_materials_purchase_mode_and_receipt;
 
 -- ----------------------------------------------------------------------------
 -- 20. AI Stock Drafts — human-in-the-loop proposals from the AI assistant
---
---     A draft is inert until an admin (or branch staff, for their own
---     branch) approves it on the /ai/drafts page — approval is what
---     actually inserts into stock_requests / stock_request_items,
---     using the same DR-<request_id zero-padded to 6> numbering as any
---     other delivery (see section 6's comment above and the migration
---     in section 12), so an AI-originated delivery is indistinguishable
---     from one requested by hand once approved.
---
---     Both created_by_user_id and reviewed_by_user_id follow the same
---     "kept for traceability, set NULL if the account is later removed"
---     pattern as every other actor column in this schema (see
---     material_usage_logs.created_by_user_id, admin_actions.actor_user_id).
---     created_by_username is denormalized alongside created_by_user_id
---     for the same reason admin_actions.actor_username is: the log still
---     reads clearly if the account is later deleted.
---
---     resulting_request_id is nullable and ON DELETE SET NULL rather
---     than CASCADE — a draft's own history (what was proposed, by
---     whom, why) should survive even if the delivery it produced is
---     ever removed from stock_requests.
---
---     Being a brand-new table (not an ALTER on an existing one), a
---     plain guarded CREATE TABLE IF NOT EXISTS is sufficient and
---     idempotent on its own — unlike the ALTER-based migrations above,
---     it doesn't need the DELIMITER/PROCEDURE guard pattern.
+-- A draft is inert until approved; approval inserts the real stock request.
 -- ----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS ai_stock_drafts (
     draft_id              BIGINT AUTO_INCREMENT PRIMARY KEY,
@@ -1311,13 +849,7 @@ CREATE TABLE IF NOT EXISTS ai_stock_drafts (
 
 -- ----------------------------------------------------------------------------
 -- 20b. AI Stock Draft Items — one row per proposed SKU on a draft
---
---      Deliberately thin (sku, suggested_qty only) — unlike
---      stock_request_items, a draft has no unit_price of its own; the
---      price is snapshotted from products.price at the moment a draft
---      is *approved* (see routes/ai.py's approve_draft()), not at the
---      moment the AI proposes it, so a draft that sits unreviewed for a
---      while doesn't lock in a stale price.
+-- Price is snapshotted at approval, not at proposal.
 -- ----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS ai_stock_draft_items (
     draft_item_id  BIGINT AUTO_INCREMENT PRIMARY KEY,
@@ -1331,38 +863,7 @@ CREATE TABLE IF NOT EXISTS ai_stock_draft_items (
 
 -- ----------------------------------------------------------------------------
 -- 21. Login Activity — every sign-in attempt, successful or not
---
---     Nothing previously tracked sign-ins or failed attempts at all —
---     admin_actions only ever logs account/product/branch *changes* an
---     already-authenticated admin makes, not the act of signing in
---     itself. This is a separate, append-only table for that: one row
---     per submission of the login form (see routes/auth.py's login()),
---     whether it succeeded or not.
---
---     user_id is nullable and ON DELETE SET NULL (same "kept for
---     traceability" pattern as admin_actions.actor_user_id) because a
---     failed attempt very often won't match a real account at all —
---     a typo'd username, or someone probing for valid logins — so this
---     also stores whatever username/role was actually typed
---     (username_attempted / role_attempted) regardless of whether it
---     matched anything, which user_id alone could never capture for a
---     failed attempt.
---
---     failure_reason is a short fixed label (see
---     routes/auth.py's _LOGIN_FAILURE_REASONS), not a free-text
---     message — keeps this filterable/groupable rather than every row
---     carrying a slightly different hand-written string.
---
---     ip_address is whatever the WSGI layer reports as the remote
---     address (request.remote_addr) — this app doesn't sit behind a
---     trusted reverse proxy that sets X-Forwarded-For today, so this
---     column is deliberately not trusting that header. If a proxy is
---     added later, populate it from the proxy's real client-IP header
---     instead once that's actually trustworthy.
---
---     Being a brand-new table, a plain guarded CREATE TABLE IF NOT
---     EXISTS is sufficient and idempotent on its own, same as
---     ai_stock_drafts above.
+-- Append-only; user_id is NULL for failed attempts that match no account.
 -- ----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS login_activity (
     activity_id       BIGINT AUTO_INCREMENT PRIMARY KEY,
@@ -1381,50 +882,14 @@ CREATE TABLE IF NOT EXISTS login_activity (
 );
 
 -- ----------------------------------------------------------------------------
--- 22. Note — CHECK constraints added to several tables' quantity/price
---     columns above (products.price, raw_materials.package_qty/
---     package_cost, branch_inventory.stock_qty/reorder_level,
---     production_logs.qty_produced, material_usage_logs.qty_used,
---     stock_request_items.*_qty/unit_price, sales.qty_sold/unit_price,
---     packages.discount_percent, package_items.qty) — defense-in-depth
---     so a future application bug or race condition can't drive a
---     quantity negative (or a discount outside 0–100%) with nothing at
---     the database layer to reject it, on top of the row-locking and
---     application-level validation that already guard these.
---
---     Deliberately NOT retrofitted here as a guarded ALTER TABLE ADD
---     CONSTRAINT migration the way earlier numbered sections retrofit
---     columns onto an existing database: unlike adding a column, adding
---     a CHECK to a table that already has rows fails outright the
---     moment ANY existing row violates it (e.g. a sale already on file
---     at unit_price = 0), aborting the ALTER — and this schema file's
---     own migration audit is exactly what surfaced that zero-price
---     sales were previously accepted (see routes/branch.py and
---     routes/admin.py's record_sale(), now fixed to require a price
---     > 0). Silently running that ALTER against a real, already-
---     populated production database here could break its next deploy
---     with no warning. A fresh database (a new install, or the test
---     suite's rebuilt-from-scratch schema) gets every constraint above
---     automatically from the CREATE TABLE statements themselves.
---
---     Before adding these to an existing production database: audit
---     each column for rows that would violate its new constraint (e.g.
---     `SELECT * FROM sales WHERE unit_price <= 0`), decide what to do
---     with any that turn up, and only then run the equivalent
---     `ALTER TABLE ... ADD CONSTRAINT ... CHECK (...)` by hand.
+-- 22. Note: CHECK constraints on quantity/price columns
+-- CHECK constraints live in the CREATE TABLEs only. Not retrofitted: an ALTER
+-- fails if any existing row violates it. Audit data before adding by hand.
 -- ----------------------------------------------------------------------------
 
 -- ----------------------------------------------------------------------------
 -- 23. Migration — material_usage_logs.cogs_log_id
---
---     Adds the column to an existing database that predates it (a fresh
---     install already has it from the CREATE TABLE above, and already
---     has cogs_logs/unit_formula_items to reference). Guarded and
---     re-run-safe like every other step in this file. No backfill is
---     possible or needed — every existing usage row was logged before
---     COGS batches existed, so it's correctly left NULL ("not part of a
---     COGS batch"), same as it would be for a brand-new plain material
---     withdrawal logged outside the formula flow.
+-- No backfill: older usage rows stay NULL (not part of a COGS batch).
 -- ----------------------------------------------------------------------------
 DELIMITER $$
 
@@ -1452,28 +917,7 @@ DROP PROCEDURE _migrate_material_usage_logs_cogs_log_id;
 -- ----------------------------------------------------------------------------
 -- 24. Migration — product_formula_items (sku-keyed) -> unit_formula_items
 --     (unit-keyed)
---
---     An earlier version of this feature keyed a product's formula by
---     sku (one recipe per specific scent+variant+size). That's now
---     unit_formula_items instead — one recipe shared by every product of
---     the same packaging size (see unit_formula_items' own comment
---     above for why). Only runs anything if it finds the OLD table;
---     on a fresh install (unit_formula_items already created directly by
---     the CREATE TABLE above) or a database that's already migrated,
---     this is a cheap existence check and a no-op.
---
---     Best-effort data carry-over: each old sku-keyed row is folded into
---     its product's `unit`, grouped so only one qty_per_unit survives
---     per (unit, material) pair — MIN() is an arbitrary tiebreaker where
---     two differently-sized-but-same-unit... no, where two SKUs of the
---     SAME unit had disagreeing qty_per_unit for the same material (only
---     possible if they'd been edited independently before this
---     migration existed), since a single shared value is all the new
---     shape can hold. Whichever value survives, admins can review and
---     adjust it on the Formulas page afterward — nothing here is silently
---     final. INSERT IGNORE (not INSERT) since two different old SKUs
---     folding onto the same (unit, material) pair after the GROUP BY
---     below would otherwise violate unit_formula_items' own UNIQUE KEY.
+-- INSERT IGNORE: two old SKUs can fold onto the same (unit, material) key.
 -- ----------------------------------------------------------------------------
 DELIMITER $$
 
@@ -1502,20 +946,7 @@ DROP PROCEDURE _migrate_product_formula_items_to_unit_formula_items;
 
 -- ----------------------------------------------------------------------------
 -- 25. Migration — raw_materials: drop stock_qty
---
---     Raw materials are decoupled from formula usage entirely now — the
---     Materials page is a pure purchase log (material, unit, package
---     qty/cost, supplier, receipt), and logging a batch off a formula
---     only computes cost of goods (see cogs_logs/material_usage_logs
---     above); it never deducts anything from raw_materials. That leaves
---     stock_qty with nothing left to track, so it's dropped here.
---
---     Runs unconditionally after migration 15 above, which still ADDs
---     this column back on a database that predates it (that migration
---     is left as historical record, not rewritten) — so this step is
---     what actually removes it, on both a freshly-migrated database and
---     one that's carried the column since before this feature existed.
---     Guarded and re-run-safe like every other step in this file.
+-- Runs after migration 15, which re-adds the column on old databases.
 -- ----------------------------------------------------------------------------
 DELIMITER $$
 
@@ -1538,19 +969,7 @@ DROP PROCEDURE _migrate_drop_raw_materials_stock_qty;
 
 -- ----------------------------------------------------------------------------
 -- 26. Migration — unit_formula_items.unit_cost
---
---     Formula lines now carry their own hand-entered price per unit of
---     material, instead of always costing off raw_materials.cost_per_unit
---     live (see unit_formula_items' own comment above) — a formula is a
---     fully custom recipe now, admin-priced rather than tied to whatever
---     a material's last purchase happened to cost.
---
---     Backfill: existing formula rows get unit_cost seeded from their
---     material's current cost_per_unit — the same figure they were
---     effectively costing at before this column existed — so nothing
---     already saved silently changes price the moment this migration
---     runs; admins can retype any of them afterward on the Formulas page.
---     Guarded and re-run-safe like every other step in this file.
+-- Backfill seeds unit_cost from the material's current cost_per_unit.
 -- ----------------------------------------------------------------------------
 DELIMITER $$
 
@@ -1578,18 +997,7 @@ DROP PROCEDURE _migrate_unit_formula_items_unit_cost;
 
 -- ----------------------------------------------------------------------------
 -- 27. Migration — unit_formula_items.unit_cost -> line_cost
---
---     A formula line's cost is now typed in directly as a flat line
---     total (line_cost), with no multiplication against qty_per_unit —
---     replacing the previous unit_cost ("price per unit of material",
---     multiplied by qty_per_unit to get a line's cost). Renaming in
---     place keeps whatever was already saved under migration 25 above
---     as this line's starting line_cost value (previously that value
---     WAS the per-unit price; admins can retype any line's cost on the
---     Formulas page afterward now that it means something different).
---     Guarded and re-run-safe like every other step in this file — a
---     no-op on a fresh install, which already gets line_cost straight
---     from the CREATE TABLE above.
+-- Rename in place keeps the saved values as the flat line cost.
 -- ----------------------------------------------------------------------------
 DELIMITER $$
 
@@ -1616,17 +1024,6 @@ DROP PROCEDURE _migrate_unit_formula_items_unit_cost_to_line_cost;
 
 -- ----------------------------------------------------------------------------
 -- 28. Migration — unit_formula_items.is_packaging / cogs_logs.sale_id: removed
---
---     Both were added to auto-log a Refill's cost of goods against
---     capital (a Refill formula minus packaging lines), then reverted —
---     this feature turned out not to be needed; a Refill can be logged
---     from Record Sale or the Excel import with no formula involved at
---     all, and the app never required one. This migration drops both if
---     an earlier run of this file already added them, so any database
---     converges back to the plain shape (unit_formula_items with no
---     packaging flag, cogs_logs written only from production runs).
---     Guarded and re-run-safe like every other step in this file — a
---     no-op on a database that never had either column.
 -- ----------------------------------------------------------------------------
 DELIMITER $$
 
@@ -1663,26 +1060,8 @@ DROP PROCEDURE _migrate_remove_refill_cogs_feature;
 
 -- ----------------------------------------------------------------------------
 -- 30. Migration — products.unit / unit_formula_items.unit: add 70ML
---
---     Widens both packaging-size ENUMs to add '70ML' alongside the
---     existing 85ML/50ML/1L/100ML/10ML/3ML Tester — see utils.py's
---     PRODUCT_UNITS, the single Python source of truth every route/
---     report/template validates against or loops over. Existing rows
---     are untouched (this only adds a new allowed value, same "widen,
---     never narrow silently" shape as every other ENUM migration in
---     this file, e.g. stock_movement_logs.movement_type gaining
---     'REFILL' above). Guarded and re-run-safe like every other step
---     in this file — a no-op on a fresh install, which already gets
---     70ML straight from the CREATE TABLE statements above.
---
---     Re-run safety (migrations 30 and 31): migration 34 below later
---     narrows both unit ENUMs to the sizes the app supports today (BULK
---     added to products). A database that has already been through 34
---     therefore no longer contains '70ML'/'55ML', so "does the column
---     mention 70ML?" alone would wrongly say "not migrated yet" on every
---     re-run and try to widen back to a list that has no 'BULK'/'3ML' —
---     failing with error 1265 as soon as a Bulk product exists. So these
---     steps also skip when the column is already in its post-34 form.
+-- Steps 30/31 also skip when already in the post-34 form, otherwise a re-run
+-- would widen back to a list without BULK and fail (error 1265).
 -- ----------------------------------------------------------------------------
 DELIMITER $$
 
@@ -1719,16 +1098,7 @@ DROP PROCEDURE _migrate_add_70ml_unit;
 
 -- ----------------------------------------------------------------------------
 -- 31. Migration — products.unit / unit_formula_items.unit: add 55ML
---
---     Same shape as migration 30 above, for the same reason — see
---     utils.py's PRODUCT_UNITS. Kept as its own separate, independently
---     guarded step (rather than folded into migration 30) since a
---     database that already ran migration 30 before 55ML existed would
---     otherwise never pick it up — that migration's own guard
---     (column_type LIKE '%70ML%') would already read as "done" and
---     skip re-running. Guarded and re-run-safe like every other step in
---     this file — a no-op on a fresh install, which already gets 55ML
---     straight from the CREATE TABLE statements above.
+-- Separate step so a database that already ran 30 still picks up 55ML.
 -- ----------------------------------------------------------------------------
 DELIMITER $$
 
@@ -1765,14 +1135,6 @@ DROP PROCEDURE _migrate_add_55ml_unit;
 
 -- ----------------------------------------------------------------------------
 -- 32. Migration — sales.sale_type / stock_movement_logs.movement_type: add Freebie
---
---     Widens both ENUMs to add 'Freebie'/'FREEBIE' for logging a
---     giveaway/comp/sample — see the comments on both tables above and
---     utils.py's SALE_TYPES for the full reasoning. Existing rows are
---     untouched (only adds a new allowed value). Guarded and re-run-safe
---     like every other step in this file — a no-op on a fresh install,
---     which already gets both straight from the CREATE TABLE statements
---     above.
 -- ----------------------------------------------------------------------------
 DELIMITER $$
 
@@ -1807,31 +1169,14 @@ DROP PROCEDURE _migrate_add_freebie;
 
 -- ----------------------------------------------------------------------------
 -- 33. Migration — unit_formula_items: drop any 1L rows
---
---     1L is sold loose by the mL (whatever quantity/price is typed in on
---     Record Sale — see utils.FORMULA_UNITS), not as a fixed bottle with
---     one recipe to cost out, so the Formulas page no longer offers it
---     at all. This clears out any 1L formula lines a database might
---     already have from before that restriction existed. A plain DELETE
---     rather than a guarded procedure — safe to re-run any time, and a
---     no-op once there's nothing left to delete.
+-- Plain DELETE; safe to re-run.
 -- ----------------------------------------------------------------------------
 DELETE FROM unit_formula_items WHERE unit = '1L';
 
 -- ----------------------------------------------------------------------------
 -- 34. Migration — products/unit_formula_items: 85ML/50ML/10ML/3ML(+BULK)
 --     only, products.category, bulk_rate_settings
---
---     Narrows the packaging-size list down to four fixed bottle sizes
---     (dropping 70ML, 55ML, 100ML, 1L, and renaming "3ML Tester" to
---     "3ML") plus the new BULK size for the Bulk/Refill category (see
---     products' own comment above, and utils.PRODUCT_UNITS/
---     BOTTLE_UNITS/PRODUCT_CATEGORIES). Assumes no existing product,
---     sale, or formula row still uses one of the dropped sizes — this
---     was confirmed before writing this migration; a database that
---     still has one will fail the MODIFY COLUMN below loudly rather
---     than silently truncating/misclassifying real data, which is the
---     right failure mode here.
+-- Fails loudly (by design) if a dropped size is still in use.
 -- ----------------------------------------------------------------------------
 DELIMITER $$
 
@@ -1887,13 +1232,6 @@ INSERT IGNORE INTO bulk_rate_settings (id, rate_per_ml) VALUES (1, 0.0000);
 
 -- ----------------------------------------------------------------------------
 -- 35. Migration — raw_materials.stock_qty (v2 — real on-hand stock)
---
---     Brings the column back (see migration 15/25 above for why it was
---     dropped the first time: nothing ever deducted from it). This time
---     it's real: bulk_batches consumption (see below) genuinely deducts
---     from it, and restock_material() genuinely adds to it. Backfilled to
---     package_qty on an existing database — there's no batch-consumption
---     history to subtract yet, since the feature starts here.
 -- ----------------------------------------------------------------------------
 DELIMITER $$
 
@@ -1919,34 +1257,7 @@ DROP PROCEDURE _migrate_raw_materials_stock_qty_v2;
 -- ----------------------------------------------------------------------------
 -- 36. Bulk Batches — the "make a bulk mix first" step between raw
 --     materials and bottling.
---
---     A batch is a real quantity of mixed scent (e.g. 500ml or 1 gallon),
---     produced from specific raw materials at specific quantities (see
---     bulk_batch_materials below). input_qty/input_unit record what was
---     actually typed in (e.g. "1 Gallon"); total_volume_ml is that same
---     amount converted to milliliters (see utils.ML_PER_BATCH_UNIT) — the
---     one unit everything else on this table (and remaining_ml) is kept
---     in, so batches entered in different units still compare/deduct
---     correctly against each other.
---
---     total_cost/cost_per_ml are frozen at creation from the sum of this
---     batch's own bulk_batch_materials line costs — a later change to a
---     raw material's cost_per_unit never rewrites a past batch's numbers,
---     same "snapshot, don't recompute later" rule cogs_logs.cogs_per_unit
---     already follows.
---
---     remaining_ml starts equal to total_volume_ml and is deducted every
---     time a Bottled production run (see production() in routes/admin.py)
---     draws from this batch to fill 85ML/50ML/10ML/3ML bottles — that's
---     also what lets the Bulk Batches page answer "how many 85ml bottles
---     can this batch still make" (floor(remaining_ml / 85), etc.) without
---     a separate rollup table.
---
---     scent_name/batch_code are plain free text, not a FK to `products` —
---     one batch can supply several bottle sizes of the same scent, and
---     nothing here forces a strict one-batch-one-SKU relationship, the
---     same loosely-coupled shape bulk_rate_settings/production_logs.
---     batch_code already use elsewhere in this schema.
+-- Costs are frozen at creation; remaining_ml is deducted by bottling runs.
 -- ----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS bulk_batches (
     batch_id           INT AUTO_INCREMENT PRIMARY KEY,
@@ -1970,28 +1281,7 @@ CREATE TABLE IF NOT EXISTS bulk_batches (
 -- ----------------------------------------------------------------------------
 -- 36a. Bulk Batch Materials — which raw materials (and how much of each)
 --     actually went into one specific bulk_batches row.
---
---     Unlike unit_formula_items.line_cost (hand-typed, no arithmetic
---     relationship to qty_per_unit), line_cost here IS computed:
---     qty_used x cost_per_unit_snapshot — this table is the real
---     "materials used, quantity, and cost" record a batch's total_cost is
---     summed from. cost_per_unit_snapshot freezes raw_materials.cost_per_unit
---     at the moment the batch was made, same reasoning as every other
---     snapshot column in this schema (stock_request_items.unit_price,
---     cogs_logs.cogs_per_unit, ...).
---
---     Creating a batch deducts qty_used from raw_materials.stock_qty (see
---     create_bulk_batch() in routes/admin.py) — this table doubles as the
---     audit trail for that deduction, the same role material_usage_logs
---     plays for bottling.
---
---     qty_used_unit (added in migration 39 below) is the unit qty_used and
---     cost_per_unit_snapshot are actually expressed in — not necessarily
---     raw_materials.unit, so a material bought by the Gallon can still
---     have a few mL used per batch logged as mL rather than a near-zero
---     fraction of a gallon. Deducting from raw_materials.stock_qty (kept
---     in the material's own purchase unit) converts qty_used into that
---     unit first — see utils.convert_material_qty().
+-- line_cost = qty_used x cost_per_unit_snapshot; also the audit trail for stock deducted.
 -- ----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS bulk_batch_materials (
     item_id                INT AUTO_INCREMENT PRIMARY KEY,
@@ -2009,12 +1299,6 @@ CREATE TABLE IF NOT EXISTS bulk_batch_materials (
 
 -- ----------------------------------------------------------------------------
 -- 37. Migration — cogs_logs.bulk_batch_id
---
---     Traces a Bottled production run's cost of goods back to the
---     specific bulk_batches row it was filled from (see production() in
---     routes/admin.py) — nullable and ON DELETE SET NULL, same "kept for
---     traceability, batch header can still be removed" pattern
---     production_log_id already uses on this table.
 -- ----------------------------------------------------------------------------
 DELIMITER $$
 
@@ -2043,25 +1327,7 @@ DROP PROCEDURE _migrate_cogs_logs_bulk_batch_id;
 -- 38. Unit Cost-of-Goods Settings — the flat base cost per Bottled
 --     packaging size that production() actually logs as cogs_per_unit
 --     for a Bottled run.
---
---     unit_formula_items (see its own comment above) is NOT read by
---     production() — a bulk batch already records exactly which raw
---     materials and quantities went into the liquid (see bulk_batches/
---     bulk_batch_materials above), so re-deriving a per-bottle liquid
---     cost from a formula on top of that would be double bookkeeping.
---     This table is instead one hand-typed number per size — e.g. "85ML
---     costs ₱95" — same shape as bulk_rate_settings' single rate, just
---     one row per BOTTLE_UNITS size instead of one shared row. The admin
---     sets this figure using unit_formula_items' own computed packaging
---     total (plus a batch's liquid cost/mL) as a reference, but nothing
---     ties the two together automatically.
---
---     A Bottled production run still requires picking a bulk batch (see
---     production() in routes/admin.py) — that's what deducts the batch's
---     remaining_ml and is unaffected by this table. This table only
---     supplies cogs_per_unit; the batch's own cost_per_ml stays purely
---     informational (shown on the Bulk Batches page) rather than feeding
---     a production run's logged cost.
+-- production() logs this flat base cost as cogs_per_unit for Bottled runs.
 -- ----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS unit_cogs_settings (
     unit               ENUM('85ML', '50ML', '10ML', '3ML') PRIMARY KEY,
@@ -2076,35 +1342,6 @@ INSERT IGNORE INTO unit_cogs_settings (unit, base_cost_per_unit) VALUES
 -- ----------------------------------------------------------------------------
 -- 39. Migration — bulk_batch_materials.qty_used_unit + raw_materials.stock_qty
 --     precision (mismatched-unit usage logging)
---
---     Before this, create_bulk_batch() (routes/admin.py) assumed a
---     material's "qty used" was always typed in that material's own
---     purchase unit (raw_materials.unit) — so a material bought by the
---     Gallon but used a few mL at a time per batch had no way to be
---     logged accurately: typing "0.31" meant 0.31 *gallons*, not 0.31 mL,
---     silently overcharging the batch by orders of magnitude.
---
---     qty_used_unit records the unit the admin actually typed the amount
---     in (one of utils.compatible_material_units(raw_materials.unit) —
---     the volume trio Milliliter/Liter/Gallon for a liquid material, or
---     just the material's own unit for Gram/Piece). qty_used and
---     cost_per_unit_snapshot are now both expressed in THAT unit (see
---     create_bulk_batch()), not necessarily the material's purchase unit
---     — line_cost = qty_used * cost_per_unit_snapshot still holds exactly
---     as before, just no longer forces a batch's line items into a unit
---     that's the wrong scale for how they're actually used.
---
---     Backfilled to each row's own material's purchase unit, which is
---     what every existing row was (silently, and for liquids sometimes
---     wrongly) assumed to already be in.
---
---     raw_materials.stock_qty is widened from DECIMAL(10,3) to
---     DECIMAL(14,6) because stock is still deducted in the material's
---     purchase unit (see create_bulk_batch()) — a Gallon-stocked material
---     used a few mL at a time converts to a very small fraction of a
---     gallon per batch (e.g. 0.31 mL = 0.0000819 gallon), which the old
---     3-decimal-place column would round straight to zero and never
---     actually deduct.
 -- ----------------------------------------------------------------------------
 DELIMITER $$
 
@@ -2142,13 +1379,6 @@ DROP PROCEDURE _migrate_qty_used_unit_and_stock_precision;
 
 -- ----------------------------------------------------------------------------
 -- 40. Migration: partner_inquiries.preferred_contact
---
---     How the inquirer would like HQ to reach them, picked on the portal's
---     inquiry form (optional, so NULL means "no preference"). General
---     inquiries sent from the portal without a package reuse this table
---     as-is: package_id is already NULL-able, package_name_snapshot reads
---     "General inquiry" and order_amount stays NULL. Guarded and re-run
---     safe like every other step in this file.
 -- ----------------------------------------------------------------------------
 DELIMITER $$
 
@@ -2173,22 +1403,6 @@ DROP PROCEDURE _migrate_partner_inquiries_preferred_contact;
 
 -- ----------------------------------------------------------------------------
 -- 41. Migration: package orders fulfill from HQ stock
---
---     Order -> produce -> fulfill. A package inquiry marked Closed is a
---     confirmed deal (and still counts as revenue then), but nothing has
---     left the warehouse yet — often the goods haven't been produced.
---     Fulfill (admin Partner Inquiries page) then takes the package's
---     items out of HQ's branch_inventory, logged as PACKAGE_ORDER; moving
---     a fulfilled inquiry off Closed puts them back, logged as
---     PACKAGE_RETURN. Both use reference_type 'PARTNER_INQUIRY'.
---
---     partner_inquiry_items snapshots the package's contents when the
---     inquiry is submitted, so what gets fulfilled is exactly what was
---     quoted even if the package is edited later. sku has no FK on
---     purpose: deleting a product must not silently erase what an old
---     order contained. Inquiries from before this migration are
---     backfilled from their package's current contents (the best record
---     there is).
 -- ----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS partner_inquiry_items (
     inquiry_item_id INT AUTO_INCREMENT PRIMARY KEY,
@@ -2248,21 +1462,6 @@ WHERE pinq.package_id IS NOT NULL
 
 -- ----------------------------------------------------------------------------
 -- 42. Migration: refills draw HQ bulk, and sales can be voided
---
---     Refills are HQ-only: a Refill takes the scent's bulk (the product
---     with the same base code and unit BULK, e.g. A1-50ML -> A1-BULK) out
---     of HQ's bulk stock — bottles x bottle size in mL, or the typed mL
---     for a bulk product itself. See sale_stock.py.
---
---     Void removes a mistaken sale entirely: its stock goes back (logged
---     as SALE_VOID) and the sales row is deleted so every revenue/units
---     total corrects itself. sale_voids keeps a permanent snapshot of the
---     voided sale with who voided it and why. Sale movement logs now
---     carry reference_id = sale_id so a void reverses exactly what the
---     sale deducted.
---
---     sales.recorded_at is when the row was entered (sold_at can be
---     back-dated); existing rows take their sold_at.
 -- ----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS sale_voids (
     void_id            INT AUTO_INCREMENT PRIMARY KEY,
@@ -2321,34 +1520,6 @@ DROP PROCEDURE _migrate_refill_bulk_and_sale_void;
 -- ----------------------------------------------------------------------------
 -- 43. Migration — bulk_batches.target_unit/target_bottle_qty,
 --     bulk_batch_materials.is_packaging
---
---     Matches the real "Timpla Costing" worksheet the business already
---     uses: a batch's packaging materials (bottle, sticker, plastic
---     seal, ...) are bought and costed for the batch's WHOLE planned
---     bottle yield up front — not per production run — and folded into
---     the same batch total as the liquid ingredients. Picking a target
---     bottle size when logging a batch (see create_bulk_batch() in
---     routes/admin.py) is what makes this possible: target_bottle_qty is
---     computed the same way the existing "how many bottles can this
---     batch still make" yield math always has (total_volume_ml div
---     bottle_size_ml — see utils.bottle_size_ml()), just frozen once at
---     creation instead of recomputed live, since packaging is bought
---     for that number specifically. Both columns are NULL for a batch
---     with no target size (or any batch created before this migration)
---     — packaging then stays exactly as before: a separate, generic
---     per-size reference on the Formulas page (see unit_formula_items),
---     not folded into this batch's own total_cost.
---
---     is_packaging marks which bulk_batch_materials rows came from the
---     target unit's formula (unit_formula_items) at qty_per_unit x
---     target_bottle_qty, rather than being hand-added liquid ingredients
---     — this is what lets a batch's total_cost split back into a liquid
---     subtotal and a packaging subtotal (bulk_batches() in
---     routes/admin.py), the same SUMIF(Category=...) split the
---     spreadsheet does by its own Category column. cost_per_ml keeps its
---     existing meaning either way — cost per mL of LIQUID only, never
---     including packaging, since mL doesn't apply to a piece-counted
---     bottle/sticker/seal.
 -- ----------------------------------------------------------------------------
 DELIMITER $$
 
@@ -2381,36 +1552,11 @@ DROP PROCEDURE _migrate_bulk_batches_target_unit;
 
 -- ----------------------------------------------------------------------------
 -- 44. Migration — backfill products.unit = 'BULK' for Bulk/Refill rows
---
---     Migration 34 above widened products.unit's ENUM to add 'BULK', but
---     any Bulk/Refill row created before that ALTER ran had tried to
---     store 'BULK' into a column whose ENUM didn't yet have that label —
---     under non-strict SQL mode MySQL silently stores an unrecognized
---     ENUM value as '' rather than erroring, so those rows have been
---     sitting with unit = '' ever since, not 'BULK'. Every bottles-vs-
---     bulk-mL split in the app (reports.py, admin.py's reports_data()/
---     dashboard(), branch.py) keys off `p.unit = 'BULK'` / `<> 'BULK'`,
---     so a blank unit on a Bulk/Refill row made it read as a bottle
---     product instead — e.g. a 2000mL batch counted as 2000 "bottles"
---     and got summed in with real bottle counts on the Ledger movement
---     chart and sales/stock totals. This is a one-time data correction,
---     not a schema change — plain UPDATE, safe to re-run (a no-op once
---     every row matches).
 -- ----------------------------------------------------------------------------
 UPDATE products SET unit = 'BULK' WHERE category = 'Bulk/Refill' AND unit <> 'BULK';
 
 -- ----------------------------------------------------------------------------
 -- 45. Migration — sales: credit settlement (credit_settled_at/by)
---
---     Until now a Credit sale had no way to be cleared once collected —
---     payment_method just stayed 'Credit' forever, so the Credit
---     Purchases leaderboard (routes/branch.py's credit_purchases()) summed
---     every Credit sale ever made, with no way to tell a still-owed
---     balance from one already paid back. These two columns back a
---     "Mark as paid" action (sale_stock.settle_credit(), wired up from
---     the Scan Receipt page) that records who cleared it and when;
---     credit_purchases() queries now exclude settled rows so the
---     leaderboard reflects what's still outstanding.
 -- ----------------------------------------------------------------------------
 DELIMITER $$
 
@@ -2434,13 +1580,6 @@ DROP PROCEDURE _migrate_sales_credit_settled;
 
 -- ----------------------------------------------------------------------------
 -- 46. Migration — dated raw-material restock events
---
---     raw_materials.package_qty/package_cost remain lifetime aggregates so
---     existing all-time purchase totals stay correct. Each restock now also
---     gets its own dated event row for supplier history and date-filtered
---     purchase reports. Existing rows predate event tracking and remain a
---     single aggregate baseline; their individual older restocks cannot be
---     reconstructed from the cumulative columns.
 -- ----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS material_restock_events (
     restock_id             INT AUTO_INCREMENT PRIMARY KEY,
@@ -2465,13 +1604,6 @@ CREATE TABLE IF NOT EXISTS material_restock_events (
 
 -- ----------------------------------------------------------------------------
 -- 47. Migration — repeatable partial stock-request shipments
---
---     Each dispatch is a separate shipment with its own quantities and
---     receipt confirmation. Request-item quantities remain cumulative for
---     reports and the final goods-received receipt. Outstanding quantity
---     is requested minus good quantity received; damaged/short units remain
---     open for a later dispatch. Existing in-transit/fulfilled requests are
---     copied into one legacy shipment so current deliveries remain receivable.
 -- ----------------------------------------------------------------------------
 ALTER TABLE stock_requests
     MODIFY COLUMN status ENUM('Pending','Partially Fulfilled','In Transit','Fulfilled','Rejected')
@@ -2526,9 +1658,7 @@ WHERE COALESCE(sri.dispatched_qty, 0) > 0
   AND NOT EXISTS (SELECT 1 FROM stock_request_shipment_items ssi
                   WHERE ssi.shipment_id = ss.shipment_id AND ssi.request_item_id = sri.item_id);
 
--- The old branch flow marked every submitted receipt Fulfilled even when
--- less than the requested amount arrived. Reopen those balances so HQ can
--- dispatch the outstanding good quantity under the new lifecycle.
+-- Reopen receipts marked Fulfilled with less than requested so HQ can ship the rest.
 UPDATE stock_requests sr
 SET sr.status = 'Partially Fulfilled'
 WHERE sr.status = 'Fulfilled'
@@ -2540,10 +1670,6 @@ WHERE sr.status = 'Fulfilled'
 
 -- ----------------------------------------------------------------------------
 -- 48. Migration — product variants are Male or Female
---
---     The catalog no longer supports a Unisex product variant. Refuse to
---     narrow the enum while any such rows remain so existing inventory and
---     sales history are never silently reclassified or discarded.
 -- ----------------------------------------------------------------------------
 DELIMITER $$
 
@@ -2573,14 +1699,6 @@ DROP PROCEDURE _migrate_products_remove_unisex_variant;
 
 -- ----------------------------------------------------------------------------
 -- 49. Migration — stats performance + package orders dated by close
---
---     * sales.sold_at gets its own index: the existing (branch_id, sold_at)
---       index can't serve the all-branches "last N days" queries behind the
---       dashboard and Reports charts, which scanned the whole table.
---     * partner_inquiries.closed_at is when an order became Closed (set by
---       the status change in admin.partner_inquiry_status). Package revenue
---       is dated by it instead of by when the inquiry came in. Existing
---       Closed rows are backfilled from fulfilled_at, else created_at.
 -- ----------------------------------------------------------------------------
 DELIMITER $$
 
@@ -2611,35 +1729,7 @@ CALL _migrate_stats_indexes_and_closed_at();
 DROP PROCEDURE _migrate_stats_indexes_and_closed_at;
 
 -- ----------------------------------------------------------------------------
--- 50. Migration — built-in bulk batch formulas (formula.txt)
---
---     The business has three fixed formulas (15% / 14% / 13%), each in
---     three timpla sizes (500 / 250 / 125 ml oil scent), kept in these tables
---     and seeded below, so a fresh database has them. A batch is produced by
---     choosing one, so nothing is entered material by material.
---
---       bulk_formulas           one row per formula (name; is_default marks the one
---                               every scent uses unless listed below)
---       bulk_formula_scents     the scents that use a different formula (the SKU Map's
---                               exceptions): base code -> formula
---       bulk_formula_sizes      its amounts per size: oil ml, fixative g,
---                               alcohol + water mix ml, moisturizer ml
---       bulk_formula_settings   the single row of shared settings: the bottle
---                               size batches are filled into, and the mixing
---                               recipe (parts alcohol : parts water) that the
---                               "alcohol" amount is split by
---       bulk_formula_packaging  how many of each packaging item go in one
---                               bottle (bottle, sticker, plastic seal)
---
---     batch_formula_materials says which raw material plays each role in
---     those formulas (oil scent, fixative, alcohol, moisturizer, distilled
---     water) and their packaging (bottle, sticker, plastic seal — one of
---     each per bottle, so the amount needed is just the bottle count).
---     Unset roles are guessed from the material names.
---
---     bulk_batches.formula_label is the text of the formula a batch was
---     produced from (e.g. "Formula 15%, 500 ml"); NULL for batches logged
---     before this existed.
+-- 50. Migration — built-in bulk batch formulas (the built-in formulas)
 -- ----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS batch_formula_materials (
     role        ENUM('oil', 'fixative', 'alcohol', 'moisturizer', 'water', 'bottle', 'sticker', 'seal') PRIMARY KEY,
@@ -2690,10 +1780,7 @@ CREATE TABLE IF NOT EXISTS bulk_formula_packaging (
     CHECK (qty_per_bottle >= 0)
 );
 
--- Databases that ran an earlier version of this migration have bulk_formulas
--- with a free-text "scents" column and no is_default: add is_default (the 15%
--- formula is the default), and drop the text column — the scents now come from
--- bulk_formula_scents. A no-op on a fresh database.
+-- Old drafts had a free-text scents column: add is_default (15% formula), drop it.
 DELIMITER $$
 
 DROP PROCEDURE IF EXISTS _migrate_bulk_formulas_default$$
@@ -2720,14 +1807,14 @@ DELIMITER ;
 CALL _migrate_bulk_formulas_default();
 DROP PROCEDURE _migrate_bulk_formulas_default;
 
--- Seed: formula.txt / Costing_Calculator_By_Formula.xlsx. INSERT IGNORE, so
+-- Seed: the owner's costing sheet. INSERT IGNORE, so
 -- re-running never overwrites a value you have since changed.
 INSERT IGNORE INTO bulk_formulas (name, is_default) VALUES
     ('15%', TRUE),
     ('14%', FALSE),
     ('13%', FALSE);
 
--- formula.txt / the SKU Map sheet: these scents use 14% and 13%; every other
+-- the owner's SKU Map: these scents use 14% and 13%; every other
 -- scent uses the default (15%).
 INSERT IGNORE INTO bulk_formula_scents (base_code, formula_id)
 SELECT v.base_code, f.formula_id
@@ -2760,11 +1847,7 @@ JOIN bulk_formulas f ON f.name = v.name;
 INSERT IGNORE INTO bulk_formula_settings (id, bottle_unit, mix_alcohol_parts, mix_water_parts)
 VALUES (1, '85ML', 1000, 200);
 
--- The mix is 1000 mL alcohol to 200 mL distilled water. It was first seeded the
--- other way round (200 alcohol : 1000 water), which put five times too little
--- alcohol into every formula. Correct a database that still has the old
--- default, and fix the column defaults; a ratio an admin has since set to
--- anything else is left alone. Safe to run on every deploy.
+-- Mix is 1000 mL alcohol : 200 mL water; fix the old swapped seed (custom ratios kept).
 ALTER TABLE bulk_formula_settings
     ALTER COLUMN mix_alcohol_parts SET DEFAULT 1000.000,
     ALTER COLUMN mix_water_parts SET DEFAULT 200.000;
@@ -2796,12 +1879,6 @@ DROP PROCEDURE _migrate_bulk_batches_formula_label;
 
 -- ----------------------------------------------------------------------------
 -- 50a. Migration — repair databases that ran an earlier version of 50
---
---      An earlier draft of migration 50 created batch_formulas /
---      batch_formula_items and bulk_batches.formula_id, and a role table
---      without the packaging roles (bottle, sticker, seal). Widen the role
---      list, drop a blank role row an old seed could leave behind, and drop
---      the unused draft tables/column. A no-op on a fresh database.
 -- ----------------------------------------------------------------------------
 DELIMITER $$
 
@@ -2843,34 +1920,6 @@ DROP PROCEDURE _migrate_formula_materials_roles;
 
 -- ----------------------------------------------------------------------------
 -- 51. Seed — suppliers and the constant raw materials the built-in formulas use
---
---     From Costing_Calculator_By_Formula.xlsx (Settings sheet rates):
---
---       Supplier  BubbleMix Fragrances and Household Goods Store
---                   Oil Scent    500 ml for PHP 2,000   (PHP 4.00 / ml)
---                   Fixative     140 g  for PHP 490     (PHP 3.50 / g)
---                   Moisturizer  1000 ml for PHP 310    (PHP 0.31 / ml)
---       Supplier  Centralpack
---                   Perfume Alcohol        1000 ml for PHP 132.09
---                   Frosted 85 ml Bottle   1 pc    for PHP 15
---       Supplier  Alfamart - Lipa (Lipa City, Batangas)
---                   Distilled Water   10 L for PHP 82   (PHP 8.20 / L)
---       Supplier  Shopee (online, no address)
---                   Sticker           1 pc  for PHP 3
---                   Plastic Seal      1 pc  for PHP 1.50
---
---     Safe to re-run: every INSERT is INSERT IGNORE (suppliers and materials
---     are unique by name), so rows that already exist — including ones whose
---     price, stock or supplier you have since edited — are left untouched.
---     Stock starts at 0 and the purchase totals start at nothing bought
---     (package_cost 0; package_qty is 1 only because the column must be
---     positive): the prices above are the unit prices (cost_per_unit), not
---     purchases, so supplier totals don't show money you haven't spent.
---     Restock each material on the Materials page to log what you buy; that
---     adds to stock and to the totals, and averages the price.
---
---     It also links each formula role (see batch_formula_materials above) to
---     its material.
 -- ----------------------------------------------------------------------------
 INSERT IGNORE INTO suppliers (supplier_name, address) VALUES
     ('BubbleMix Fragrances and Household Goods Store', '107 E. Rodriguez Sr. Ave., Brgy. Tatalon, Quezon City'),
@@ -2898,9 +1947,7 @@ VALUES
     ('Plastic Seal', 'Piece', 'Individual', 1, 0.00, 1.5000, 0,
         (SELECT supplier_id FROM suppliers WHERE supplier_name = 'Shopee'));
 
--- A database seeded before these suppliers existed has the three materials
--- with no supplier: assign them now. Only where none is set, so a supplier
--- chosen on the Materials page is never overwritten.
+-- Assign suppliers only where none is set, so Materials page choices stay.
 UPDATE raw_materials SET supplier_id = (SELECT supplier_id FROM suppliers WHERE supplier_name = 'Alfamart - Lipa')
 WHERE material_name = 'Distilled Water' AND supplier_id IS NULL;
 UPDATE raw_materials SET supplier_id = (SELECT supplier_id FROM suppliers WHERE supplier_name = 'Shopee')
@@ -2925,17 +1972,6 @@ SELECT 'seal', material_id FROM raw_materials WHERE material_name = 'Plastic Sea
 
 -- ----------------------------------------------------------------------------
 -- 52. Seed — the product catalog (products_20260922_144849.csv)
---
---     31 scents, each as an 85ML bottle (PHP 85.00). Bulk is not a product:
---     it is sold by the mL straight out of the bulk batches (migration 55),
---     priced on bulk_rate_settings.
---     The SKU is built the way the app builds it: base code + '-' + unit
---     (A1 + 85ML -> A1-85ML), and category follows the unit (BULK is
---     Bulk/Refill, a bottle size is Bottled).
---
---     INSERT IGNORE, so re-running never overwrites a price or name you have
---     since edited. Every product also gets a zero-stock row in every
---     branch's inventory, as the app does when you add a product by hand.
 -- ----------------------------------------------------------------------------
 INSERT IGNORE INTO products (sku, item_name, variant, category, unit, price) VALUES
     ('A4-85ML', 'Abercrombie & Fitch', 'Male', 'Bottled', '85ML', 85.00),
@@ -2975,13 +2011,6 @@ SELECT b.branch_id, p.sku, 0 FROM branches b CROSS JOIN products p;
 
 -- ----------------------------------------------------------------------------
 -- 54a. Default product photos
---
---     Every catalog scent that has a built-in render in static/img/scents/
---     gets its square, bottle-centred thumbnail as its product photo, for
---     every bottle size, so nobody has to upload one. Only products with NO
---     photo (or the earlier wide render, which sat off-centre in small square
---     boxes) are filled in: a photo uploaded from the Products page is never
---     replaced, and this is safe to run on every deploy.
 -- ----------------------------------------------------------------------------
 UPDATE products p
 JOIN (
@@ -3023,30 +2052,7 @@ WHERE p.image_path IS NULL OR p.image_path = ''
 
 -- ----------------------------------------------------------------------------
 -- 55. Migration — bulk is sold from the bulk batches, not from BULK products
---
---     A bulk batch is already the stock of a scent in mL, so a separate
---     "A1-BULK" product row (with its own stock count) was a second, parallel
---     copy of the same thing. This removes it:
---
---       - bulk_batches.base_code: the product code the batch is of (A1), so a
---         sale of "100 mL of A1" knows which batches to draw from. Existing
---         batches are matched to a code by their scent name.
---       - sale_batch_usage: which batch(es) each bulk sale or refill took its
---         mL from, and at what cost per mL. A void puts exactly that back, and
---         it is where the cost of a bulk sale comes from. Sales take from the
---         OLDEST batch of the scent that still has mL left.
---       - sales.sku is no longer a foreign key to products: a bulk sale is
---         recorded under the key '<code>-BULK' (e.g. A1-BULK), which is just a
---         label now, not a product.
---       - sale_catalog: products plus one virtual '<code>-BULK' row per code,
---         so sales history and every sales report still show a bulk sale's
---         name, size and variant by joining it where they used to join
---         products.
---       - the BULK rows (and their inventory rows) are deleted from products,
---         and products.unit / products.category no longer allow BULK or
---         Bulk/Refill.
---
---     Safe to re-run: every step checks before it changes anything.
+-- A batch is the scent's stock in mL, so separate BULK product rows are retired.
 -- ----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS sale_batch_usage (
     usage_id    INT AUTO_INCREMENT PRIMARY KEY,
@@ -3083,9 +2089,7 @@ BEGIN
         WHERE b.base_code IS NULL;
     END IF;
 
-    -- A batch with no product code can't be sold by the mL. Link any such batch
-    -- to the catalog scent of the same name, on every run (a batch made by a
-    -- script or an older version of the app has none).
+    -- Link batches with no product code to the same-named catalog scent, every run.
     UPDATE bulk_batches b
     JOIN (SELECT DISTINCT LEFT(sku, CHAR_LENGTH(sku) - CHAR_LENGTH(unit) - 1) AS code, item_name
           FROM products) x ON x.item_name = b.scent_name
@@ -3150,15 +2154,6 @@ FROM (SELECT LEFT(sku, CHAR_LENGTH(sku) - CHAR_LENGTH(unit) - 1) AS code,
 
 -- ----------------------------------------------------------------------------
 -- 56. Migration — one order, several scents
---
---     A customer can buy several different scents at once. Each scent is still
---     its own sales row (so stock, voids, reports and history keep working per
---     product); sales.order_id ties the rows of one order together. It holds the
---     sale_id of the order's FIRST row, so a single-product sale has order_id
---     NULL and is its own order. The receipt prints the whole order, 10 products
---     to a slip (see receipts.py), and its QR code points at the first row.
---
---     Safe to re-run: the column and index are only added when missing.
 -- ----------------------------------------------------------------------------
 DELIMITER $$
 
@@ -3181,21 +2176,7 @@ DROP PROCEDURE _migrate_sales_order_id;
 
 -- ----------------------------------------------------------------------------
 -- 57. Migration — oil scent price and stock per scent
---
---     Every scent has its own oil, bought at its own price and kept in its own
---     stock. scent_oils holds one row per scent (the product base code, e.g.
---     'A1'): that oil's price per unit and stock on hand. The single "Oil Scent"
---     raw material stays as the summary row on the Materials page; when a bulk
---     batch is made for a scent that has a row here, the batch is costed at
---     that scent's price and its oil comes out of that scent's stock.
---
---     Rows are created by the app (services/scent_oils.py), one per scent in
---     the catalog, priced like the Oil Scent material and starting at 0 stock
---     (the owner enters each scent's real stock). The Oil Scent material's own
---     stock is left alone: batches of an "other" scent still use it.
---
---       scent_oils          one row per scent: price per unit, stock on hand
---       scent_oil_restocks  each purchase of a scent's oil, for price history
+-- scent_oils holds one row per scent (price and stock).
 -- ----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS scent_oils (
     base_code     VARCHAR(40) PRIMARY KEY,
@@ -3223,16 +2204,7 @@ CREATE TABLE IF NOT EXISTS scent_oil_restocks (
 
 -- ----------------------------------------------------------------------------
 -- 58. Migration — a gallon is 3,200 mL
---
---     The app converted a Gallon to mL with the US gallon (3,785.411784 mL), but
---     the jugs in use hold 3,200 mL. Every conversion now uses 3,200 (see
---     ML_PER_BATCH_UNIT in heaven_angel/utils.py). A bulk batch whose own size
---     was entered in Gallons still holds the old mL figure: bring its total to
---     input_qty x 3200 and move what is left by the same difference (what was
---     already used stays used), and keep its liquid cost per mL consistent with
---     the new volume. MySQL applies the SET list left to right, so total_volume_ml
---     is last. Safe to run on every deploy: a batch already at input_qty x 3200
---     does not match.
+-- One gallon is 3,200 mL (not the US gallon).
 -- ----------------------------------------------------------------------------
 UPDATE bulk_batches
 SET remaining_ml = GREATEST(0, remaining_ml + (input_qty * 3200 - total_volume_ml)),
@@ -3240,12 +2212,8 @@ SET remaining_ml = GREATEST(0, remaining_ml + (input_qty * 3200 - total_volume_m
     total_volume_ml = input_qty * 3200
 WHERE input_unit = 'Gallon' AND total_volume_ml <> input_qty * 3200;
 
--- The opening Perfume Alcohol was imported as 9 gallons worked out with the US
--- gallon: 34,068.706 mL for 4,500 pesos. 9 gallons of 3,200 mL is 28,800 mL, so
--- the quantity and the stock were 5,268.706 mL too high and the cost per mL too
--- low (0.1321 instead of 0.1563). Correct a row that still matches that import
--- exactly; one that has changed since is left for scripts/gallon_stock_correction.py.
--- Runs once: afterwards the quantity is 28,800 and no longer matches.
+-- Fix the opening alcohol import (9 gallons = 28,800 mL, not 34,068 mL) if it still
+-- matches exactly; otherwise see scripts/gallon_stock_correction.py. Runs once.
 UPDATE raw_materials
 SET stock_qty = GREATEST(0, stock_qty - 5268.706),
     package_qty = 28800.000,
@@ -3255,13 +2223,6 @@ WHERE material_name = 'Perfume Alcohol' AND unit = 'Milliliter'
 
 -- ----------------------------------------------------------------------------
 -- 59. Migration — chemist and labor, per bottle
---
---     A bulk batch made from a formula carries two flat charges per bottle it
---     yields, one of each: the chemist and the labor (5 pesos each by default).
---     They are costs, not materials, so nothing is deducted from stock. The rate
---     per bottle lives on bulk_formula_settings; the amount charged on a batch
---     (rate x the bottles it yields) is kept on the batch itself, and is part of
---     its total_cost and so of the cost per new bottle. Safe to re-run.
 -- ----------------------------------------------------------------------------
 DELIMITER $$
 

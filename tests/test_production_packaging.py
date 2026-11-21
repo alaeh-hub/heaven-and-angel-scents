@@ -34,6 +34,7 @@ def _packaging_materials(sql, stock):
 
 
 def test_a_run_from_a_batch_without_packaging_deducts_it(client, sql):
+    """A run from a batch without packaging deducts it."""
     _admin(client, sql)
     packaging = _packaging_materials(sql, 10)
     assert len(packaging) == 3
@@ -51,6 +52,7 @@ def test_a_run_from_a_batch_without_packaging_deducts_it(client, sql):
 
 
 def test_a_run_is_refused_when_packaging_is_short(client, sql):
+    """A run is refused when packaging is short."""
     _admin(client, sql)
     packaging = _packaging_materials(sql, 2)
     sku = make_product(sql, unit="85ML")
@@ -66,6 +68,7 @@ def test_a_run_is_refused_when_packaging_is_short(client, sql):
 
 
 def test_a_batch_that_already_had_its_packaging_is_not_deducted_twice(client, sql):
+    """A batch that already had its packaging is not deducted twice."""
     _admin(client, sql)
     packaging = _packaging_materials(sql, 10)
     sku = make_product(sql, unit="85ML")
@@ -86,6 +89,7 @@ def test_a_batch_that_already_had_its_packaging_is_not_deducted_twice(client, sq
 
 
 def test_a_batch_of_another_scent_or_size_is_refused(client, sql):
+    """A batch of another scent or size is refused."""
     _admin(client, sql)
     packaging = _packaging_materials(sql, 10)
     sku = make_product(sql, unit="85ML")

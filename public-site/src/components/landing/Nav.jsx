@@ -16,17 +16,13 @@ export const NAV_LINKS = [
 ];
 
 /**
- * Which of `ids` sits across the middle band of the viewport right now.
- * `lockRef.current` pauses tracking while a nav click scrolls the page, so
- * the pill heads straight for the chosen link instead of stopping at every
- * section it passes.
+ * Which of `ids` crosses the viewport middle. `lockRef.current` pauses
+ * tracking during a nav-click scroll so the pill goes straight to its link.
  */
 function useActiveSection(ids, lockRef) {
   const [active, setActive] = useState(null);
   useEffect(() => {
-    // Tracked as a set so leaving a section (into one that isn't in the
-    // nav, like the collection) clears the highlight instead of leaving
-    // the last one lit.
+    // A set, so leaving into a section not in the nav clears the highlight.
     const inBand = new Set();
     const observer = new IntersectionObserver((entries) => {
       entries.forEach((entry) => {
@@ -47,18 +43,14 @@ function useActiveSection(ids, lockRef) {
 
 /** Pixels of upward scrolling it takes to bring the hidden bar back. */
 const UP_TO_SHOW = 24;
-/**
- * Without `scrollend`: a nav glide counts as finished once the page has
- * been still this long (ms).
- */
+/** Without `scrollend`: a glide is finished once the page is still this long (ms). */
 const SETTLE_MS = 180;
 /** Unlock regardless after this long (ms), in case no end is ever reported. */
 const GLIDE_MAX_MS = 4000;
 
 /**
- * Sticky top bar. Transparent over the hero, frosted once the page moves;
- * slides away while reading downward and returns only on a real scroll
- * up, so it's there when wanted and out of the way otherwise.
+ * Sticky top bar: transparent over the hero, frosted on scroll, hides when
+ * reading down and returns on a real scroll up.
  */
 export default function Nav({ hiddenIds = [] }) {
   const { scrollY } = useScroll();
@@ -69,12 +61,10 @@ export default function Nav({ hiddenIds = [] }) {
   const navigatingRef = useRef(false);
   const { site, openInquiry } = useSite();
   const contact = site?.contact || {};
-  // Sections that aren't on the page right now (Earnings, with no
-  // discounted package to estimate) get no link, rather than a dead one.
+  // Absent sections (e.g. Earnings without discounts) get no dead link.
   const hiddenKey = hiddenIds.join(' ');
   const links = useMemo(() => NAV_LINKS.filter((l) => !hiddenKey.split(' ').includes(l.id)), [hiddenKey]);
-  // A new list whenever a section appears or goes, so the tracker below
-  // re-observes and picks up sections that render after the first load.
+  // New list when a section appears or goes, so the tracker re-observes.
   const sectionIds = useMemo(() => links.map((l) => l.id), [links]);
   const [active, setActive] = useActiveSection(sectionIds, navigatingRef);
 
@@ -94,9 +84,7 @@ export default function Nav({ hiddenIds = [] }) {
       // Stay put while a nav click is carrying the page downward.
       if (!navigatingRef.current) setHidden(true);
     } else if (dy < 0) {
-      // Only a deliberate scroll up brings it back: the tiny steps at the
-      // tail of a smooth or momentum scroll (and layout nudges) no longer
-      // count as "not scrolling down", which kept popping it back in.
+      // Only a deliberate scroll up shows it (momentum tails used to pop it back).
       upTravel.current -= dy;
       if (upTravel.current > UP_TO_SHOW) setHidden(false);
     }
@@ -108,10 +96,7 @@ export default function Nav({ hiddenIds = [] }) {
 
   /** Light the chosen link at once, then glide to its section. */
   const goTo = (e, id) => {
-    // Locked first, so the bar stays put for the whole glide down. It
-    // unlocks once the page has settled rather than after a fixed delay,
-    // since a long glide (hero to packages) outlasts any fixed guess, and
-    // a bar sliding away at the end left a gap above the section.
+    // Lock first so the bar stays put; unlock when settled (glides vary in length).
     stopWatch.current();
     navigatingRef.current = true;
     if (!scrollToSection(id)) {
@@ -120,9 +105,7 @@ export default function Nav({ hiddenIds = [] }) {
     }
     e.preventDefault();
     setActive(id);
-    // `scrollend` fires when the smooth scroll is really done, however
-    // slowly the frames arrive; older browsers fall back to "still for
-    // SETTLE_MS".
+    // `scrollend` marks the end; older browsers wait for SETTLE_MS of stillness.
     const hasEnd = 'onscrollend' in window;
     let timer;
     const done = () => stopWatch.current();
@@ -190,8 +173,7 @@ export default function Nav({ hiddenIds = [] }) {
                 whileTap={{ scale: 0.94 }}
                 transition={SPRING}
               >
-                {/* A faint hover pill glides between links; the active pill
-                    sits above it and springs over when a link is chosen. */}
+                {/* Faint hover pill glides between links; the active pill springs over. */}
                 <AnimatePresence>
                   {hovered === id && active !== id && (
                     <motion.span
@@ -211,8 +193,7 @@ export default function Nav({ hiddenIds = [] }) {
           </nav>
 
           <div className="nav-actions">
-            {/* Packages has its own link beside this, so the one button
-                is the other thing a visitor comes to do: get in touch. */}
+            {/* Packages has its own link, so this button is for getting in touch. */}
             <button type="button" className="btn btn-primary btn-sm" onClick={() => openInquiry()}>Send an inquiry</button>
             <button
               type="button"

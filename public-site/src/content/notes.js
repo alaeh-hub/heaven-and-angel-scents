@@ -1,13 +1,7 @@
-// "How our scents unfold" copy (the ScentJourney section), kept in one
-// place like about.js.
-//
-// Notes follow the published note pyramids of the fragrances each bottle's
-// label says it is inspired by (Uriel H1: Salvatore Ferragamo Incanto Shine;
-// Raphael A3: Ralph Lauren Polo Sport). Retail sources differ slightly, so
-// TODO(content): confirm them against your own formulas before partners
-// repeat them to customers. One to three notes per scent per layer keeps
-// the layout tidy; the first one of each also floats over that bottle in
-// the scene.
+// "How our scents unfold" copy (ScentJourney), like about.js.
+// Notes follow the published pyramids of each bottle's inspiration.
+// TODO(content): confirm against your own formulas. Keep 1-3 notes per
+// layer; the first of each also floats over its bottle.
 
 /** The two bottles in the scene, left to right (see PerfumeScene). */
 export const SCENTS = [

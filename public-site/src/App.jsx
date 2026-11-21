@@ -10,10 +10,7 @@ import { useScrollReveal } from './hooks/useScrollReveal.js';
 import { EASE_OUT } from './motion.js';
 import PackagesPage from './pages/PackagesPage.jsx';
 
-// The landing page ships with the app; the pages a visitor may never open
-// (the dialog, a package's own page, the full catalog) are separate
-// downloads, fetched in the background once the browser is idle so that
-// opening one is still instant.
+// Landing ships in the main bundle; other pages load in the background when idle.
 const loadDialog = () => import('./pages/DetailDialog.jsx');
 const loadPackagePage = () => import('./pages/PackageDetailPage.jsx');
 const loadProducts = () => import('./pages/ProductsPage.jsx');
@@ -38,20 +35,10 @@ const DETAIL = '/partner-portal/:slug/packages/:packageId';
 const PRODUCTS = '/partner-portal/:slug/products';
 
 /**
- * Flask only serves this app at the two page URLs above, after checking
- * the slug (routes/portal.py) — a wrong slug never reaches React.
- *
- * "Modal route" pattern: a package opened from the list carries the list's
- * location as `state.background`. The page routes then keep rendering
- * that background (the list, untouched) and the package renders on top in
- * a dialog. Opened any other way — a shared link, a new tab — the same
- * URL renders the standalone detail page instead.
- *
- * Moving between pages (list, catalog, standalone detail) cross-fades:
- * the old page fades out, the window resets to the top, the new one
- * fades in. Opacity only: a transform here would re-anchor the fixed
- * backdrop videos and nav sheet to this wrapper. Keyed by pathname, so
- * filters/pagination (search params) and the modal route don't trigger it.
+ * Routes. A package opened from the list renders in a dialog over it
+ * (`state.background`); a shared link or new tab gets the standalone page.
+ * Page changes cross-fade with opacity only (a transform would re-anchor
+ * the fixed backdrops), keyed by pathname.
  */
 export default function App() {
   const location = useLocation();

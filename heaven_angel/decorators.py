@@ -8,9 +8,7 @@ from flask import abort, flash, redirect, request, session, url_for
 
 from heaven_angel.db import query
 
-# Endpoints a signed-in user must always be able to reach even while
-# must_change_password is set — otherwise they'd be locked out of the
-# one page that lets them clear it.
+# Pages reachable while must_change_password is set, so the user can clear it.
 _PASSWORD_CHANGE_EXEMPT_ENDPOINTS = {"auth.change_password", "auth.logout"}
 
 
@@ -59,18 +57,18 @@ def live_account_or_none():
     return account
 
 
-# Server-side list of signed-out sessions. The session cookie is stateless, so
-# without this a copied cookie would keep working after logout. Each login gets a
-# random "sid"; logout remembers it here (one gunicorn worker, so in memory).
+# Signed-out session ids (in memory, one worker); stops a copied cookie after logout.
 _revoked_sids = {}
 _REVOKE_TTL = 60 * 60 * 24 * 2
 
 
 def new_session_id():
+    """A random id for a new login session."""
     return secrets.token_urlsafe(12)
 
 
 def revoke_current_session():
+    """Remember the current session id as signed out."""
     sid = session.get("sid")
     if sid:
         now = time.time()
@@ -80,6 +78,7 @@ def revoke_current_session():
 
 
 def session_is_revoked():
+    """True if this session id was signed out."""
     sid = session.get("sid")
     return bool(sid) and sid in _revoked_sids
 
@@ -110,18 +109,13 @@ def _require_session(required_role=None):
         flash("Your password changed, so please sign in again.", "warning")
         return redirect(url_for("auth.login"))
 
-    # A Branch account must belong to a branch. users.branch_id is
-    # ON DELETE SET NULL, and several helpers (scan, void_sale, settle_credit)
-    # read branch_id=None as "HQ, unrestricted" — so a branchless Branch
-    # account is refused outright instead of failing open.
+    # A Branch account without a branch is refused (a null branch_id would mean HQ).
     if account["role"] == "Branch" and account["branch_id"] is None:
         session.clear()
         flash("This account isn't assigned to a branch. Please contact HQ.", "error")
         return redirect(url_for("auth.login"))
 
-    # Keep the session's branch in sync with the database on every
-    # request, same reasoning as the role/is_active re-check above —
-    # see _current_account_or_none()'s docstring.
+    # Keep the session's branch in sync with the database on every request.
     session["branch_id"] = account["branch_id"]
     session["branch_name"] = account["branch_name"]
 
@@ -136,6 +130,7 @@ def _require_session(required_role=None):
 
 
 def login_required(view):
+    """Require a signed-in user."""
     @wraps(view)
     def wrapped(*args, **kwargs):
         deny = _require_session()
@@ -146,6 +141,7 @@ def login_required(view):
 
 
 def admin_required(view):
+    """Require an Admin user."""
     @wraps(view)
     def wrapped(*args, **kwargs):
         deny = _require_session(required_role="Admin")
@@ -156,6 +152,7 @@ def admin_required(view):
 
 
 def branch_required(view):
+    """Require a Branch user."""
     @wraps(view)
     def wrapped(*args, **kwargs):
         deny = _require_session(required_role="Branch")

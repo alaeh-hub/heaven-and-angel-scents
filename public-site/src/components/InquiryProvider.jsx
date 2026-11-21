@@ -6,11 +6,9 @@ import InquirySheet from './detail/InquirySheet.jsx';
 const SiteContext = createContext({ site: null, openInquiry: () => {} });
 
 /**
- * Portal-wide facts (contact details, reply time, catalog counts, see
- * routes/portal.py's api_site) plus the one general inquiry form, not
- * tied to any package. Any page can open it with
- * `useSite().openInquiry({ message })`. Lives above the routes so the
- * form and the facts survive moving between pages.
+ * Portal-wide facts (contact, reply time, counts; routes/portal.py api_site)
+ * and the general inquiry form: `useSite().openInquiry({ message })`.
+ * Sits above the routes so state survives page changes.
  */
 export function InquiryProvider({ children }) {
   const { pathname } = useLocation();
@@ -28,7 +26,7 @@ export function InquiryProvider({ children }) {
         csrfToken.current = result.csrf_token;
         setSite(result);
       })
-      // Not fatal: the page still works, the form fetches again on send.
+      // Not fatal: the form fetches again on send.
       .catch(() => {});
     return () => controller.abort();
   }, [slug]);

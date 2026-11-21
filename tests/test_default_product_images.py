@@ -17,6 +17,7 @@ def _schema_defaults():
 
 
 def test_schema_maps_every_scent_render_to_its_code():
+    """Schema maps every scent render to its code."""
     defaults = _schema_defaults()
     on_disk = {p.name.split("-")[0].upper() for p in SCENTS.glob("*/*-thumb.webp")}
     assert defaults, "no default photo mapping found in schema.sql"
@@ -27,6 +28,7 @@ def test_schema_maps_every_scent_render_to_its_code():
 
 
 def test_every_scent_has_its_full_set_of_renders_and_is_on_the_public_site():
+    """Every scent has its full set of renders and is on the public site."""
     codes = {p.name.split("-")[0].upper() for p in SCENTS.glob("*/*-thumb.webp")}
     assert {"A12", "A13", "A14", "H17"} <= codes
     for code in codes:
@@ -40,6 +42,7 @@ def test_every_scent_has_its_full_set_of_renders_and_is_on_the_public_site():
 
 
 def test_default_scent_image_matches_the_code_exactly(app):
+    """Default scent image matches the code exactly."""
     with app.app_context():
         assert default_scent_image("A1").endswith("/a1-zadkiel-thumb.webp")
         assert default_scent_image("a10").endswith("/a10-afriel-thumb.webp")  # not A1
@@ -49,6 +52,7 @@ def test_default_scent_image_matches_the_code_exactly(app):
 
 
 def test_replacing_a_photo_never_deletes_the_shared_scent_render(app):
+    """Replacing a photo never deletes the shared scent render."""
     with app.app_context():
         rel = default_scent_image("A1")
         _delete_product_image(rel)

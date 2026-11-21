@@ -11,6 +11,7 @@ _ready = False
 
 
 def _ensure():
+    """Create the settings table once per process."""
     global _ready
     if _ready:
         return
@@ -33,6 +34,7 @@ def get_many(keys):
 
 
 def set_many(values):
+    """Save several settings in one go."""
     _ensure()
     for key, value in values.items():
         execute(

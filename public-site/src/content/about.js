@@ -1,23 +1,12 @@
-// "About the brand" copy, kept in one place so the real text can be
-// dropped in without touching any layout code.
-//
-// TODO(content): the copy below is a DRAFT written from what the site
-// already says (small runs, 85 ml, partner pricing); it states no years,
-// names or figures. Review it and replace it with the real story (who's behind the brand, how long you've been
-// making scents, what makes the formulations different) before sharing
-// the portal link. Keep `lede` to about 2 sentences and each point body
-// to about 25 words so the layout keeps its rhythm.
-//
-// `photos`: `main` shows large and landscape (4:3), `detail` is a smaller
-// portrait (4:5) that overlaps its corner. Use WebP or JPG, about 1600px on
-// the long side, and write `alt` as what the photo actually shows.
+// "About the brand" copy in one place.
+// TODO(content): this is DRAFT copy; replace it with the real story before
+// sharing the link. Keep `lede` ~2 sentences, point bodies ~25 words.
+// `photos`: `main` is landscape 4:3, `detail` portrait 4:5; WebP/JPG ~1600px.
 
 export const ABOUT = {
   title: 'About Heaven & Angel Scents.',
   photos: {
-    // Stock photos from Unsplash (free under the Unsplash License, no
-    // attribution required; credited here anyway). Swap in your own shots
-    // by replacing the two files in static/img/about/.
+    // Unsplash stock photos (Unsplash License); swap files in static/img/about/.
     //   bottles.webp Lera Ginzburg, https://unsplash.com/photos/N8WxMVijPKw
     //   dropper.webp Fulvio Ciccolo, https://unsplash.com/photos/dtLGvOl0hEs
     main: { src: '/static/img/about/bottles.webp', alt: 'Five perfume bottles with blank labels standing in raking light and shadow' },

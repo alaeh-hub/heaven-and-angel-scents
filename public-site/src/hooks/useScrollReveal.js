@@ -1,11 +1,6 @@
 import { useEffect } from 'react';
 
-/**
- * Selector -> entrance variant. Everything here is revealed the first time
- * it scrolls into view. Elements that already animate themselves (package
- * cards, steps, catalog tiles, anything wrapped in <Reveal>) are left out.
- * Variants are defined in styles/reveal.css.
- */
+/** Selector -> entrance variant (see reveal.css). Self-animating elements are left out. */
 const TARGETS = [
   ['.section-head', 'up'],
   ['.section-head > *', 'up'],
@@ -36,11 +31,8 @@ const SELECTOR = TARGETS.map(([s]) => s).join(',');
 const VARIANT = TARGETS.map(([s, v]) => [s, v]);
 
 /**
- * One app-wide IntersectionObserver + MutationObserver (no per-component
- * code). New nodes (the packages arrive after a fetch, pages swap) are
- * tagged `data-sr="hide"` before paint, then flipped to `data-sr="in"` the
- * first time they are 12% visible; siblings stagger via --sr-i. Visitors
- * who ask for reduced motion get nothing tagged, so nothing ever hides.
+ * App-wide scroll reveal: tags new nodes `data-sr="hide"`, flips to "in"
+ * at 12% visible, staggers siblings via --sr-i. Skipped for reduced motion.
  */
 export function useScrollReveal() {
   useEffect(() => {

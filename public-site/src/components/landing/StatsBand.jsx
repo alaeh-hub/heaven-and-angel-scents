@@ -7,12 +7,8 @@ import Reveal from '../Reveal.jsx';
 const count = (v) => String(Math.round(v));
 
 /**
- * The facts a buyer weighs before inquiring, right under the packages:
- * real catalog and package counts (from the server, see api_site), the
- * best discount on offer, the reply-time promise when one is set, plus
- * any facts and partner quotes filled in content/partner.js. The counts
- * roll up from zero as the band comes into view. Nothing here is ever a
- * placeholder: an unknown figure is left out, not guessed.
+ * Facts buyers weigh under the packages: real counts, best discount, reply
+ * time, plus content/partner.js entries. Unknown figures are left out.
  */
 export default function StatsBand({ topDiscount }) {
   const { site } = useSite();
@@ -22,8 +18,7 @@ export default function StatsBand({ topDiscount }) {
   if (stats?.scents) items.push({ key: 'scents', value: <AnimatedNumber value={stats.scents} from={0} format={count} whenInView />, label: 'scents in the catalog' });
   if (stats?.packages) items.push({ key: 'packages', value: <AnimatedNumber value={stats.packages} from={0} format={count} whenInView />, label: stats.packages === 1 ? 'package ready to order' : 'packages ready to order' });
   if (topDiscount > 0) items.push({ key: 'discount', value: <>Up to <AnimatedNumber value={topDiscount} from={0} format={(v) => `${percent(Math.round(v * 10) / 10)}%`} whenInView /></>, label: 'below our list price' });
-  // "No login needed" is How it works' line to make, so there's no
-  // stand-in here when no reply time is set.
+  // No stand-in when no reply time is set ("No login needed" is in How it works).
   if (site?.reply_time) items.push({ key: 'reply', value: 'We reply', label: site.reply_time });
   FACTS.forEach((fact) => items.push({ key: fact.label, value: fact.value, label: fact.label }));
 

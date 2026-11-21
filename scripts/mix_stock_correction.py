@@ -1,25 +1,17 @@
-"""Work out (and optionally apply) the stock correction for the alcohol / water mix fix.
+"""Work out (and optionally apply) the stock fix for the alcohol / water mix ratio.
 
-Until the fix, every formula batch split its "Alcohol" mix amount 200 : 1000
-alcohol : water, so it took about a fifth of the alcohol it should and about
-five times too much water out of stock. The ratio is 1000 : 200. This script
-reads every batch that was made from a formula, works out what it SHOULD have
-taken with the correct ratio, and reports, per material, how far the stock
-count is off. It uses whatever database the app is configured for, so run it
-on the server (the numbers live in that database, not in any local backup):
+Before the fix, formula batches split the mix 200 : 1000 alcohol : water; the
+correct ratio is 1000 : 200. This reads every formula batch, works out what it
+should have taken, and reports per material how far the stock is off. Run it on
+the server (it uses the app's database):
 
-    python scripts/mix_stock_correction.py              # report only, changes nothing
+    python scripts/mix_stock_correction.py              # report only
     python scripts/mix_stock_correction.py --apply      # also correct raw_materials.stock_qty
+    docker compose exec web python scripts/mix_stock_correction.py   # Docker
 
-Docker deployment:
-
-    docker compose exec web python scripts/mix_stock_correction.py
-
-A batch that already used the right split (made after the fix) works out to a
-zero difference, so it is skipped automatically. The report is computed from the
-batches, not from today's stock, so apply it ONCE: running --apply a second time
-would adjust the stock again. Past batches keep their recorded amounts and costs;
-the report shows how much each batch's cost was off, for your information.
+Batches already made with the right split work out to zero and are skipped.
+Apply ONCE: a second --apply would adjust the stock again. Past batch costs are
+not rewritten; the report shows how far each was off.
 """
 import argparse
 import decimal
@@ -33,12 +25,7 @@ MIL = D("0.001")
 
 
 def correct_split(recorded_alcohol_ml, recorded_water_ml, alcohol_parts, water_parts):
-    """What a batch should have taken, from what it recorded.
-
-    The alcohol and water lines always add back up to the formula's mix, so the
-    mix is their sum. Returns (right_alcohol_ml, right_water_ml); water is the
-    remainder, exactly as batch_formulas.split_mix() does it.
-    """
+    """Return (right_alcohol_ml, right_water_ml) for a batch; the mix is the sum of its two lines."""
     mix = D(recorded_alcohol_ml) + D(recorded_water_ml)
     right_alcohol = (mix * D(alcohol_parts) / (D(alcohol_parts) + D(water_parts))).quantize(MIL)
     return right_alcohol, mix - right_alcohol
@@ -47,11 +34,9 @@ def correct_split(recorded_alcohol_ml, recorded_water_ml, alcohol_parts, water_p
 def batch_corrections(lines, alcohol_id, water_id, alcohol_parts, water_parts, to_ml):
     """Per-batch corrections from the alcohol and water lines of formula batches.
 
-    `lines` are dicts with batch_id, material_id, qty_used, qty_used_unit and
-    cost_per_unit_snapshot; `to_ml(qty, unit)` converts a quantity to mL. Returns
-    one dict per batch that was wrong (right-ratio batches are left out), with the
-    extra alcohol it should have taken, the water it over-took (both in mL) and
-    the cost it was understated by.
+    `lines` are dicts (batch_id, material_id, qty_used, qty_used_unit,
+    cost_per_unit_snapshot); `to_ml(qty, unit)` converts to mL. Returns one dict
+    per wrong batch: extra alcohol, water over-taken (mL) and cost understated.
     """
     by_batch = {}
     for ln in lines:
@@ -84,11 +69,7 @@ def batch_corrections(lines, alcohol_id, water_id, alcohol_parts, water_parts, t
 
 
 def stock_adjustments(corrections, alcohol_unit, water_unit, from_ml):
-    """Total change to apply to each material's stock count, in its own stock unit.
-
-    Alcohol stock is too HIGH by the alcohol the batches should have used, so it
-    goes down; water stock is too LOW by the water they over-took, so it goes up.
-    """
+    """Stock change per material: alcohol goes down, water goes up (own stock unit)."""
     extra_alcohol = sum((c["extra_alcohol_ml"] for c in corrections), D("0"))
     over_water = sum((c["over_water_ml"] for c in corrections), D("0"))
     return (-from_ml(extra_alcohol, alcohol_unit), from_ml(over_water, water_unit))

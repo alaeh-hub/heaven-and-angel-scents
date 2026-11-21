@@ -13,9 +13,8 @@ const slide = {
 const SWIPE_PX = 60;
 
 /**
- * Big product stage + thumbnail strip. `active`/`dir` live in the parent
- * so the contents list below can drive the same selection. On touch the
- * stage can be swiped left/right.
+ * Product stage plus thumbnails; `active`/`dir` live in the parent so the
+ * contents list can drive them. Swipeable on touch.
  */
 export default function Gallery({ items, active, dir, onSelect }) {
   const item = items[active];

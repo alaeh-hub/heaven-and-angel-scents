@@ -13,16 +13,12 @@ from heaven_angel.services import login_activity
 
 bp = Blueprint("auth", __name__)
 
-# Burned in place of a real check_password_hash() call when the username
-# doesn't exist, so that branch takes about as long as the "user found,
-# wrong password" branch instead of returning early. Without this, an
-# attacker who can measure response time gets a (slow, but free) oracle
-# for which usernames exist — hashing is the expensive part of this
-# check, so skipping it entirely for unknown usernames is the tell.
-# Not a real credential: generated once per process, never stored.
+# Hashed when the username is unknown, so timing can't reveal valid usernames.
+# Not a real credential: generated per process, never stored.
 _DUMMY_PASSWORD_HASH = generate_password_hash(secrets.token_hex(32))
 
 
+# Send visitors to the dashboard or the login page.
 @bp.route("/", methods=["GET"])
 def index():
     if "user_id" in session:
@@ -32,6 +28,7 @@ def index():
     return redirect(url_for("auth.login"))
 
 
+# Sign in; timing and lockout checks avoid leaking usernames.
 @bp.route("/login", methods=["GET", "POST"])
 @limiter.limit("10 per minute")
 def login():
@@ -62,19 +59,8 @@ def login():
             (username,), fetchone=True,
         )
 
-        # Always run a real check_password_hash() call, win or lose, so a
-        # nonexistent username doesn't return measurably faster than a
-        # wrong password for one that exists — see _DUMMY_PASSWORD_HASH.
-        #
-        # This has to happen *before* the is_locked_out() check below,
-        # not after: is_locked_out() is a cheap DB query with none of
-        # check_password_hash()'s deliberate cost, so if it ran first and
-        # short-circuited on a lockout, a locked-out username would
-        # respond measurably faster than every other case — an oracle
-        # for "this username is currently under a lockout" by timing
-        # alone, the same class of leak _DUMMY_PASSWORD_HASH exists to
-        # close. Paying the hash cost unconditionally first keeps every
-        # branch below the same shape.
+        # Always run a real hash check, before is_locked_out(), so timing can't
+        # reveal unknown or locked-out usernames.
         password_ok = check_password_hash(
             user["password_hash"] if user else _DUMMY_PASSWORD_HASH, password)
 
@@ -139,10 +125,7 @@ def login():
             return redirect(url_for("auth.change_password"))
 
         flash(f"Welcome back, {user['username']}.", "success")
-        # One-shot flag, popped by app.py's inject_login_splash() the
-        # first time any base.html page renders after this — shows the
-        # branded splash in base.html once, then never again until the
-        # next login.
+        # One-shot flag popped by inject_login_splash(): splash shows once per login.
         session["show_login_splash"] = True
         return redirect(url_for("admin.dashboard"
                                 if user["role"] == "Admin"
@@ -150,16 +133,7 @@ def login():
     return render_template("login.html")
 
 
-# POST-only, not GET. A GET route with a side effect (clearing the
-# session) can be triggered by any other site the signed-in user's
-# browser visits — e.g. <img src="https://this-app/logout"> — since the
-# browser will happily follow that request with the user's session
-# cookie attached, no interaction required. CSRFProtect(app) in app.py
-# already exempts GET/HEAD/OPTIONS by design (that's normal — GET isn't
-# supposed to have side effects), so GET was the actual hole here, not
-# a missing CSRF token; switching to POST is what puts this behind
-# CSRFProtect's real protection, and the hidden csrf_token field on the
-# sign-out form in base.html is what satisfies it.
+# POST-only: a GET logout could be triggered cross-site; POST sits behind CSRFProtect.
 @bp.route("/logout", methods=["POST"])
 def logout():
     sid = session.get("sid")
@@ -170,6 +144,7 @@ def logout():
     return redirect(url_for("auth.login"))
 
 
+# Let the signed-in user change their own password.
 @bp.route("/change-password", methods=["GET", "POST"])
 @login_required
 def change_password():

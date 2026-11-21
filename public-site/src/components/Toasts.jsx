@@ -4,9 +4,7 @@ import { AnimatePresence, motion } from 'motion/react';
 import { CheckCircleIcon, WarningCircleIcon } from '@phosphor-icons/react';
 import { SPRING_SOFT } from '../motion.js';
 
-// Short-lived notices ("that package is no longer available") that have
-// to survive a route change, so they live above the router. Form errors
-// don't come through here; they're shown inline in the form.
+// Short-lived notices that survive route changes (form errors stay inline).
 
 const ToastContext = createContext(() => {});
 const VISIBLE_MS = 4500;

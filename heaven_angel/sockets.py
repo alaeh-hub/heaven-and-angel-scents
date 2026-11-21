@@ -42,6 +42,7 @@ _sockets_by_session = {}
 
 
 def _drop(table, key, socket_sid):
+    """Remove a socket from a tracking group."""
     group = table.get(key)
     if group:
         group.discard(socket_sid)
@@ -50,6 +51,7 @@ def _drop(table, key, socket_sid):
 
 
 def _kick(table, key):
+    """Disconnect every socket in a tracking group."""
     for socket_sid in list(table.get(key, ())):
         try:
             socketio.server.disconnect(socket_sid, namespace="/")
@@ -71,6 +73,7 @@ def disconnect_session(session_sid):
 
 @socketio.on("disconnect")
 def handle_disconnect(*_args):
+    """Forget a socket when it disconnects."""
     for table in (_sockets_by_user, _sockets_by_session):
         for key in [k for k, group in table.items() if request.sid in group]:
             _drop(table, key, request.sid)
@@ -87,9 +90,7 @@ def handle_connect():
     """
     if "user_id" not in session or session_is_revoked():
         return False
-    # Same live checks as the HTTP routes (decorators._require_session): a
-    # deactivated account, a changed password or a branchless Branch account
-    # must not keep receiving pushes just because its cookie is still valid.
+    # Same live account checks as the HTTP routes; stale cookies must not keep receiving pushes.
     account = _current_account_or_none()
     if (account is None or not account["is_active"]
             or session.get("pwv") != password_fingerprint(account["password_hash"])):
@@ -106,6 +107,7 @@ def handle_connect():
 
 
 def _emit(scopes, room=None):
+    """Tell clients which data scopes changed."""
     if isinstance(scopes, str):
         scopes = [scopes]
     socketio.emit("data_changed", {"scopes": scopes}, room=room)

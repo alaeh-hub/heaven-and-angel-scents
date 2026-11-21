@@ -1,8 +1,4 @@
-{# Void-a-sale dialog, shared by the admin and branch Sales History pages.
-   Any `.void-sale-btn` (data-url = the void POST route, data-label = what
-   the sale was) opens it; a reason is required and ends up in the Admin
-   Log, the Inventory Log's SALE VOID rows and the voided-sales record.
-   Voiding returns the sale's stock and removes it from every total. #}
+{# Void-a-sale dialog shared by admin and branch Sales History; reason is required. #}
 <div class="void-overlay" id="voidSaleOverlay" style="display:none;">
   <div class="card card-pad void-modal">
     <h2 class="void-title">Void this sale?</h2>

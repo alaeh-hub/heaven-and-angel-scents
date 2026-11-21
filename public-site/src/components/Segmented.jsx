@@ -2,9 +2,8 @@ import { motion } from 'motion/react';
 import { SPRING } from '../motion.js';
 
 /**
- * Segmented control; the pill slides to whichever option is picked.
- * `options` is a list of [value, label, count?]. `id` keeps two controls
- * on different pages from sharing one sliding pill.
+ * Segmented control with a sliding pill. `options`: [value, label, count?];
+ * `id` keeps pills on different pages separate.
  */
 export default function Segmented({ id, label, options, value, onChange }) {
   return (

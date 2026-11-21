@@ -4,44 +4,25 @@ import React, { useMemo } from "react";
 import { cn } from "@/lib/utils";
 
 interface FlipTextProps {
-    /**
-     * Additional CSS classes for the wrapper
-     */
+    /** Additional CSS classes for the wrapper */
     className?: string;
 
-    /**
-     * The text content to animate (will be split by spaces)
-     */
+    /** The text content to animate (will be split by spaces) */
     children: string;
 
-    /**
-     * Duration of the flip animation in seconds
-     * @default 2.2
-     */
+    /** Duration of the flip animation in seconds (default 2.2) */
     duration?: number;
 
-    /**
-     * Initial delay before animation starts in seconds
-     * @default 0
-     */
+    /** Initial delay before animation starts in seconds (default 0) */
     delay?: number;
 
-    /**
-     * Whether the animation should loop infinitely
-     * @default true
-     */
+    /** Whether the animation should loop infinitely (default true) */
     loop?: boolean;
 
-    /**
-     * Custom separator for splitting text (default is space)
-     * @default " "
-     */
+    /** Custom separator for splitting text (default is space) (default " ") */
     separator?: string;
 
-    /**
-     * Whether all characters should animate together (no stagger)
-     * @default false
-     */
+    /** Whether all characters should animate together (no stagger) (default false) */
     together?: boolean;
 }
 

@@ -1,11 +1,6 @@
 import { motion, useReducedMotion, useScroll, useSpring } from 'motion/react';
 
-/**
- * A thin gold line along the top edge that fills as the page is read, so
- * the length of the long landing page is visible at a glance. Driven by
- * motion values (no React state), smoothed with a spring, and left out
- * under reduced motion.
- */
+/** Thin gold line along the top that fills as the page is read (not under reduced motion). */
 export default function ScrollProgress() {
   const reduce = useReducedMotion();
   const { scrollYProgress } = useScroll();

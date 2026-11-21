@@ -1,6 +1,4 @@
-// Shared motion vocabulary, so every transition on the portal moves with
-// the same physics. Springs for anything the visitor directly causes
-// (tabs, cards, sheets); a long ease-out for things that simply arrive.
+// Shared motion: springs for direct interaction, long ease-out for arrivals.
 
 export const EASE_OUT = [0.22, 1, 0.36, 1];
 

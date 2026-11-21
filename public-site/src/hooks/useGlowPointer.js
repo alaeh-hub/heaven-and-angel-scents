@@ -3,12 +3,9 @@ import { useEffect } from 'react';
 const SELECTOR = '.glow-card, .glow-area';
 
 /**
- * One app-wide pointer listener that feeds the cursor position (as
- * --mx / --my, in px relative to the element) to every `.glow-card` or
- * `.glow-area` under the mouse, nested ones included. The glow itself is
- * pure CSS (see tokens.css), so moving the mouse never re-renders React,
- * and the writes are batched to one per frame. Mouse only: touch has no
- * hover to light anything up.
+ * One app-wide pointer listener that sets --mx/--my on `.glow-card` and
+ * `.glow-area` under the mouse (glow is CSS, see tokens.css). Batched
+ * per frame; mouse only.
  */
 export function useGlowPointer() {
   useEffect(() => {

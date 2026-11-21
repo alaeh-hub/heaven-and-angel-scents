@@ -169,9 +169,7 @@
 
 /* =============================================================== hero */
 
-/* The tall section is the scroll distance; the stage pins to the
-   viewport while the opening scene plays (see Hero.jsx). The offer is
-   already on screen, so this only has to be long enough for the scene. */
+/* The tall section is the scroll distance; the stage pins while the scene plays (Hero.jsx). */
 .hero-pin {
   position: relative;
   z-index: 1;
@@ -200,11 +198,7 @@
   background: linear-gradient(var(--stage), var(--bg-alt));
 }
 
-/* The glass scene: a square canvas as tall as the screen allows. Its
-   own background is pure black, so the stage matches it; a vignette
-   and soft edge fades (the scene's coloured haze reaches the square's
-   sides) melt it into the page. It sits below the fixed nav (the stage
-   itself starts under it), with a little air in between. */
+/* Square glass-scene canvas; black ground matches the stage, vignette and edge fades blend it in. Sits below the fixed nav. */
 .hero-scene-wrap {
   position: absolute;
   inset: 0;
@@ -221,9 +215,7 @@
   position: relative;
   width: min(100%, calc(100dvh - var(--nav-h) - 32px));
   aspect-ratio: 1;
-  /* Soft fade on all four edges: both gradients on one element, where
-     they intersect, rather than a mask here and another nested on the
-     canvas (each mask costs its own compositing pass every frame). */
+  /* Soft fade on all four edges: both gradients on one element (a mask here and on the canvas cost extra passes). */
   mask-image:
     linear-gradient(90deg, transparent, var(--stage) 12%, var(--stage) 88%, transparent),
     linear-gradient(transparent, var(--stage) 10%, var(--stage) 90%, transparent);
@@ -286,9 +278,7 @@
   display: inline-block;
 }
 
-/* Hero headline words (wiped in, see Hero.jsx). The extra block padding,
-   cancelled by the negative margin, lets the wipe's mask cover the
-   descenders instead of cutting them off at the line box. */
+/* Hero headline words (wiped in, Hero.jsx); block padding cancelled by negative margin keeps descenders in the mask. */
 .wipe-word {
   display: inline-block;
   padding-block: 0.12em;
@@ -306,9 +296,7 @@
   pointer-events: auto;
 }
 
-/* Light rising from below, added over the scene rather than painted on
-   it (plus-lighter), so it brightens the black canvas too instead of
-   stopping at its square edge. */
+/* Light rising from below, added over the scene (plus-lighter) so it brightens the black canvas too. */
 .hero-glow-rise {
   position: absolute;
   inset: 0;
@@ -321,17 +309,12 @@
 }
 
 @media (max-width: 900px) {
-  /* The hero plays by itself here (see Hero.jsx), so it doesn't pin or
-     overlay everything into one screen: the scene and copy stack as
-     plain, normal-flow content instead, one below the other, so nothing is clipped or crowded off-screen if the copy runs tall,
-     and the section is just as long as what's actually in it. */
+  /* The hero plays by itself here (Hero.jsx): scene and copy stack in normal flow, no pinning. */
   .hero-pin {
     height: auto;
   }
 
-  /* At least one full screen, so on first load the hero is all there is:
-     the next section never peeks in below it. Content starts below the
-     fixed nav, and the column is centred in whatever height is left. */
+  /* At least one screen so nothing peeks below; content starts under the fixed nav, centred. */
   .hero-stage {
     position: static;
     height: auto;
@@ -720,18 +703,13 @@
   overflow: hidden;
 }
 
-/* DotField sizes its canvas off this element's own box, so it always
-   fills its positioned ancestor (here, .collection) on its own, rather
-   than depending on a page happening to size it correctly. */
+/* DotField sizes its canvas off this box, so it fills its positioned ancestor (.collection). */
 .dot-field {
   position: absolute;
   inset: 0;
 }
 
-/* Behind the section's own content (unpositioned, so it paints above a
-   negative-z-index layer) but above the section's solid background.
-   Faded at all four edges so the grid reads as part of the section,
-   not a hard-edged panel. */
+/* Behind content, above the section background; faded at all four edges. */
 .collection-dots {
   z-index: -1;
   mask-image:
@@ -772,9 +750,7 @@
   }
 }
 
-/* Touch screens and reduced motion: a still row the visitor swipes
-   through, snapping tile by tile, each scent shown once (the second
-   track and the repeats only exist to make the marquee loop). */
+/* Touch and reduced motion: a still swipe row, one tile per scent (the repeats exist for the loop). */
 @media (prefers-reduced-motion: reduce), (hover: none) {
   .marquee {
     overflow-x: auto;
@@ -803,13 +779,10 @@
   }
 }
 
-/* One scent: its bottle on its own, the gift box tucked behind it.
-   --scent-aspect / --scent-centre come from the generated manifest: the
-   shared frame's width/height, and where the bottle's centre line sits
-   across it. The two layers (.scent-box, .scent-bottle) fill that frame,
-   so stacked they are the original studio shot. At rest the frame is
-   parked so the bottle alone sits mid-tile; on hover it slides back to
-   centre the whole shot and the box eases out from behind the bottle. */
+/* One scent: bottle with the gift box behind. --scent-aspect/--scent-centre
+   come from the generated manifest (frame size, bottle centre line); the
+   layers fill the frame. At rest the bottle sits mid-tile; on hover the
+   whole shot centres and the box eases out. */
 .bottle-tile {
   --aura: var(--gold);
   --lift: cubic-bezier(0.22, 1, 0.36, 1);
@@ -888,9 +861,7 @@
   pointer-events: none;
 }
 
-/* The bottle shifts a touch on hover (no scale: resampling the image
-   mid-hover is what made it go soft); the box rides in from behind it,
-   from the bottle's side, so it reads as sliding out. */
+/* The bottle shifts a touch on hover (no scale: resampling softens it); the box slides in from behind. */
 .scent-bottle {
   z-index: 1;
   transition: transform 0.85s var(--lift);
@@ -993,10 +964,7 @@
   }
 }
 
-/* No hover: a tap flips the box in and out, so every tile says what it
-   is up front, and the bottle sits a little higher to leave the label a
-   clear strip. Tiles are narrower on phones so the next one peeks in,
-   which says "swipe" without a label. */
+/* No hover: a tap flips the box; the bottle sits higher for the label; narrower tiles let the next one peek (says "swipe"). */
 @media (hover: none) {
   .marquee {
     --tile-w: min(62vw, 250px);
@@ -1301,11 +1269,7 @@
 
 /* ============================================================= footer */
 
-/* Sticky reveal (see Footer.jsx). The wrapper holds the footer and
-   whatever covers it; being the footer's containing block, it limits
-   the sticky footer to waiting beneath that cover only. The cover must
-   be opaque: the footer is painted underneath it (z-index -1), so any
-   see-through part would show it early. */
+ /* Sticky reveal (Footer.jsx): the wrapper is the footer's containing block, and its cover must be opaque (footer sits at z-index -1). */
 .footer-cover {
   background: var(--bg);
 }
@@ -1760,10 +1724,7 @@
   white-space: nowrap;
 }
 
-/* Phones: one block that fills the column. The main button runs full
-   width; "For him" and "For her" sit under it as two equal outlined
-   pills, each a comfortable tap target, instead of loose text links
-   trailing off to one side. */
+/* Phones: full-width main button; "For him" and "For her" as two equal outlined pills. */
 @media (max-width: 640px) {
   .collection-ctas {
     display: grid;
@@ -1878,9 +1839,7 @@
   font-weight: 600;
 }
 
-/* Phones: one row per figure, number left and label right, so any
-   count of figures stacks evenly (a two-column grid left the third one
-   alone beside an empty cell). */
+/* Phones: one row per figure, number left and label right, so any count stacks evenly. */
 @media (max-width: 640px) {
   .stats-band {
     grid-template-columns: 1fr;

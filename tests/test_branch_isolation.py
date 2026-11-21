@@ -1,7 +1,6 @@
-"""Branch data isolation: one branch's staff must never read or change
-another branch's sales, receipts or AI stock drafts, and an account that
-isn't tied to a branch must never be treated as unrestricted (the scan
-and void/settle helpers use branch_id=None to mean "HQ, no restriction").
+"""One branch must never read or change another's sales, receipts or AI drafts.
+
+An account with no branch is never unrestricted (branch_id=None means HQ in the helpers).
 """
 import pytest
 
@@ -62,6 +61,7 @@ def _verify(client, sale_id, app):
 
 
 def test_branch_cannot_download_another_branchs_sale_receipt(client, other_client, sql):
+    """Branch cannot download another branchs sale receipt."""
     owner_branch = _branch_login(client, sql)
     sale_id = _record_sale(client, sql, owner_branch)
     _branch_login(other_client, sql)
@@ -71,6 +71,7 @@ def test_branch_cannot_download_another_branchs_sale_receipt(client, other_clien
 
 
 def test_scan_verify_is_scoped_to_the_callers_branch(app, client, other_client, sql):
+    """Scan verify is scoped to the callers branch."""
     owner_branch = _branch_login(client, sql)
     sale_id = _record_sale(client, sql, owner_branch)
     _branch_login(other_client, sql)
@@ -80,6 +81,7 @@ def test_scan_verify_is_scoped_to_the_callers_branch(app, client, other_client, 
 
 
 def test_scan_void_and_settle_refuse_another_branchs_sale(client, other_client, sql):
+    """Scan void and settle refuse another branchs sale."""
     owner_branch = _branch_login(client, sql)
     sale_id = _record_sale(client, sql, owner_branch)
     _make_credit(sql, sale_id)
@@ -96,6 +98,7 @@ def test_scan_void_and_settle_refuse_another_branchs_sale(client, other_client, 
 
 
 def test_branch_cannot_approve_or_reject_another_branchs_ai_draft(client, other_client, sql):
+    """Branch cannot approve or reject another branchs ai draft."""
     owner_branch = make_branch(sql)
     cur = sql.cursor()
     cur.execute("INSERT INTO ai_stock_drafts (branch_id, status) VALUES (%s, 'Pending Review')", (owner_branch,))

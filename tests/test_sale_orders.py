@@ -44,6 +44,7 @@ def _pages(pdf_bytes):
 
 
 def test_order_is_recorded_as_one_order_and_takes_stock_for_every_scent(client, sql):
+    """Order is recorded as one order and takes stock for every scent."""
     branch_id, skus = _setup(client, sql, 3)
     resp = _post_order(client, skus, qty=2)
     assert resp.status_code == 302
@@ -56,6 +57,7 @@ def test_order_is_recorded_as_one_order_and_takes_stock_for_every_scent(client, 
 
 
 def test_a_single_product_sale_has_no_order(client, sql):
+    """A single product sale has no order."""
     branch_id, skus = _setup(client, sql, 1)
     client.post(URL, data={"sku": skus[0], "sale_type": "Sale", "payment_method": "Cash", "qty_sold": "1",
                            "unit_price": "50.00", "form_token": get_form_token(client, URL)})
@@ -64,12 +66,14 @@ def test_a_single_product_sale_has_no_order(client, sql):
 
 
 def test_the_field_still_filled_in_counts_as_one_more_product(client, sql):
+    """The field still filled in counts as one more product."""
     branch_id, skus = _setup(client, sql, 3)
     _post_order(client, skus[:2], sku=skus[2], qty_sold="1", unit_price="50.00")
     assert len(_rows(sql, "SELECT 1 FROM sales WHERE branch_id = %s", (branch_id,))) == 3
 
 
 def test_one_scent_out_of_stock_records_nothing(client, sql):
+    """One scent out of stock records nothing."""
     branch_id, skus = _setup(client, sql, 3)
     cur = sql.cursor()
     cur.execute("UPDATE branch_inventory SET stock_qty = 1 WHERE branch_id = %s AND sku = %s", (branch_id, skus[2]))   # needs 2
@@ -82,6 +86,7 @@ def test_one_scent_out_of_stock_records_nothing(client, sql):
 
 @pytest.mark.parametrize("count, slips", [(10, 1), (11, 2), (25, 3)])
 def test_receipt_prints_ten_products_to_a_slip(client, sql, count, slips):
+    """Receipt prints ten products to a slip."""
     branch_id, skus = _setup(client, sql, count)
     _post_order(client, skus, qty=1)
     first = _rows(sql, "SELECT MIN(sale_id) AS id FROM sales WHERE branch_id = %s", (branch_id,))[0]["id"]
@@ -94,6 +99,7 @@ def test_receipt_prints_ten_products_to_a_slip(client, sql, count, slips):
 
 
 def test_other_branch_cannot_download_the_order_receipt(app, client, sql):
+    """Other branch cannot download the order receipt."""
     branch_id, skus = _setup(client, sql, 2)
     _post_order(client, skus)
     first = _rows(sql, "SELECT MIN(sale_id) AS id FROM sales WHERE branch_id = %s", (branch_id,))[0]["id"]
@@ -104,6 +110,7 @@ def test_other_branch_cannot_download_the_order_receipt(app, client, sql):
 
 
 def test_scan_shows_every_product_and_voiding_returns_them_all(app, client, sql):
+    """Scan shows every product and voiding returns them all."""
     branch_id, skus = _setup(client, sql, 3)
     _post_order(client, skus, qty=2)
     first = _rows(sql, "SELECT MIN(sale_id) AS id FROM sales WHERE branch_id = %s", (branch_id,))[0]["id"]
@@ -121,6 +128,7 @@ def test_scan_shows_every_product_and_voiding_returns_them_all(app, client, sql)
 
 
 def test_both_record_sale_pages_offer_adding_another_scent(app, client, sql):
+    """Both record sale pages offer adding another scent."""
     _setup(client, sql, 1)
     assert b'id="addToOrderBtn"' in client.get(URL).data
 
@@ -131,6 +139,7 @@ def test_both_record_sale_pages_offer_adding_another_scent(app, client, sql):
 
 
 def test_an_order_shows_one_receipt_button_not_one_per_row(client, sql):
+    """An order shows one receipt button not one per row."""
     branch_id, skus = _setup(client, sql, 3)
     _post_order(client, skus, qty=1)
     first = _rows(sql, "SELECT MIN(sale_id) AS id FROM sales WHERE branch_id = %s", (branch_id,))[0]["id"]
@@ -144,6 +153,7 @@ def test_an_order_shows_one_receipt_button_not_one_per_row(client, sql):
 
 
 def test_a_single_sale_keeps_a_plain_receipt_button(client, sql):
+    """A single sale keeps a plain receipt button."""
     branch_id, skus = _setup(client, sql, 1)
     client.post(URL, data={"sku": skus[0], "sale_type": "Sale", "payment_method": "Cash", "qty_sold": "1",
                            "unit_price": "50.00", "form_token": get_form_token(client, URL)})

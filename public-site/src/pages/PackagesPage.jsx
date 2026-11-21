@@ -33,8 +33,7 @@ export default function PackagesPage() {
     document.title = 'Business Partners · Heaven & Angel Scents';
   }, []);
 
-  // The previous results stay on screen while a new filter loads, then
-  // the grid re-flows into the new set (see PackagesSection).
+  // Keep old results on screen while a new filter loads (see PackagesSection).
   useEffect(() => {
     const controller = new AbortController();
     setLoading(true);
@@ -52,9 +51,7 @@ export default function PackagesPage() {
     return () => controller.abort();
   }, [slug, scope, showToast]);
 
-  // A #section in the URL (a shared ".../packages#faq" link, or a footer
-  // link from another page) can only be honored once the content it
-  // points at exists. Each new hash is handled once.
+  // Honour a #section hash once its content exists; each hash is handled once.
   const handledHash = useRef('');
   useEffect(() => {
     if (!data || !location.hash || handledHash.current === location.hash) return;
@@ -79,10 +76,7 @@ export default function PackagesPage() {
       <main>
         <Hero />
         <ScentRail />
-        {/* What a partner comes for leads: the packages, what they'd
-            earn on them, and what happens after "Inquire". Visitors who
-            already know what they want get a direct marketplace exit
-            right after, before the brand story and closing step. */}
+        {/* Packages, earnings and next steps first, then marketplaces, brand story and closing. */}
         <PackagesSection slug={slug} data={data} loading={loading} scope={scope} onScopeChange={changeScope} />
         <Earnings packages={data?.packages || []} />
         <OnlineShops />

@@ -23,12 +23,9 @@ from heaven_angel.routes.admin._common import bp
 @bp.route("/packages", methods=["GET", "POST"])
 @admin_required
 def packages():
-    """Bundles of products HQ offers distributors/resellers at a discount.
+    """Bundles of products offered to distributors/resellers at a discount.
 
-    Creating a package here only sets its shell (name, discount, who it's
-    for) — products are added one at a time on its own detail page (see
-    package_detail() below), the same two-step shape as adding a branch
-    then assigning it stock.
+    Creating one sets only its shell; products are added on package_detail().
     """
     if request.method == "POST":
         name = request.form.get("package_name", "").strip()
@@ -89,6 +86,7 @@ def packages():
 _BOTTLED_ONLY = "category <> 'Bulk/Refill' AND unit <> 'BULK'"
 
 
+# Package page: its items and the products that can be added.
 @bp.route("/packages/<int:package_id>")
 @admin_required
 def package_detail(package_id):
@@ -110,11 +108,7 @@ def package_detail(package_id):
     reference_total, discounted_total = package_value(
         pkg["discount_percent"], reference_total)
 
-    # Bottled products only: packages are bundles of finished bottles,
-    # so Bulk/Refill stock never shows up as an option here (and
-    # add_package_item() refuses it too). Sent to the page as JSON for
-    # its searchable product field, sorted so each scent's sizes sit
-    # together, smallest first.
+    # Bottled products only (no Bulk/Refill), as JSON for the search field, sizes smallest first.
     existing_skus = {i["sku"] for i in items}
     catalog = query(
         f"""SELECT sku, item_name, variant, unit, price FROM products
@@ -131,6 +125,7 @@ def package_detail(package_id):
     )
 
 
+# POST: edit a package's name, discount and audience.
 @bp.route("/packages/<int:package_id>/edit", methods=["POST"])
 @admin_required
 def edit_package(package_id):
@@ -172,6 +167,7 @@ def edit_package(package_id):
     return redirect(url_for("admin.packages"))
 
 
+# POST: add a bottled product to a package.
 @bp.route("/packages/<int:package_id>/items", methods=["POST"])
 @admin_required
 def add_package_item(package_id):
@@ -213,6 +209,7 @@ def add_package_item(package_id):
     return redirect(url_for("admin.package_detail", package_id=package_id))
 
 
+# POST: remove a product; an emptied package is deleted.
 @bp.route("/packages/<int:package_id>/items/remove", methods=["POST"])
 @admin_required
 def remove_package_item(package_id):
@@ -222,10 +219,7 @@ def remove_package_item(package_id):
         abort(404)
 
     item_id = request.form.get("package_item_id")
-    # Same reasoning as reject_request()/edit_material(): without checking
-    # rowcount, a stale page (item already removed by another admin, or a
-    # double-submit) would DELETE zero rows but still fall through and
-    # flash "Product removed" as if it had actually happened.
+    # Check rowcount: a stale page or double-submit would delete zero rows but flash success.
     _, rowcount = execute(
         "DELETE FROM package_items WHERE package_item_id = %s AND package_id = %s",
         (item_id, package_id),
@@ -238,11 +232,7 @@ def remove_package_item(package_id):
         "SELECT COUNT(*) c FROM package_items WHERE package_id = %s", (package_id,), fetchone=True
     )
     if remaining["c"] == 0:
-        # An empty package can't be ordered/inquired about anyway — the
-        # confirm dialog on package_detail.html already warned the admin
-        # this exact removal would empty it out, so deleting it here
-        # (rather than leaving a dangling zero-product shell around) is
-        # the outcome they already agreed to.
+        # An empty package can't be ordered; the confirm dialog warned of this, so delete it.
         execute("DELETE FROM packages WHERE package_id = %s", (package_id,))
         notify_all(["packages"])
         log_action(

@@ -1,4 +1,5 @@
-{% extends "base.html" %}
+{% extends "base.html" %}
+{# Stock requests and deliveries #}
 {% import "_empty.html" as empty %}
 {% import "_macros.html" as m %}
 {% block title %}Stock Requests{% endblock %}
@@ -75,17 +76,9 @@
               <div class="inline-form rq-actions">
                 <a href="{{ url_for('admin.review_request', request_id=r.request_id) }}"
                   class="btn btn-accent btn-sm">{{ 'Dispatch remaining' if r.status == 'Partially Fulfilled' else 'Review' }}</a>
-                <!-- Deliberately just "Review", not "Review & dispatch":
-                     this button doesn't dispatch anything itself — it
-                     opens the delivery's own page where dispatch
-                     quantities are set and the actual "Dispatch this
-                     delivery" action happens (see request_detail.html).
-                     Shorter label, and a more accurate one. -->
+                {# Just "Review": dispatch happens on the delivery's own page. #}
 
-                <!-- Unified confirm pattern: main.js delegates to any
-                     form[data-confirm] on submit and shows this text —
-                     no per-page onsubmit/JS needed. See also
-                     request_detail.html, users.html, package_detail.html. -->
+                {# form[data-confirm] gets a confirm() prompt from main.js. #}
                 {% if r.status == 'Pending' %}<form method="POST" action="{{ url_for('admin.reject_request', request_id=r.request_id) }}"
                   data-confirm="Reject {{ r.delivery_number }}? This can't be undone.">
                   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">

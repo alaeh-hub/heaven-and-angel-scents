@@ -1,7 +1,4 @@
-"""A bulk sale's qty_sold is recorded in mL, not bottles — so every
-"units" figure (Customers, the branch dashboard, reports) must keep bulk
-mL apart from bottle counts rather than adding the two together.
-"""
+"""A bulk sale's qty_sold is in mL, so "units" figures must keep bulk mL apart from bottles."""
 from factories import login, make_branch, make_bulk_sale, make_scent, make_user, unique_suffix
 from heaven_angel.services.reports import get_report, parse_report_filters, render_report_excel, render_report_pdf
 
@@ -27,6 +24,7 @@ def _setup_mixed_sales(sql):
 
 
 def test_branch_customers_units_keep_bulk_ml_separate(client, sql):
+    """Branch customers units keep bulk ml separate."""
     branch_id, customer = _setup_mixed_sales(sql)
     user = make_user(sql, role="Branch", branch_id=branch_id)
     login(client, user["username"], user["password"], "Branch")
@@ -40,6 +38,7 @@ def test_branch_customers_units_keep_bulk_ml_separate(client, sql):
 
 
 def test_branch_dashboard_headline_is_revenue_with_bottles_and_ml_apart(client, sql):
+    """Branch dashboard headline is revenue with bottles and ml apart."""
     branch_id, _ = _setup_mixed_sales(sql)
     user = make_user(sql, role="Branch", branch_id=branch_id)
     login(client, user["username"], user["password"], "Branch")
@@ -51,6 +50,7 @@ def test_branch_dashboard_headline_is_revenue_with_bottles_and_ml_apart(client, 
 
 
 def test_customers_report_splits_bottles_and_bulk_ml(app, sql):
+    """Customers report splits bottles and bulk ml."""
     branch_id, customer = _setup_mixed_sales(sql)
     with app.test_request_context():
         report = get_report("customers", parse_report_filters({}), branch_scope=branch_id)
@@ -63,6 +63,7 @@ def test_customers_report_splits_bottles_and_bulk_ml(app, sql):
 
 
 def test_sales_history_report_totals_bottles_and_ml_apart(app, sql):
+    """Sales history report totals bottles and ml apart."""
     branch_id, _ = _setup_mixed_sales(sql)
     with app.test_request_context():
         report = get_report("sales_history", parse_report_filters({"mode": "recent"}),
@@ -79,6 +80,7 @@ def test_sales_history_report_totals_bottles_and_ml_apart(app, sql):
 
 
 def test_admin_pages_render_with_bulk_sales(client, sql):
+    """Admin pages render with bulk sales."""
     _setup_mixed_sales(sql)
     user = make_user(sql, role="Admin", branch_id=None)
     login(client, user["username"], user["password"], "Admin")
@@ -92,6 +94,7 @@ def test_admin_pages_render_with_bulk_sales(client, sql):
 
 
 def test_branch_pages_render_with_bulk_sales(client, sql):
+    """Branch pages render with bulk sales."""
     branch_id, _ = _setup_mixed_sales(sql)
     user = make_user(sql, role="Branch", branch_id=branch_id)
     login(client, user["username"], user["password"], "Branch")

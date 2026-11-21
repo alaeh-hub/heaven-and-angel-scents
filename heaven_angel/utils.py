@@ -17,23 +17,13 @@ from datetime import datetime, timedelta, timezone
 
 from flask import current_app, has_app_context, request, session
 
-# Packaging sizes a product SKU can be. Kept here (rather than duplicated
-# in admin.py/branch.py/reports.py) so the one allow-list is what every
-# form validates against, what every <select> is built from, and what
-# reports.py filters against.
-#
-# The bottle sizes a product comes in. Bulk is not a product: it is made as
-# a bulk batch and sold by the mL straight out of the batches, at the single
-# shared rate on bulk_rate_settings.rate_per_ml (see sale_stock.py).
+# Allowed bottle sizes; bulk is not a product but sold by mL at bulk_rate_settings.rate_per_ml.
 PRODUCT_UNITS = ("85ML", "50ML", "10ML", "3ML")
 
 # Same list, under the name the bottle-only code reads better with.
 BOTTLE_UNITS = PRODUCT_UNITS
 
-# What a sale line can be in: a bottle size, or BULK for a sale by the mL
-# (recorded under the key '<code>-BULK', which exists only as a label in
-# sales and the sale_catalog view, never in products). Sales reports filter
-# on this; nothing that lists products does.
+# Sale line units: a bottle size or BULK (a '<code>-BULK' label in sales only).
 SALE_UNITS = PRODUCT_UNITS + ("BULK",)
 
 # What the Base Cost of Goods page covers — every bottle size.
@@ -43,10 +33,7 @@ FORMULA_UNITS = BOTTLE_UNITS
 # costed the normal formula-driven way.
 PRODUCT_CATEGORIES = ("Bottled",)
 
-# Short, filename/SKU-safe suffix for each unit (no spaces), used only to
-# build the stored SKU from an admin-entered base product code — see
-# build_sku() below. Keys are PRODUCT_UNITS plus BULK, which is never a
-# product but is read back by base_code_from_sku() for a '<code>-BULK' sale key.
+# Filename/SKU-safe suffix per unit, used by build_sku() and base_code_from_sku().
 _PRODUCT_UNIT_SUFFIXES = {
     "85ML": "85ML",
     "50ML": "50ML",
@@ -55,41 +42,18 @@ _PRODUCT_UNIT_SUFFIXES = {
     "BULK": "BULK",
 }
 
-# A base product code: letters, numbers, and hyphens only, must start
-# with a letter or number, capped well under the products.sku VARCHAR(50)
-# column (the longest unit suffix adds 5 chars incl. the separator).
+# Base product code: letters, digits, hyphens; must fit products.sku VARCHAR(50) with a suffix.
 _BASE_CODE_RE = re.compile(r"^[A-Z0-9][A-Z0-9\-]{0,29}$")
 
-# A sale is a normal transaction (customer takes a bottle); a refill is a
-# customer bringing back their own bottle and only paying for product.
-# Both consume stock; both carry their own manually-entered price.
-#
-# Freebie is a giveaway/comp/sample — it consumes stock the same way a
-# Sale does (a real bottle leaves inventory), but is always logged at
-# ₱0, unlike Sale/Refill which must be strictly positive (see
-# parse_positive_decimal's callers in routes/branch.py and routes/
-# admin.py) — that strict-positive rule exists specifically so a
-# giveaway can't be quietly disguised as a ₱0 "Sale" with nothing
-# marking it as one; Freebie is the explicit, visible way to log it
-# instead. Deliberately its own sale_type rather than a payment_method
-# value — payment_method (Cash/Credit) is about how a real charge gets
-# settled, which doesn't apply here since nothing is ever charged.
+# Sale and Refill need a positive price; Freebie is a giveaway always logged at 0 (not a payment method).
 SALE_TYPES = ("Sale", "Refill", "Freebie")
 
-# Cash is a normal register transaction. Credit is anyone — an employee
-# taking product against their own pay, or a customer buying on store
-# credit ("utang") — taking product now without paying cash at the
-# register; buyer_name on the sales table records who it's owed by.
+# Cash is a register sale; Credit takes product now, owed by buyer_name.
 PAYMENT_METHODS = ("Cash", "Credit")
 
 MATERIAL_UNITS = ("Gram", "Milliliter", "Liter", "Gallon", "Piece")
 
-# The units a bulk batch's own size can be entered in (see bulk_batches in
-# schema.sql) — everything gets converted to milliliters via
-# ML_PER_BATCH_UNIT so a 500ml batch and a 1-gallon batch compare and
-# deduct against each other correctly. A Gallon here is 3,200 mL: the size of
-# the gallon jugs actually bought and used, NOT the 3,785.41 mL US liquid
-# gallon.
+# Batch size units, all converted to mL; a Gallon is 3,200 mL (the jug used), not the US 3,785 mL.
 BATCH_VOLUME_UNITS = ("Milliliter", "Liter", "Gallon")
 
 ML_PER_BATCH_UNIT = {
@@ -136,18 +100,10 @@ def bottle_size_ml(unit):
     """
     return decimal.Decimal(unit[:-2])
 
-# A Distributor buys in bulk to resell further down a chain of their own;
-# a Reseller buys in bulk to sell directly to end customers. Both are
-# bulk buyers outside the retail branch network — see the `partners`
-# table in schema.sql.
+# Distributors resell down a chain; Resellers sell to end customers (see `partners`).
 PARTNER_TYPES = ("Distributor", "Reseller")
 
-# Deliberately simple/permissive — this only guards against obvious
-# typos and junk input on the public partner-portal inquiry form (see
-# routes/portal.py), not full RFC 5322 / ITU E.164 correctness. Being
-# too strict here would reject real addresses/numbers a distributor or
-# reseller actually uses; the real verification happens when HQ calls
-# or emails them back.
+# Deliberately permissive: only catches typos in the portal form; HQ verifies by contact.
 _EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]{2,}$")
 _PHONE_RE = re.compile(r"^[0-9+\-().\s]{7,30}$")
 
@@ -363,6 +319,7 @@ def parse_optional_text(raw, field_label="Value", max_length=None):
 
 
 def parse_email(raw, field_label="Email"):
+    """Validate an optional email address."""
     value = str(raw or "").strip()
     if not value:
         raise ValidationError(f"{field_label} is required.")
@@ -373,6 +330,7 @@ def parse_email(raw, field_label="Email"):
 
 
 def parse_phone(raw, field_label="Phone number"):
+    """Validate an optional phone number."""
     value = str(raw or "").strip()
     if not value:
         raise ValidationError(f"{field_label} is required.")
@@ -409,17 +367,7 @@ def parse_past_date(raw, field_label="Date"):
     return datetime.combine(picked, now.time())
 
 
-# ---------------------------------------------------------------------------
-# Product avatar fallback.
-#
-# Every product thumbnail (catalog, inventory, low-stock report, the public
-# package gallery) falls back to a generated initials avatar when a product
-# has no uploaded photo, instead of a broken/empty-image icon. Styled the
-# same flat accent tone everywhere (see .product-thumb-avatar in style.css,
-# matching .pi-avatar on the partner inquiries page) rather than a color
-# hashed per product name — one consistent on-brand look instead of a
-# per-item rainbow.
-# ---------------------------------------------------------------------------
+# Product avatar fallback: a generated initials avatar when a product has no photo.
 
 
 def product_avatar(name):
@@ -473,25 +421,7 @@ def generate_temp_password(length=12):
     return "".join(secrets.choice(alphabet) for _ in range(length))
 
 
-# ---------------------------------------------------------------------------
-# Single-use form submission tokens.
-#
-# Guards a "create a record" form (Record Sale, Request Stock, ...) against
-# a double-submit — a double-click before the page redirects, a browser
-# back-button resubmit, or a client retrying a request whose response was
-# lost — turning into two real writes (two sale rows quietly double-
-# charging a customer and double-decrementing stock, two delivery
-# requests, etc). Row-locking (see db.transaction()) already stops two
-# *concurrent* requests from corrupting shared state, but does nothing
-# about one browser legitimately sending the same "record this sale" POST
-# twice in a row — each one is a perfectly valid write on its own.
-#
-# Usage: call issue_form_token(key) every time the form is rendered (GET)
-# and put the result in a hidden field named "form_token"; call
-# consume_form_token(key) as the very first thing the POST handler does,
-# before any other validation, and stop (flash + redirect back to the GET
-# route, which issues a fresh token) if it returns False.
-# ---------------------------------------------------------------------------
+# Single-use form tokens: issue on GET (hidden "form_token"), consume first in POST to stop double submits.
 def is_duplicate_error(exc):
     """True for a MySQL duplicate-key error (1062), so a route can say "already
     exists" only when that's really the problem and not for any failure."""
@@ -506,9 +436,7 @@ def issue_form_token(key):
     """Generate a fresh single-use token for the form named `key`, stash
     it in the session, and return it to embed as a hidden field.
     """
-    # Reuse an unconsumed token: live-refresh and other tabs re-render the page
-    # via GET, and rotating here would invalidate the token in a half-filled
-    # form. It is still single-use, since consume_form_token() pops it.
+    # Reuse an unconsumed token so other tabs re-rendering the page do not invalidate it.
     skey = f"_form_token:{key}"
     token = session.get(skey)
     if not token:
@@ -531,10 +459,7 @@ def consume_form_token(key):
         return False
     if not hmac.compare_digest(expected, submitted):
         return False
-    # The session is a client-side cookie, so popping the token only affects THIS
-    # request's copy: a double-click (or two tabs) sends the same cookie twice and
-    # both would pass. Remember used tokens server-side (one gunicorn worker) so
-    # the second use is refused.
+    # Session cookies are client-side, so used tokens are also remembered server-side (one worker).
     now = time.time()
     with _used_tokens_lock:
         for t in [t for t, exp in _used_tokens.items() if exp < now]:
@@ -545,34 +470,7 @@ def consume_form_token(key):
     return True
 
 
-# ---------------------------------------------------------------------------
-# Sale receipt verification codes.
-#
-# The QR code printed on every sale receipt (see receipts.py) encodes one
-# of these — never the sale's actual data. It's a short, human-typeable
-# string of the shape HAS-<sale_id>-<signature>, where the signature is
-# an HMAC-SHA256 of the sale_id keyed on the app's SECRET_KEY, truncated
-# to 10 hex characters. That makes the code:
-#   - Stateless to verify — no separate "receipt codes" table or column
-#     to keep in sync; parse_receipt_code() just recomputes the expected
-#     signature and compares. If it doesn't match, the code is rejected,
-#     whether that's from a garbled scan, a QR from something else
-#     entirely, or someone guessing at sale_ids in sequence.
-#   - Safe to trust once verified — since only someone with SECRET_KEY
-#     (this app) could have produced a signature that checks out, a
-#     valid code couldn't have been forged by a customer or a partner
-#     tampering with a printed slip.
-#   - Still readable/typeable by hand as a fallback if a camera or photo
-#     upload isn't available (see routes/scan.py's manual-entry path).
-#
-# Deliberately NOT itsdangerous's URLSafeSerializer here even though
-# that's already a dependency (via Flask-WTF) and would do something
-# similar: its tokens are base64, longer, and carry a dot-separated
-# payload+signature shape that's harder to read off a slip or type by
-# hand than HAS-000128-CEFCE5776C. A plain HMAC gives full control over
-# that shape for the same security property (can't be forged without
-# SECRET_KEY) at the cost of one extra small function.
-# ---------------------------------------------------------------------------
+# Receipt codes HAS-<sale_id>-<HMAC signature>: stateless to verify, unforgeable without SECRET_KEY, typeable by hand.
 _RECEIPT_CODE_PREFIX = "HAS"
 _RECEIPT_CODE_SALT = b"sale-receipt-v1"  # bump if the code format ever changes
 

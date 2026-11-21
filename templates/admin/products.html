@@ -1,4 +1,5 @@
-{% extends "base.html" %}
+{% extends "base.html" %}
+{# Admin: products and sizes #}
 {% import "_empty.html" as empty %}
 {% import "_macros.html" as m %}
 {% block title %}Products{% endblock %}
@@ -118,8 +119,7 @@
   <div class="card">
     <div class="card-header">
       <h2>All Products</h2>
-      {# The table below starts filtered to this unit (the pre-selected option) and paginated, exactly as
-         initSmartTables() will leave it, so the server renders that final state and nothing jumps on load. #}
+      {# Server renders the final filtered state so nothing jumps on load. #}
       {% set default_unit = '85ML' if '85ML' in unit_choices else '' %}
       {% set initial_rows = catalog|selectattr('unit', 'equalto', default_unit)|list if default_unit else catalog %}
       {% set page_size = 10 %}
@@ -278,9 +278,7 @@
       </form>
     </div>
 
-    <!-- Bulk CSV import/export: same base_code/item_name/variant/unit/price
-         shape as the single-product form. See admin.py's export_products() /
-         import_products() for the column contract. -->
+    {# Bulk CSV import/export; same columns as the single-product form. #}
     <details class="card card-pad pg-disclosure">
       <summary>
         <span>Bulk import / export (CSV)</span>
@@ -459,6 +457,8 @@
     // Returns true when the animation was started.
     function staggerRows() {
       if (!window.Motion || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return false;
+      // On a phone the rows just appear: a stagger over 30 rows made every page change and filter stutter.
+      if (window.matchMedia('(max-width: 760px)').matches) return false;
       var rows = visibleRows();
       if (!rows.length) return false;
       var anim = window.Motion.animate(
@@ -472,6 +472,8 @@
 
     function countUpStock() {
       if (!window.anime || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+      // Same on a phone: no per-cell count-up (it rewrote 30 table cells every frame).
+      if (window.matchMedia('(max-width: 760px)').matches) return;
       document.querySelectorAll('.prod-table td[data-label="Total stock"]').forEach(function (el) {
         var raw = el.textContent.trim();
         if (!/^\d+$/.test(raw)) return;

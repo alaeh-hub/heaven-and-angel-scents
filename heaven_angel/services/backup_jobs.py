@@ -42,6 +42,7 @@ def set_restore_probe(fn):
 
 
 def restore_running():
+    """True while a restore is in progress."""
     return bool(_restore_probe and _restore_probe())
 
 AUTO_ACTOR = "Automatic backup"
@@ -137,11 +138,13 @@ def get_schedule():
 
 
 def save_schedule(days, auto, hour):
+    """Save the automatic backup schedule."""
     appsettings.set_many({"backup_days": days, "backup_auto": "1" if auto else "0", "backup_hour": hour})
     _reminder_cache["at"] = 0.0
 
 
 def _last_events():
+    """Latest backup success and failure events from the audit log."""
     ok = query("""SELECT action_id, created_at FROM admin_actions WHERE action = 'BACKUP_EMAIL'
                   ORDER BY action_id DESC LIMIT 1""", fetchone=True)
     failed = query("""SELECT action_id, actor_username, details, created_at FROM admin_actions
@@ -220,6 +223,7 @@ def _auto_ran_since(moment):
 
 
 def _tick(app):
+    """One scheduler check: send a backup if one is due."""
     with app.app_context():
         if restore_running():
             return

@@ -31,8 +31,7 @@ def period_sql(period, col):
 _PERIOD_SQL = {name: period_sql(name, "s.sold_at") for name in PERIOD_TMPL}
 
 
-# Bulk products' qty_sold is mL, not bottles, so every "units" figure below
-# counts bottles only and bulk volume comes back separately as bulk_ml.
+# Bulk qty_sold is mL: 'units' counts bottles only; bulk volume is bulk_ml.
 # Both need `products p` joined on s.sku.
 _UNITS_SQL = "COALESCE(SUM(CASE WHEN p.unit <> 'BULK' THEN s.qty_sold ELSE 0 END),0) AS units"
 
@@ -40,6 +39,7 @@ _UNITS_SQL = "COALESCE(SUM(CASE WHEN p.unit <> 'BULK' THEN s.qty_sold ELSE 0 END
 _BULK_ML_SQL = "COALESCE(SUM(CASE WHEN p.unit = 'BULK' THEN s.qty_sold ELSE 0 END),0) AS bulk_ml"
 
 
+# Tool: sales totals for a period, scoped by role/branch.
 def get_sales_summary(args, ctx):
     period = (args.get("period") or "today").strip()
     if period not in _PERIOD_SQL:
@@ -47,8 +47,7 @@ def get_sales_summary(args, ctx):
 
     branch_name = (args.get("branch_name") or "").strip()
     by_branch = bool(args.get("by_branch"))
-    # HQ records its own sales too (admin Record Sale), so "HQ" is a
-    # valid location here.
+    # HQ records sales too, so "HQ" is a valid location.
     branch_ids, err = _resolve_branch_ids(ctx, branch_name, include_hq=True)
     if err:
         return {"error": err}
@@ -73,8 +72,7 @@ def get_sales_summary(args, ctx):
         " GROUP BY p.item_name ORDER BY units DESC, bulk_ml DESC LIMIT 5",
         tuple(params),
     )
-    # Sale vs Refill vs Freebie, Cash vs Credit, so "how much went on
-    # credit" or "how many refills" doesn't need a tool of its own.
+    # Sale/Refill/Freebie and Cash/Credit splits, so no extra tool is needed.
     by_type = query(
         "SELECT s.sale_type, s.payment_method, COUNT(*) AS transactions, "
         f"{_UNITS_SQL}, {_BULK_ML_SQL}, COALESCE(SUM(s.qty_sold*s.unit_price),0) AS revenue "
@@ -100,9 +98,7 @@ def get_sales_summary(args, ctx):
         ],
     }
 
-    # Dashboard / Reports "Total revenue" also counts Closed partner
-    # package orders (partner_inquiries.order_amount). Only fleet-wide —
-    # a package order isn't tied to any branch.
+    # Total revenue also counts Closed package orders (fleet-wide only).
     if ctx["role"] == "Admin" and branch_ids is None:
         pkg = query(
             "SELECT COUNT(*) AS n, COALESCE(SUM(order_amount),0) AS revenue FROM partner_inquiries "
@@ -113,15 +109,8 @@ def get_sales_summary(args, ctx):
         result["package_revenue"] = float(pkg["revenue"])
         result["total_revenue"] = round(result["revenue"] + result["package_revenue"], 2)
 
-    # by_branch: one GROUP BY query instead of the model having to loop
-    # get_sales_summary once per branch_name (which is what used to blow
-    # through MAX_TOOL_ROUNDS on "how does revenue split across branches"
-    # -style questions — there was previously no way to get a per-branch
-    # breakdown except calling this tool once per branch, and no tool to
-    # even list branch names first). Only meaningful when the result
-    # isn't already scoped to one named branch; LEFT JOIN so a branch
-    # with zero sales in the period still shows up as 0 instead of being
-    # silently missing from the split.
+    # by_branch: one GROUP BY (LEFT JOIN keeps zero-sale branches) instead of
+    # per-branch tool calls.
     if by_branch and branch_ids is None:
         by_branch_rows = query(
             f"SELECT b.branch_name, b.is_hq, {_UNITS_SQL}, {_BULK_ML_SQL}, "
@@ -222,9 +211,7 @@ def get_customers(args, ctx):
 
 
 # ---------------------------------------------------------------------------
-# Admin-only tools: raw materials, suppliers, COGS settings (Formulas
-# page), bulk batches, production cost (COGS), packages, partner
-# inquiries, branch performance, financials. See _ADMIN_ONLY.
+# Tool: get_recent_sales  (both roles, branch-scoped)
 # ---------------------------------------------------------------------------
 
 

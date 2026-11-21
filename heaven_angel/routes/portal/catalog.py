@@ -72,84 +72,6 @@ def _package_previews(package_ids):
     return previews
 
 
-PRODUCTS_PER_PAGE = 12
-
-
-PRODUCT_GENDERS = ("Male", "Female")
-
-
-# Smallest bottle first, bulk last, whatever order the SKUs were added in.
-_UNIT_ORDER = "FIELD(unit, '3ML', '10ML', '50ML', '85ML', 'BULK')"
-
-
-@bp.route("/<slug>/api/products")
-@_read_limit
-def api_products(slug):
-    """Every scent in the catalog, one entry per product name + gender
-    (the SKU table has a row per size, so sizes are folded into a list),
-    optionally filtered by gender and paginated.
-
-    ?gender=Male|Female (anything else = all), ?page=N (1-based,
-    clamped to the last page). Also returns per-gender counts for the
-    filter tabs.
-    """
-    _verify_slug(slug)
-
-    gender = request.args.get("gender", "all")
-    if gender not in PRODUCT_GENDERS:
-        gender = "all"
-    where = "WHERE variant = %s" if gender != "all" else "WHERE variant IN ('Male', 'Female')"
-    params = (gender,) if gender != "all" else ()
-
-    count_rows = query(
-        """SELECT variant, COUNT(*) AS c
-           FROM (SELECT item_name, variant FROM products GROUP BY item_name, variant) grouped
-           GROUP BY variant"""
-    )
-    counts = {g: 0 for g in PRODUCT_GENDERS}
-    for row in count_rows:
-        if row["variant"] in counts:
-            counts[row["variant"]] = int(row["c"])
-    counts["all"] = sum(counts.values())
-
-    total = counts[gender]
-    pages = max(1, -(-total // PRODUCTS_PER_PAGE))
-    try:
-        page = int(request.args.get("page", 1))
-    except (TypeError, ValueError):
-        page = 1
-    page = min(max(page, 1), pages)
-
-    rows = query(
-        f"""SELECT item_name, variant,
-                   GROUP_CONCAT(DISTINCT unit ORDER BY {_UNIT_ORDER} SEPARATOR ',') AS units,
-                   MAX(image_path) AS image_path
-            FROM products {where}
-            GROUP BY item_name, variant
-            ORDER BY item_name, variant
-            LIMIT %s OFFSET %s""",
-        params + (PRODUCTS_PER_PAGE, (page - 1) * PRODUCTS_PER_PAGE),
-    )
-
-    return _cacheable(jsonify(
-        products=[
-            {
-                "item_name": r["item_name"],
-                "variant": r["variant"],
-                "sizes": [u for u in (r["units"] or "").split(",") if u],
-                "image_url": url_for("static", filename=r["image_path"]) if r["image_path"] else None,
-            }
-            for r in rows
-        ],
-        gender=gender,
-        counts=counts,
-        page=page,
-        pages=pages,
-        per_page=PRODUCTS_PER_PAGE,
-        total=total,
-    ))
-
-
 @bp.route("/<slug>/api/packages")
 @_read_limit
 def api_packages(slug):
@@ -222,11 +144,7 @@ def api_package_detail(slug, package_id):
     )
     pkg["unit_count"] = sum(int(i["qty"]) for i in items)
 
-    # A handful of other active packages (same visibility rule as the
-    # main list — scoped to this package's own partner_scope, or 'Both'
-    # packages, so a Distributor-only visitor never sees a Reseller-only
-    # suggestion and vice versa) so a visitor who lands directly on this
-    # page via a shared link isn't stuck with nowhere else to look.
+    # A few other active packages in the same partner scope (or 'Both').
     other_rows = query(
         """SELECT pkg2.*, COUNT(pi.package_item_id) AS item_count,
                   COALESCE(SUM(pi.qty * p.price), 0) AS reference_total
@@ -256,9 +174,7 @@ def api_package_detail(slug, package_id):
         ],
         other_packages=[_package_summary(row) for row in other_rows],
         partner_types=list(PARTNER_TYPES),
-        # Sent back as the X-CSRFToken header on the inquiry POST — see
-        # CSRFProtect in app.py. Tied to the session cookie this same
-        # response sets.
+        # Sent back as the X-CSRFToken header on the inquiry POST.
         csrf_token=generate_csrf(),
     )
 

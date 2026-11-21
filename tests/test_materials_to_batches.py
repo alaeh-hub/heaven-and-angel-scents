@@ -10,6 +10,7 @@ BULK_BATCHES_URL = "/admin/bulk-batches"
 
 
 def test_supplier_material_restock_totals_and_batch_use_them(client, sql):
+    """Supplier material restock totals and batch use them."""
     user = make_user(sql, role="Admin", branch_id=None)
     login(client, user["username"], user["password"], "Admin")
 

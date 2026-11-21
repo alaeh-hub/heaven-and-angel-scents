@@ -1,4 +1,5 @@
-{% extends "base.html" %}
+{% extends "base.html" %}
+{# Admin: users and roles #}
 {% import "_empty.html" as empty %}
 {% block title %}Accounts{% endblock %}
 {% block heading %}Accounts{% endblock %}
@@ -85,10 +86,7 @@
               <td class="mobile-fold" data-label="Status"><span class="badge badge-{{ 'active' if a.is_active else 'inactive' }}">{{ 'Active' if a.is_active else 'Deactivated' }}</span></td>
               <td data-label="" class="mobile-inline-action mobile-actions-below">
                 <div class="inline-form">
-                  <!-- Unified confirm pattern: form[data-confirm] is
-                       picked up by main.js's delegated submit handler —
-                       see requests.html / request_detail.html /
-                       package_detail.html for the same pattern. -->
+                  {# form[data-confirm] gets a confirm() prompt from main.js. #}
                   <form method="POST" action="{{ url_for('admin.reset_user_password', user_id=a.user_id) }}"
                         data-confirm="Reset this account's password? A new temporary password will be generated and shown once.">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">

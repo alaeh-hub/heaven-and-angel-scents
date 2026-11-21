@@ -1,12 +1,9 @@
 """schema.sql migration 52 seeds the product catalog.
 
-Checked against the schema text rather than the test database, because other
-tests (the app's "Clear data") empty the products table during a test run.
-
-Two checks:
-  * the seeded catalog is consistent on its own (always runs, including on CI);
-  * every row of the local products export is seeded (runs only where that file
-    exists: `products_*.csv` is git-ignored, so it is not in a fresh clone or on CI).
+Checked against the schema text, since "Clear data" tests empty the products table.
+  * the seeded catalog is consistent (always runs, including CI);
+  * every row of the local products export is seeded (only where `products_*.csv`
+    exists; it is git-ignored, so not in CI).
 """
 import csv
 import re
@@ -30,6 +27,7 @@ def _seeded_products():
 
 
 def test_seeded_catalog_is_consistent():
+    """Seeded catalog is consistent."""
     rows = _seeded_products()
     assert len(rows) == 31, "the catalog seed should hold 31 scents"
     skus = [r[0] for r in rows]
@@ -46,6 +44,7 @@ def test_seeded_catalog_is_consistent():
 
 @pytest.mark.skipif(not CSV_EXPORT.exists(), reason="local products export not present (git-ignored)")
 def test_every_csv_product_is_seeded_in_schema_sql():
+    """Every csv product is seeded in schema sql."""
     with open(CSV_EXPORT, encoding="utf-8-sig") as fh:
         rows = list(csv.DictReader(fh))
     assert len(rows) == 62

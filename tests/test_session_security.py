@@ -1,7 +1,4 @@
-"""Password changes and resets must end every other signed-in session for
-the account (decorators.password_fingerprint), without logging out the
-session that made the change.
-"""
+"""A password change or reset ends every other session for the account, but not the current one."""
 import pytest
 from werkzeug.security import generate_password_hash
 
@@ -20,6 +17,7 @@ def _branch_user(sql):
 
 
 def test_changing_password_signs_out_other_sessions_but_not_this_one(client, second_client, sql):
+    """Changing password signs out other sessions but not this one."""
     user = _branch_user(sql)
     login(client, user["username"], user["password"], "Branch")
     login(second_client, user["username"], user["password"], "Branch")
@@ -38,6 +36,7 @@ def test_changing_password_signs_out_other_sessions_but_not_this_one(client, sec
 
 
 def test_admin_password_reset_signs_out_the_target_users_session(client, sql):
+    """Admin password reset signs out the target users session."""
     user = _branch_user(sql)
     login(client, user["username"], user["password"], "Branch")
     assert client.get(BRANCH_ROUTE).status_code == 200
@@ -53,6 +52,7 @@ def test_admin_password_reset_signs_out_the_target_users_session(client, sql):
 
 
 def test_session_without_a_password_fingerprint_is_rejected(client, sql):
+    """Session without a password fingerprint is rejected."""
     user = _branch_user(sql)
     login(client, user["username"], user["password"], "Branch")
     with client.session_transaction() as sess:

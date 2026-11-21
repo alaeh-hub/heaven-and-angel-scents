@@ -10,6 +10,7 @@ KEYS = {"by_variant", "by_branch", "movement_trend", "stock_by_branch", "totals"
 
 @pytest.mark.parametrize("granularity", ["daily", "weekly", "monthly", "yearly", "bogus"])
 def test_reports_data_shape_and_totals(client, sql, granularity):
+    """Reports data shape and totals."""
     branch_id = make_branch(sql)
     sku = make_product(sql)
     make_inventory(sql, branch_id, sku, 20)

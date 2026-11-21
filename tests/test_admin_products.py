@@ -1,10 +1,6 @@
-"""routes/admin/'s products() catalog page — specifically the
-product_thumb() macro's no-photo fallback (see templates/_macros.html
-and product_avatar() in utils.py). A product with no image_path should
-render a generated initials avatar rather than a broken/empty-image
-icon, and end-to-end through the real route + template + Jinja globals
-wiring (app.py registers product_avatar as a jinja global) — not just
-the pure function tested in test_utils.py.
+"""Admin products page: a product with no photo shows a generated initials avatar.
+
+Goes through the real route, template and Jinja globals, not just the pure function.
 """
 from factories import login, make_product, make_user
 
@@ -16,6 +12,7 @@ def _signed_in_admin(client, sql):
 
 
 def test_product_with_no_photo_renders_an_initials_avatar(client, sql):
+    """Product with no photo renders an initials avatar."""
     _signed_in_admin(client, sql)
     make_product(sql)  # make_product never sets image_path -> NULL
 
@@ -64,6 +61,7 @@ def _product(sql, sku):
 
 
 def test_import_refuses_a_bulk_row_because_bulk_is_not_a_product(client, sql):
+    """Import refuses a bulk row because bulk is not a product."""
     import uuid
     user = make_user(sql, role="Admin", branch_id=None)
     login(client, user["username"], user["password"], "Admin")
@@ -76,6 +74,7 @@ def test_import_refuses_a_bulk_row_because_bulk_is_not_a_product(client, sql):
 
 
 def test_export_never_lists_a_bulk_row(client, sql):
+    """Export never lists a bulk row."""
     import uuid
     user = make_user(sql, role="Admin", branch_id=None)
     login(client, user["username"], user["password"], "Admin")

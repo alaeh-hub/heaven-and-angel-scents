@@ -20,9 +20,7 @@ const SOCIAL_ICONS = {
   x: FaXTwitter,
 };
 
-// Phosphor has no official Shopee/Lazada/TikTok Shop marks, so each
-// marketplace gets a generic storefront-style icon instead of a logo,
-// tinted with that marketplace's own brand color on hover.
+// No official marketplace marks exist, so generic storefront icons get brand tints.
 const MARKETPLACE_ICONS = {
   shopee: ShoppingBagIcon,
   lazada: ShoppingCartIcon,
@@ -42,8 +40,7 @@ const EXPLORE = [
   { id: 'faq', label: 'FAQ' },
 ];
 
-/** A footer taller than this share of the screen doesn't tuck under
-    the page: it would have to reveal bottom-first, hiding its top. */
+/** A footer taller than this share of the screen is not revealed (top would hide). */
 const MAX_REVEAL_SHARE = 0.9;
 
 const clamp01 = (v) => Math.min(1, Math.max(0, v));
@@ -51,22 +48,10 @@ const clamp01 = (v) => Math.min(1, Math.max(0, v));
 const span = (v, from, to) => clamp01((v - from) / (to - from));
 
 /**
- * The site footer, as a sticky reveal: it sits still under the page
- * (z-index -1, sticky to the bottom edge) and the content above it
- * slides up to uncover it, while the footer itself fades, rises and
- * scales up in step with how much of it is uncovered (useScroll
- * over its own box, 0 as its top reaches the bottom of the screen, 1 at
- * the very end of the page).
- *
- * `children` is what covers it (the closing band on the landing page,
- * the whole page elsewhere). They share one wrapper, which is the
- * sticky footer's containing block, so the footer only waits beneath
- * them and never shows through the see-through sections higher up the
- * page (the ones over the backdrop video). Whatever is passed must be
- * opaque, see .footer-zone in landing.css.
- *
- * Under reduced motion, or when the footer is too tall for the screen
- * (phones), it's an ordinary footer that simply follows the page.
+ * Sticky-reveal footer: it waits under the page (z-index -1) while the
+ * content in `children` slides up to uncover it, fading/rising in step.
+ * `children` must be opaque (see .footer-zone in landing.css). Reduced
+ * motion or a footer taller than the screen gives a plain footer.
  */
 export default function Footer({ children }) {
   const { slug } = useParams();
@@ -74,7 +59,7 @@ export default function Footer({ children }) {
   const reduce = useReducedMotion();
   const footerRef = useRef(null);
   const coverRef = useRef(null);
-  // Read inside the scroll mapping below, so kept in a ref (no re-render).
+  // Kept in a ref: read by the scroll mapping without re-rendering.
   const sizesRef = useRef({ footer: 1, viewport: 1 });
   const [fits, setFits] = useState(true);
 
@@ -97,21 +82,13 @@ export default function Footer({ children }) {
 
   const reveal = fits && !reduce;
 
-  // How much of the footer is uncovered, 0..1. Measured off the cover,
-  // not the footer: a sticky element's measured position moves with it
-  // while it's stuck, which threw the progress off. The cover scrolls
-  // normally, and the footer is uncovered exactly as far as the cover's
-  // bottom edge has risen past the bottom of the screen. That rise, over
-  // one screen, is `v` below, and the footer's own height is all of it.
+  // Uncovered amount 0..1, measured off the cover (a stuck sticky box moves).
   const { scrollYProgress } = useScroll({ target: coverRef, offset: ['end end', 'end start'] });
   const uncovered = useTransform(scrollYProgress, (v) => {
     const { footer, viewport } = sizesRef.current;
     return clamp01((v * viewport) / footer);
   });
-  // Mapped through functions on purpose: given plain ranges, Motion can
-  // hand opacity to the browser's native scroll timeline, which
-  // measures differently from the transforms (same issue as the hero's
-  // useSpan). This way every value follows the one progress above.
+  // Mapped via functions so Motion avoids the native scroll timeline (hero useSpan issue).
   const opacity = useTransform(uncovered, (v) => span(v, 0, 0.7));
   const scale = useTransform(uncovered, (v) => 0.94 + 0.06 * v);
   const y = useTransform(uncovered, (v) => 48 * (1 - v));
@@ -119,11 +96,7 @@ export default function Footer({ children }) {
   const phone = site?.contact?.phone || FOOTER.phone;
   const email = site?.contact?.email || FOOTER.email;
 
-  /** Always a router link to the landing page's section; when that
-      section is on this page already it just glides there. (Choosing
-      between a plain anchor and a link by comparing pathnames broke the
-      link whenever they differed, e.g. by a trailing slash, and the
-      click then did nothing.) */
+  /** Router link to the landing section (a plain anchor broke on trailing slashes). */
   const sectionLink = ({ id, label }) => (
     <Link
       className={UNDERLINE_HOVER}
@@ -138,9 +111,7 @@ export default function Footer({ children }) {
     <div className="footer-zone">
       <div className="footer-cover" ref={coverRef}>{children}</div>
       <footer ref={footerRef} className={`footer${reveal ? ' footer-reveal' : ''}`}>
-        {/* Keyed by mode: switching to a plain footer (a phone, or a
-            window resized short) remounts it, so none of the reveal's
-            last values linger on it. */}
+        {/* Keyed by mode so a switch remounts and drops reveal values. */}
         <motion.div
           key={reveal ? 'reveal' : 'static'}
           className="footer-body"

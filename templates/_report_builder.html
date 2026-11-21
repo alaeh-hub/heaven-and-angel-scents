@@ -1,17 +1,6 @@
-{# The "Generate a report" builder, shared by the admin and branch Reports pages.
-
-   Needs: report_catalog (services.reports.report_catalog), report_groups, unit_choices,
-          and for admins also branch_list.
-   Set rb_admin (true/false), rb_generate_url and rb_preview_url before including.
-   Its behaviour is in _report_builder_script.html, which each page includes from {% block scripts %}
-   (soft navigation re-runs that block, but never a script inside .content).
-
-   Pick a report from grouped cards, narrow it with choice chips and a date preset, and see
-   in plain words (and a live row count) what you will get before you download it.
-   The real <select> and <input> controls stay in the form, so the download is still the
-   same GET the server already understands. #}
+{# Report builder shared by admin and branch Reports. Set rb_admin, rb_generate_url, rb_preview_url first. #}
 <section class="card card-pad rbx" id="reportBuilder" aria-labelledby="rbxTitle">
-  {# Until the script has set the builder up, the raw form is hidden (no flash of every dropdown). #}
+  {# Form stays hidden until the script sets the builder up. #}
   <noscript><style>.rbx .rbx-step, .rbx .rbx-bar, .rbx .rbx-foot { visibility: visible !important; }</style></noscript>
   <div class="rbx-head">
     <div>
@@ -75,9 +64,7 @@
           <span class="rbx-label" id="lbl_branch_id">Branch</span>
           <select id="rb_branch_id" name="branch_id" aria-labelledby="lbl_branch_id">
             <option value="all">All branches</option>
-            {# Main Branch is HQ Main Warehouse (branch_id 1). It is left out of branch_list (the Branches
-               page lists retail branches only), but it has its own sales, stock and movements, so reports
-               need to filter down to it. Listed here rather than changing branch_list, which other pages share. #}
+            {# Main Branch (id 1) is not in branch_list, so it is added here for report filters. #}
             <option value="1">Main Branch (HQ Warehouse)</option>
             {% for b in branch_list %}
             <option value="{{ b.branch_id }}">{{ b.branch_name }}</option>

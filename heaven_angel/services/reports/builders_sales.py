@@ -8,6 +8,7 @@ from heaven_angel.db import query
 
 
 def report_sales_history(filters, branch_scope):
+    """Sales history report."""
     where, params = "", []
     if branch_scope is not None:
         where += " AND s.branch_id = %s"
@@ -164,9 +165,7 @@ def report_partners(filters, branch_scope):
         ) or "—"
         r["inquiries_summary"] = f"{r['inquiry_count']} total · {r['closed_order_count']} closed"
 
-    # 4th element = relative PDF column width (see render_report_pdf's
-    # width-weight comment). Contact now carries three merged fields so
-    # it gets the biggest share; Type/Inquiries are short so they shrink.
+    # 4th element is the relative PDF column width; Contact is widest.
     columns = [
         ("partner_name", "Partner", "str", 1.2),
         ("partner_type", "Type", "badge:partner_type", 0.7),
@@ -274,24 +273,13 @@ def report_partner_inquiries(filters, branch_scope):
             f"prefers {preferred}" if preferred else None) if p) or "—"
         # Same short package name the Partner Inquiries page shows.
         r["package_name_snapshot"] = (r["package_name_snapshot"] or "—").split(" (")[0]
-        # Nullable — see schema.sql's comment: NULL means "unknown"
-        # (older row predating this column), never coerced to 0. The
-        # quoted package value is shown for every lead, but only a
-        # Closed inquiry is a sale (same rule as the Dashboard/Partners),
-        # so only sale_amount is totalled.
+        # NULL order_amount means unknown (never 0); only Closed inquiries count as sales.
         amount = r.pop("order_amount")
         r["package_value"] = float(amount) if amount is not None else None
         r["sale_amount"] = float(amount) if amount is not None and r["status"] == "Closed" else None
         r["remarks"] = r["remarks"] or "—"
 
-    # See report_partners' comment above — same reasoning: Contact
-    # Person now rides along inside Company, and Phone/Email collapse
-    # into one Contact column, so both the column count and the short
-    # badge/status columns shrink; Remarks/Package/Contact (the ones
-    # that actually need room) grow. Address and HQ Notified (whether
-    # the notification email happened to send) are dropped outright —
-    # Address is almost always blank, and HQ Notified is an internal
-    # mailer-ops flag, not information about the partner or the sale.
+    # Compact columns, as in report_partners: Contact merged into Company, internal flags dropped.
     columns = [
         ("created_at", "When", "datetime", 0.9),
         ("company_name", "Company", "str", 1.3),

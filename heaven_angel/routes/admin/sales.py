@@ -24,12 +24,7 @@ from heaven_angel.routes.admin._common import HQ_BRANCH_ID, bp
 @bp.route("/record-sale/<int:sale_id>/receipt")
 @admin_required
 def sale_receipt(sale_id):
-    """Downloadable PDF receipt for a single sale/refill — see receipts.py.
-
-    No branch_id scoping here since HQ Admin can see every branch (in
-    practice this is only ever called for HQ/Main Branch's own sales,
-    recorded on this same page).
-    """
+    """Downloadable PDF receipt for one sale/refill (receipts.py); admins see every branch."""
     pdf_buffer, sale = build_sale_receipt_pdf(sale_id)
     if pdf_buffer is None:
         abort(404)
@@ -39,6 +34,7 @@ def sale_receipt(sale_id):
     )
 
 
+# Flash text for a recorded sale (one product, or several on one receipt).
 def _recorded_message(sales):
     if len(sales) == 1:
         return f"{sales[0].sale_type} recorded."
@@ -48,16 +44,10 @@ def _recorded_message(sales):
 @bp.route("/record-sale", methods=["GET", "POST"])
 @admin_required
 def record_sale():
-    """HQ selling straight from the warehouse (branch_id=1) — walk-in
-    sales, refills, or a Credit sale (an employee against their own pay,
-    or a customer buying on store credit/"utang"). Mirrors
-    branch.record_sale(); the only difference is HQ can't produce here,
-    only sell/refill from whatever the warehouse already has on hand
-    (see production() for adding stock).
+    """HQ sells straight from the warehouse (branch_id=1): walk-in, refill or Credit sale.
 
-    There's no branch price to fall back to anymore — the HQ price is
-    only ever a suggested starting point; the actual amount charged is
-    typed in on every sale/refill.
+    Mirrors branch.record_sale(), but HQ can only sell/refill existing stock. The HQ price
+    is a suggestion; the amount charged is typed on every sale.
     """
     if request.method == "POST":
         if not consume_form_token("admin_record_sale"):
@@ -87,11 +77,8 @@ def record_sale():
             flash("Couldn't record that — please try again.", "error")
         return redirect(url_for("admin.record_sale"))
 
-    # Bulk is not a product any more: it is the mL left in a scent's bulk
-    # batches (bulk_batches.base_code = the product code). bulk_ml on a bottle
-    # row is what a Refill of that size can still pour from; the 'Bulk/Refill'
-    # rows (sku '<code>-BULK') are the scents with mL left, for the "sold by
-    # the mL" panel. Both come from the same batch totals.
+    # Bulk is the mL left in a scent's bulk batches (bulk_batches.base_code). bulk_ml on a
+    # bottle row is what a Refill can pour; '<code>-BULK' rows feed the sold-by-mL panel.
     batch_ml = """(SELECT base_code, SUM(remaining_ml) AS ml FROM bulk_batches
                    WHERE base_code IS NOT NULL AND remaining_ml > 0 GROUP BY base_code)"""
     inventory = query(
@@ -113,9 +100,7 @@ def record_sale():
     bulk_rate = query(
         "SELECT rate_per_ml FROM bulk_rate_settings WHERE id = 1", fetchone=True,
     )["rate_per_ml"]
-    # s.* already carries sales.sku (the FK column) — no need to
-    # re-select p.sku separately; it's used below for the Item column's
-    # SKU + Name display.
+    # s.* already carries sales.sku; used for the Item column.
     recent_sales = query(
         """SELECT s.*, p.item_name, p.unit, COALESCE(s.buyer_name, bu.username) AS buyer_username
            FROM sales s JOIN sale_catalog p ON s.sku = p.sku
@@ -127,10 +112,7 @@ def record_sale():
     employees = query(
         "SELECT user_id, username, role FROM users WHERE is_active = TRUE ORDER BY username"
     )
-    # Every distinct customer name logged at HQ/Main Branch, each paired
-    # with the address from that name's *first* sale (see schema.sql's
-    # comment on sales.customer_address) — feeds the Customer name
-    # autocomplete/autofill on the form below. Mirrors branch.record_sale().
+    # Every customer name logged at HQ with the address of their first sale (form autofill).
     customers = query(
         """SELECT s.customer_name AS name, s.customer_address AS address
            FROM sales s
@@ -159,9 +141,7 @@ def record_sale():
 @bp.route("/record-sale/import-template")
 @admin_required
 def sales_import_template():
-    """Downloadable blank workbook for the "Import from Excel" button
-    below — see sales_import.build_sales_import_template().
-    """
+    """Blank workbook for the Import from Excel button (sales_import)."""
     inventory = query(
         """SELECT p.sku, p.item_name, p.variant, p.unit, p.price, bi.stock_qty
            FROM branch_inventory bi JOIN products p ON bi.sku = p.sku
@@ -178,11 +158,7 @@ def sales_import_template():
 @bp.route("/record-sale/import", methods=["POST"])
 @admin_required
 def import_sales():
-    """Bulk-insert every row of an uploaded, filled-in copy of the
-    template above in one go. Mirrors branch.import_sales() — see
-    sales_import.import_sales_rows() for the all-or-nothing transaction
-    this runs against the HQ warehouse (branch_id=1).
-    """
+    """Bulk-insert a filled template in one all-or-nothing transaction on the HQ warehouse."""
     if not consume_form_token("admin_import_sales"):
         flash(
             "This import already went through, or the form expired — try uploading again.", "error")
@@ -215,26 +191,10 @@ def import_sales():
 @bp.route("/customers")
 @admin_required
 def customers():
-    """Company-wide repeat-customer directory, aggregated across every
-    branch — the admin counterpart to branch.customers().
+    """Company-wide repeat-customer directory (admin counterpart of branch.customers()).
 
-    Same underlying data as the branch-scoped version: there's no
-    separate customers table, this is built entirely from
-    `sales.customer_name` / `customer_address`, grouped by name. The
-    difference here is scope: a customer who has bought from more than
-    one branch is folded into a single row instead of appearing once
-    per branch, with a "Branches" column showing where they've shopped
-    and the branch of their most recent purchase.
-
-    Address is taken from the earliest sale on file for that name
-    fleet-wide (same "first sale wins" convention as the branch page
-    and Record Sale's autocomplete — see schema.sql's comment on
-    sales.customer_address). Walk-ins (blank customer_name) are
-    excluded since there's nothing to group them by. Matching is by
-    exact customer_name text, same as everywhere else this field is
-    used — two different spellings of the same person's name are
-    treated as two different customers, same limitation the branch
-    page and Record Sale autocomplete already have.
+    Built from sales.customer_name/customer_address grouped by exact name; customers from
+    several branches fold into one row. Address is the earliest sale's; walk-ins are excluded.
     """
     rows = query(
         """SELECT s.customer_name AS name, s.customer_address AS address,
@@ -288,11 +248,9 @@ def customers():
 @bp.route("/credit-purchases")
 @admin_required
 def credit_purchases():
-    """Outstanding Credit across every branch — who still owes what,
-    HQ-wide. Mirrors branch.credit_purchases() but grouped by branch +
-    buyer (so the same name at two branches stays two rows) and filterable
-    by branch. Settled credit (see sale_stock.settle_credit(), used from
-    the Scan Receipt page's "Mark as paid") drops off once cleared.
+    """Outstanding Credit across every branch, grouped by branch + buyer, filterable by branch.
+
+    Settled credit (sale_stock.settle_credit) drops off once cleared.
     """
     branch_filter = request.args.get("branch_id", "all")
     branches = query("SELECT branch_id, branch_name, is_hq FROM branches ORDER BY is_hq DESC, branch_name")
@@ -336,9 +294,7 @@ def credit_purchases():
 @bp.route("/sales-history")
 @admin_required
 def sales_history():
-    """Every location's sales (HQ and branches), newest first — the place
-    HQ voids a sale from. Recent voids are listed underneath as the
-    permanent record of what was removed and why (sale_voids)."""
+    """Every location's sales, newest first, where HQ voids one; recent voids listed below."""
     branch_filter = request.args.get("branch_id", "all")
     branches = query("SELECT branch_id, branch_name, is_hq FROM branches ORDER BY is_hq DESC, branch_name")
     sql = """SELECT s.*, b.branch_name, b.is_hq, p.item_name, p.variant, p.unit,

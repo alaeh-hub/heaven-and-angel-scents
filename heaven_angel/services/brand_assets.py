@@ -116,15 +116,7 @@ class NumberedCanvas(pdfcanvas.Canvas):
         pdfcanvas.Canvas.save(self)
 
     def _draw_page_number(self, total_pages):
-        # reportlab's Canvas only ever exposes the page size as the
-        # private `_pagesize` (see reportlab.pdfgen.canvas.Canvas.__init__)
-        # — there is no public `pagesize` attribute, in this pinned
-        # version (5.0.1) or any other. Reading `self.pagesize` here
-        # raised AttributeError on every PDF that reached a second page
-        # (single-page PDFs never call this, since save() only stamps
-        # page numbers when total_pages > 1), which meant any report or
-        # receipt long enough to spill past one page failed to generate
-        # at all instead of downloading.
+        # reportlab only exposes `_pagesize`; `pagesize` raised on multi-page PDFs.
         page_w, _ = self._pagesize
         font, _ = register_fonts()
         self.setFont(font, 7.3)

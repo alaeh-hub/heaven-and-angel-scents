@@ -82,6 +82,7 @@ def _scope():
     return is_admin, (None if is_admin else session.get("branch_id"))
 
 
+# QR receipt scan page.
 @bp.route("/")
 @login_required
 def scan_page():

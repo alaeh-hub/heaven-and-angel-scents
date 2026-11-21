@@ -56,11 +56,7 @@ def dashboard():
            ORDER BY sr.requested_at DESC LIMIT 6"""
     )
 
-    # Same exclusion as movement_logs() below: a delivery's own
-    # DISPATCH/RECEIPT/DAMAGE/ADJUSTMENT rows (reference_type=
-    # 'STOCK_REQUEST') are left off this preview too, so it doesn't show
-    # one SKU out of a multi-item delivery as if that were the whole
-    # story — that detail belongs on the delivery's own page/receipt.
+    # Same exclusion as movement_logs(): STOCK_REQUEST rows belong on the delivery page.
     recent_activity = query(
         """SELECT sml.created_at, b.branch_name, p.item_name, sml.change_qty, sml.movement_type
            FROM stock_movement_logs sml
@@ -70,8 +66,7 @@ def dashboard():
            ORDER BY sml.created_at DESC LIMIT 8"""
     )
 
-    # Operational snapshot: bottles on hand per branch (the sales-side
-    # rankings — top sellers/packages/partners — live on the Reports page).
+    # Operational snapshot: bottles on hand per branch (sales rankings are on Reports).
     stock_by_branch = query(
         """SELECT b.branch_name,
                   COALESCE(SUM(CASE WHEN p.unit <> 'BULK' THEN bi.stock_qty ELSE 0 END), 0) AS total_stock
@@ -80,26 +75,9 @@ def dashboard():
            WHERE b.is_hq = FALSE GROUP BY b.branch_id, b.branch_name ORDER BY total_stock DESC"""
     )
 
-    # Business-level financials: total revenue across branch sales AND
-    # closed package orders, and total spent on raw materials, so a
-    # simple gross profit can be shown at a glance. See reports_data()
-    # below for the same figures broken out into charts on the Reports
-    # page.
-    #
-    # package_sales is only ever Closed inquiries' order_amount — see
-    # the note above top_packages. It's folded into total_revenue (and
-    # therefore profit) the same way branch sales are, since a closed
-    # package order is real money in exactly the same sense.
-    #
-    # "Capital" is no longer its own ledger (see schema.sql's note on
-    # capital_contributions being removed) — it's now the cost of goods
-    # actually produced: SUM(total_cogs) over cogs_logs, i.e. each
-    # formula's cost per unit x how many units were logged as produced
-    # against it (see production()). "Raw materials bought" is
-    # tracked alongside it (SUM(package_cost) over raw_materials) purely
-    # as a comparison figure now — what's been paid for material
-    # packages vs. what's actually gone into produced goods — it no
-    # longer feeds capital/profit itself.
+    # Financials: revenue = branch sales + closed package orders (order_amount).
+    # Capital = cost of goods produced (SUM total_cogs in cogs_logs). Raw materials bought
+    # (SUM package_cost) is a comparison figure only; it does not feed capital or profit.
     total_cogs = query(
         "SELECT COALESCE(SUM(total_cogs), 0) AS v FROM cogs_logs", fetchone=True
     )["v"]
@@ -117,15 +95,8 @@ def dashboard():
     )["v"]
     total_revenue = branch_sales_revenue + package_sales_revenue
 
-    # Trend arrow on the Total revenue tile: month-to-date revenue vs.
-    # the same stretch of last month (1st of last month up to this exact
-    # moment one month ago), so a half-finished month isn't compared
-    # against a whole one. MySQL's `- INTERVAL 1 MONTH` clamps to the
-    # month's last day (Mar 31 -> Feb 28/29). Rows between those two
-    # windows (the rest of last month) fall in neither sum.
-    #
-    # A closed package order counts toward the month it was closed in
-    # (partner_inquiries.closed_at; older rows fall back to created_at).
+    # Revenue trend: month-to-date vs the same stretch of last month (MySQL clamps
+    # - INTERVAL 1 MONTH to month end). Closed orders count in closed_at (else created_at).
     month_revenue = query(
         """SELECT
                COALESCE(SUM(CASE WHEN t.at >= CURDATE() - INTERVAL (DAY(CURDATE()) - 1) DAY
@@ -142,16 +113,13 @@ def dashboard():
         fetchone=True,
     )
 
-    # Profit is revenue minus cost of goods SOLD (see finance.py), not minus
-    # what was produced; production cost stays visible as "capital".
+    # Profit = revenue - cost of goods SOLD (finance.py); production cost shows as capital.
     cogs_total = cogs_sold()
     receivables = query(
         "SELECT COALESCE(SUM(qty_sold * unit_price), 0) AS v FROM sales "
         "WHERE payment_method = 'Credit' AND credit_settled_at IS NULL", fetchone=True)["v"]
 
-    # Last 14 days of revenue (branch sales + closed package orders) and
-    # profit (that revenue minus the cost of what was sold that day), zero-
-    # filled, for the sparklines on the Total revenue / Net profit tiles.
+    # Last 14 days of revenue and profit, zero-filled, for the tile sparklines.
     from datetime import timedelta
     spark_days = [business_today() - timedelta(days=i) for i in range(13, -1, -1)]
     rev_by_day = {}

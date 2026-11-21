@@ -1,4 +1,5 @@
-{% extends "base.html" %}
+{% extends "base.html" %}
+{# Admin: bulk batches (mL) and their real cost #}
 {% import "_empty.html" as empty %}
 {% import "_macros.html" as m %}
 {% block title %}Bulk Batches{% endblock %}
@@ -453,9 +454,7 @@
   </p>
   {% endif %}
 
-{# The numbers this page draws live in a data block INSIDE the page content (not only in the
-   script): the live refresh swaps the page only when the content's HTML changed, so a price or
-   stock change has to change this block, or it would be skipped as "nothing new". #}
+{# Keep the data block inside .content so live refresh sees changed numbers. #}
   <script type="application/json" id="fmData">{{ {'catalog': formula_catalog_json, 'scent_oils': scent_oils_json} | tojson }}</script>
   <form method="POST" action="{{ url_for('admin.produce_batch_formula') }}" class="fm-form" id="fmProduceForm">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">

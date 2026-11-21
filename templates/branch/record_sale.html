@@ -1,4 +1,5 @@
-{% extends "base.html" %}
+{% extends "base.html" %}
+{# Record Sale and recent sales #}
 {% import "_empty.html" as empty %}
 {% import "_macros.html" as m %}
 {% block title %}Record Sale{% endblock %}
@@ -341,8 +342,7 @@
 {% endblock %}
 
 {% block content %}
-<!-- New sale / Import from Excel live in dialogs, opened from the
-     buttons in the Recent sales header — see wireOverlay() in main.js. -->
+{# New sale / Import dialogs, opened from the Recent sales header. #}
 <div id="newSaleOverlay" class="rs-dialog" role="dialog" aria-modal="true" aria-labelledby="newSaleOverlayTitle" style="display:none;">
 <div class="card card-pad rs-dialog-panel is-wide">
   <div class="rs-dialog-head">
@@ -358,9 +358,7 @@
 
     <div class="dialog-cols">
     <div>
-    <!-- Refills and Bulk/Refill sales pour from bulk, which only HQ holds
-         (branches can't stock it), so a branch only ever sells bottles.
-         Both switches stay in the DOM (hidden) for the page script. -->
+    {# Branches sell bottles only (bulk is HQ-only); switches stay hidden for the script. #}
     <div class="field" style="display:none;">
       <label>Transaction</label>
       <div class="choice-grid" id="topTypeSwitch">
@@ -422,11 +420,7 @@
       </div>
     </div>
 
-    <!-- ---- Bulk/Refill: sold by volume, not a fixed bottle — qty (mL)
-         is freely typed, price per mL is always the one shared rate on
-         file (see admin's Base Cost of Goods page / bulk_rate_settings in
-         schema.sql), never retyped by hand. Only products in the
-         Bulk/Refill category show up here (see products.category). ---- -->
+    {# Bulk/Refill: qty in mL, price per mL is the shared rate on file. #}
     <div id="looseSection" class="kind-panel" style="display:none;">
       <div class="field">
         <label for="sku_loose">Product</label>
@@ -484,14 +478,7 @@
       </div>
     </div>
 
-    <!-- Customer name/address only apply to a normal cash sale to an
-         outside customer. A Credit sale is one person — employee or
-         customer — taking product now against a balance owed later —
-         pairing that with a separate "customer name" field invited
-         mixing up two different people on the same sale (whose name is
-         this, the credit buyer's or the customer's?). This whole block
-         is hidden and cleared whenever Credit is selected — see the
-         paymentSwitch wiring below. -->
+    {# Customer fields apply to cash sales only; hidden when Credit is chosen. #}
     <div id="customerFieldsWrap">
       <div class="form-row">
         <div class="field">
@@ -612,9 +599,7 @@
             <td data-label="" class="mobile-inline-action">
               {{ m.receipt_button(s, 'branch.sale_receipt') }}
             </td>
-            <!-- Mobile-only — see .mobile-toggle-row/.row-toggle-btn in
-                 style.css. Hidden on desktop, where every cell above is
-                 already visible in the real table row. -->
+            {# Mobile-only: .row-toggle-btn expands the cells hidden in the card layout. #}
             <td data-label="" class="mobile-toggle-row">
               <button type="button" class="row-toggle-btn" aria-expanded="false">
                 <span>Details</span>

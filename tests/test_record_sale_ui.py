@@ -1,12 +1,6 @@
-"""Record Sale's "Recent sales" list — on a phone this used to dump
-every sale as a tall card with Qty/Price/Total/Payment all stacked
-underneath the item name. Each row now starts collapsed to just the
-item (see .table-collapsible / .mobile-detail / .mobile-toggle-row in
-style.css and the matching JS in main.js's initSmartTables()), with a
-"Details" bar at the bottom to expand it back open. This only checks
-the markup the template renders — the actual collapse/expand
-interaction is CSS + client-side JS, out of reach for a server-side
-test.
+"""Record Sale's "Recent sales" list: rows start collapsed to the item with a "Details" bar.
+
+Only the template markup is checked; the toggle itself is CSS + JS.
 """
 from factories import (get_form_token, login, make_branch, make_inventory,
                         make_product, make_user)
@@ -30,6 +24,7 @@ def _sell(client, sku, qty, unit_price):
 
 
 def test_recent_sales_table_renders_the_collapsible_mobile_markup(client, sql):
+    """Recent sales table renders the collapsible mobile markup."""
     branch_id = make_branch(sql)
     user = make_user(sql, role="Branch", branch_id=branch_id)
     login(client, user["username"], user["password"], "Branch")

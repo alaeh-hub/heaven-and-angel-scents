@@ -1,7 +1,4 @@
-"""Adding products to a package (admin.package_detail /
-admin.add_package_item): the page's searchable product field only offers
-bottled products, and a bulk SKU is refused even if posted
-directly."""
+"""Adding products to a package: the picker offers only bottled products, and a bulk SKU is refused."""
 import json
 import re
 
@@ -28,6 +25,7 @@ def _package_skus(sql, package_id):
 
 
 def test_package_page_offers_bottled_products_but_not_bulk(client, sql):
+    """Package page offers bottled products but not bulk."""
     _signed_in_admin(client, sql)
     package_id = make_package(sql)
     bottled = make_product(sql, unit="85ML")
@@ -41,6 +39,7 @@ def test_package_page_offers_bottled_products_but_not_bulk(client, sql):
 
 
 def test_adding_a_bottled_product_by_sku(client, sql):
+    """Adding a bottled product by sku."""
     _signed_in_admin(client, sql)
     package_id = make_package(sql)
     bottled = make_product(sql, unit="50ML")
@@ -51,6 +50,7 @@ def test_adding_a_bottled_product_by_sku(client, sql):
 
 
 def test_a_bulk_product_is_refused_even_when_posted_directly(client, sql):
+    """A bulk product is refused even when posted directly."""
     _signed_in_admin(client, sql)
     package_id = make_package(sql)
     bulk = f"BLK-{unique_suffix().upper()}-BULK"  # bulk is not a product, so there is no such SKU

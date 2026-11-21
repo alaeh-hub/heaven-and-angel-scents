@@ -7,6 +7,7 @@ from heaven_angel.db import query
 
 
 def report_accounts(filters, branch_scope):
+    """Accounts report (admin only)."""
     where, params = "", []
     if filters["role"] != "all":
         where += " AND u.role = %s"

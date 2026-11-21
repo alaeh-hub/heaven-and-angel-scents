@@ -12,12 +12,9 @@ const DISMISS_PX = 140;
 const DISMISS_VELOCITY = 700;
 
 /**
- * Where the sheet should grow from: the clicked card's centre (carried
- * as `state.origin` by PackageCard), as a transform-origin inside the
- * sheet's own box. The sheet's box mirrors `.sheet` in detail.css: up
- * to 1180px wide and centred, with 40px of the page left showing above
- * it (12px on phones). Null without an origin (opened from inside the
- * sheet, a shared link, back/forward), where it simply rises.
+ * Transform-origin for the sheet to grow from the clicked card's centre
+ * (`state.origin`). Mirrors `.sheet` in detail.css (max 1180px, 40px top
+ * gap, 12px on phones). Null without an origin, where the sheet rises.
  */
 function growFrom(origin) {
   if (!origin) return null;
@@ -29,17 +26,11 @@ function growFrom(origin) {
 }
 
 /**
- * The package detail as a sheet that rises over the package list,
- * rendered by App.jsx when the URL is a package's but the navigation
- * carried a `background` location (see PackageCard). The URL is still
- * the package's own, so it can be shared or reloaded as-is.
- *
- * Opened from a card, it grows out of that card instead of rising from
- * the bottom edge, so it's clear which package it is (see growFrom).
- *
- * Close with the X, Escape, a tap on the dimmed page, or by dragging the
- * top bar down. The route only changes once the exit animation has
- * finished, so the sheet always gets to slide away.
+ * The package detail as a sheet over the list, rendered by App.jsx when a
+ * package URL carries a `background` location (see PackageCard); the URL
+ * stays shareable. Grows from the card when opened from one. Closes via
+ * X, Escape, backdrop tap or dragging the top bar; the route changes after
+ * the exit animation.
  */
 export default function DetailDialog() {
   const { slug, packageId } = useParams();
@@ -48,7 +39,7 @@ export default function DetailDialog() {
   const [open, setOpen] = useState(true);
   const dragControls = useDragControls();
   const scrollRef = useRef(null);
-  // Read once: only the opening itself grows out of the card.
+  // Read once: only the opening grows out of the card.
   const [transformOrigin] = useState(() => growFrom(location.state?.origin));
   useBodyScrollLock(true);
 
@@ -66,9 +57,7 @@ export default function DetailDialog() {
   }, [close]);
 
   const leave = () => {
-    // Opening pushed one history entry and switching packages inside
-    // the sheet replaces it, so going back one lands on the list. With
-    // nothing to go back to, replace this entry with the list.
+    // Opening pushed one entry; with nothing to go back to, replace it with the list.
     const { background } = location.state;
     if (window.history.state?.idx > 0) navigate(-1);
     else navigate(background.pathname + background.search, { replace: true });
@@ -95,11 +84,7 @@ export default function DetailDialog() {
           aria-modal="true"
           aria-label="Package details"
           style={{ ...(transformOrigin ? { transformOrigin } : null), willChange: 'transform, opacity' }}
-          // A calm rise: a short ease-out tween on transform and opacity
-          // only, started a little below and slightly smaller (grown out of
-          // the card's own spot when there is one). The old spring scaled a
-          // full-screen sheet up from 35% while its text re-rendered at
-          // every size, which is what looked rough.
+          // Calm rise: short ease-out on transform and opacity (a full-screen spring looked rough).
           initial={{ y: 56, scale: transformOrigin ? 0.94 : 0.985, opacity: 0 }}
           animate={{
             y: 0,

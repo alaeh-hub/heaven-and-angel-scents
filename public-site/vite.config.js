@@ -3,14 +3,8 @@ import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import { fileURLToPath } from 'node:url';
 
-// Flask stays the backend: in dev (`npm run dev`, port 5173) the JSON
-// API and the shared /static assets (style.css, images, videos,
-// product photos) are proxied to Flask on :5000, so the React app runs
-// same-origin with no CORS setup and the session cookie (which carries
-// the CSRF token) just works.
-//
-// `npm run build` writes into ../static/public-site/, which Flask then
-// serves — see routes/portal.py's _serve_public_site().
+// Dev: proxy the API and /static to Flask on :5000 (same-origin, no CORS).
+// Build: writes to ../static/public-site/, served by Flask.
 const FLASK = process.env.FLASK_URL || 'http://127.0.0.1:5000';
 
 export default defineConfig(({ command }) => ({
@@ -20,8 +14,7 @@ export default defineConfig(({ command }) => ({
       '@': fileURLToPath(new URL('./src', import.meta.url)),
     },
   },
-  // Only the build lives under Flask's /static; the dev server serves
-  // from / so its own /static proxy below doesn't collide with it.
+  // Only the build lives under /static; dev serves from /.
   base: command === 'build' ? '/static/public-site/' : '/',
   build: {
     outDir: '../static/public-site',
@@ -30,7 +23,7 @@ export default defineConfig(({ command }) => ({
   server: {
     port: 5173,
     host: true,
-    // VS Code / dev-tunnel forwarded hostnames.
+    // VS Code / dev-tunnel hostnames.
     allowedHosts: true,
     proxy: {
       '^/partner-portal/[^/]+/api/.*': FLASK,

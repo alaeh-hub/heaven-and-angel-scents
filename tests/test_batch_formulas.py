@@ -1,11 +1,9 @@
-"""The built-in bulk batch formulas (formula.txt, see batch_formulas.py and
-migration 50 in schema.sql): the user picks Formula 15% / 14% / 13% and a
-size, the materials and amounts are fixed, and the alcohol + water mix is
-split automatically.
+"""Built-in bulk batch formulas (batch_formulas.py, schema migration 50).
 
-Numbers mirror Costing_Calculator_By_Formula.xlsx, Formula 15% / 500 ml:
-oil scent 500, fixative 10 g, mix 2800, moisturizer 26 -> 3336 ml,
-39 bottles of 85 ml, mix split 1000 : 200 alcohol : water.
+The user picks Formula 15% / 14% / 13% and a size; materials and amounts are
+fixed and the alcohol + water mix splits automatically. Numbers mirror the
+costing sheet, Formula 15% / 500 ml: oil 500, fixative 10 g, mix 2800,
+moisturizer 26 -> 3336 ml, 39 bottles of 85 ml, mix split 1000 : 200.
 """
 from decimal import Decimal
 
@@ -70,7 +68,7 @@ def _save_materials(client, m):
 
 
 def test_formula_amounts_in_the_database_match_formula_txt(app):
-    """The seed in schema.sql (migration 50) holds formula.txt's numbers."""
+    """The seed in schema.sql (migration 50) holds the formulas' numbers."""
     with app.app_context():
         config = load_formula_config()
     sizes = {name: {size: tuple(int(x) for x in amounts) for size, amounts in spec["sizes"].items()}
@@ -81,7 +79,7 @@ def test_formula_amounts_in_the_database_match_formula_txt(app):
     assert config["bottle_unit"] == "85ML" and config["bottle_ml"] == 85
     assert (config["alcohol_parts"], config["water_parts"]) == (1000, 200)
     assert config["packaging"] == {"bottle": 1, "sticker": 1, "seal": 1}
-    # The totals written in formula.txt: oil + fixative + alcohol + moisturizer.
+    # The totals written in the costing sheet: oil + fixative + alcohol + moisturizer.
     for formula, totals in (("15%", (3336, 1668, 835)), ("14%", (3536, 1768, 885)),
                             ("13%", (3836, 1918, 960))):
         for size, total in zip((500, 250, 125), totals):
@@ -90,6 +88,7 @@ def test_formula_amounts_in_the_database_match_formula_txt(app):
 
 
 def test_split_mix_matches_the_spreadsheet():
+    """Split mix matches the spreadsheet."""
     alcohol_ml, water_ml = split_mix(Decimal("2800"), D(1000), D(200))
     assert alcohol_ml == Decimal("2333.333")
     assert water_ml == Decimal("466.667")
@@ -97,6 +96,7 @@ def test_split_mix_matches_the_spreadsheet():
 
 
 def test_compute_formula_costs_like_the_spreadsheet():
+    """Compute formula costs like the spreadsheet."""
     def mat(i, unit, cost):
         return {"material_id": i, "material_name": f"m{i}", "unit": unit, "cost_per_unit": Decimal(cost)}
     resolved = {
@@ -127,6 +127,7 @@ def test_compute_formula_costs_like_the_spreadsheet():
 
 
 def test_page_lists_the_three_formulas_and_sizes(client, sql):
+    """Page lists the three formulas and sizes."""
     _signed_in_admin(client, sql)
     page = client.get(BULK_BATCHES_URL).get_data(as_text=True)
     for label in ("Formula 15%", "Formula 14%", "Formula 13%", "500 ml", "250 ml", "125 ml"):
@@ -135,6 +136,7 @@ def test_page_lists_the_three_formulas_and_sizes(client, sql):
 
 
 def test_producing_from_a_formula_splits_the_mix_and_deducts_stock(client, sql):
+    """Producing from a formula splits the mix and deducts stock."""
     _signed_in_admin(client, sql)
     m = _make_role_materials(sql)
     _save_materials(client, m)
@@ -188,6 +190,7 @@ def test_producing_from_a_formula_splits_the_mix_and_deducts_stock(client, sql):
 
 
 def test_producing_without_materials_set_up_is_refused(client, sql):
+    """Producing without materials set up is refused."""
     _signed_in_admin(client, sql)
     token = get_form_token(client, BULK_BATCHES_URL)
     before = len(_rows(sql, "SELECT 1 FROM bulk_batches"))
@@ -201,6 +204,7 @@ def test_producing_without_materials_set_up_is_refused(client, sql):
 
 
 def test_materials_must_be_distinct_per_role(client, sql):
+    """Materials must be distinct per role."""
     _signed_in_admin(client, sql)
     m = _make_role_materials(sql)
     before = _rows(sql, "SELECT COUNT(*) AS n FROM batch_formula_materials")[0]["n"]
@@ -211,6 +215,7 @@ def test_materials_must_be_distinct_per_role(client, sql):
 
 
 def test_schema_seeds_the_constant_suppliers_and_materials(sql):
+    """Schema seeds the constant suppliers and materials."""
     suppliers = {r["supplier_name"]: r["address"] for r in _rows(
         sql, "SELECT supplier_name, address FROM suppliers")}
     assert suppliers["BubbleMix Fragrances and Household Goods Store"].startswith("107 E. Rodriguez Sr. Ave.")
@@ -239,6 +244,7 @@ def test_schema_seeds_the_constant_suppliers_and_materials(sql):
 
 
 def test_compute_formula_reports_which_materials_are_short():
+    """Compute formula reports which materials are short."""
     def mat(i, unit, cost):
         return {"material_id": i, "material_name": f"m{i}", "unit": unit, "cost_per_unit": Decimal(cost)}
     resolved = {
@@ -251,8 +257,7 @@ def test_compute_formula_reports_which_materials_are_short():
     plenty = {i: Decimal("100000") for i in range(1, 9)}
     assert compute_formula("15%", 500, resolved, CONFIG, plenty)["enough_stock"] is True
 
-    # Oil: 500 ml needed, 400 in stock. Alcohol: 2333.333 ml needed, 2000 in
-    # stock. Bottles: 39 needed, 30 in stock.
+    # Needed vs in stock: oil 500/400 ml, alcohol 2333.333/2000 ml, bottles 39/30.
     stock = dict(plenty)
     stock.update({1: Decimal("400"), 3: Decimal("2000"), 6: Decimal("30")})
     calc = compute_formula("15%", 500, resolved, CONFIG, stock)
@@ -265,6 +270,7 @@ def test_compute_formula_reports_which_materials_are_short():
 
 
 def test_producing_with_too_little_stock_is_refused(client, sql):
+    """Producing with too little stock is refused."""
     _signed_in_admin(client, sql)
     m = _make_role_materials(sql)
     _save_materials(client, m)
@@ -303,6 +309,7 @@ def test_scents_map_to_their_formula_from_the_database(app):
 
 
 def test_compute_formula_includes_the_mixing_batches_like_the_sheet():
+    """Compute formula includes the mixing batches like the sheet."""
     def mat(i, unit, cost):
         return {"material_id": i, "material_name": f"m{i}", "unit": unit, "cost_per_unit": Decimal(cost)}
     resolved = {
@@ -320,6 +327,7 @@ def test_compute_formula_includes_the_mixing_batches_like_the_sheet():
 
 
 def test_producing_checks_the_scent_matches_its_formula(client, sql):
+    """Producing checks the scent matches its formula."""
     _signed_in_admin(client, sql)
     m = _make_role_materials(sql)
     _save_materials(client, m)
@@ -347,12 +355,14 @@ def test_producing_checks_the_scent_matches_its_formula(client, sql):
 
 
 def test_bulk_batches_page_offers_a_scent_picker(client, sql):
+    """Bulk batches page offers a scent picker."""
     _signed_in_admin(client, sql)
     page = client.get(BULK_BATCHES_URL).get_data(as_text=True)
     assert "fmScentSelect" in page and "Other scent" in page
 
 
 def test_tools_page_renders_for_admins_only(client, sql, app):
+    """Tools page renders for admins only."""
     _signed_in_admin(client, sql)
     resp = client.get("/admin/tools")
     assert resp.status_code == 200
@@ -367,6 +377,7 @@ def test_tools_page_renders_for_admins_only(client, sql, app):
 
 
 def test_tools_has_its_own_sidebar_category_not_the_production_tabs(client, sql):
+    """Tools has its own sidebar category not the production tabs."""
     _signed_in_admin(client, sql)
     # On a Production page, Tools is not one of the page tabs; it appears once, in the sidebar.
     page = client.get(BULK_BATCHES_URL).get_data(as_text=True)
@@ -383,6 +394,7 @@ def test_tools_has_its_own_sidebar_category_not_the_production_tabs(client, sql)
 
 
 def test_a_batch_uses_its_own_scents_oil_price_and_stock(client, sql):
+    """A batch uses its own scents oil price and stock."""
     _signed_in_admin(client, sql)
     m = _make_role_materials(sql)
     _save_materials(client, m)
@@ -414,6 +426,7 @@ def test_a_batch_uses_its_own_scents_oil_price_and_stock(client, sql):
 
 
 def test_scent_oil_restock_averages_the_price_and_import_checks_every_row(client, sql):
+    """Scent oil restock averages the price and import checks every row."""
     _signed_in_admin(client, sql)
     m = _make_role_materials(sql)
     _save_materials(client, m)

@@ -4,15 +4,9 @@ import { EASE_OUT } from '../motion.js';
 import { peso } from '../utils.js';
 
 /**
- * A number that rolls to its value instead of just appearing, so the
- * figure that matters (a partner price, a profit) is the one the eye
- * lands on. With `from`, it starts there (a card's price counts down
- * from the list price); `whenInView` waits until it's on screen, once.
- * After that, any change to `value` rolls from the current figure.
- *
- * Driven by a motion value, so the rolling never re-renders React.
- * Screen readers get only the final figure; under reduced motion it's
- * simply the final figure.
+ * A number that rolls to its value (optionally `from` a start, `whenInView`
+ * once). Motion-value driven, so no re-renders; screen readers and reduced
+ * motion get the final figure.
  */
 export default function AnimatedNumber({ value, from, format = peso, whenInView = false, duration = 1.1, className }) {
   const ref = useRef(null);
@@ -29,10 +23,7 @@ export default function AnimatedNumber({ value, from, format = peso, whenInView 
       return undefined;
     }
     if (whenInView && !inView) return undefined;
-    // A slider drag changes `value` many times a second. Restarting a
-    // half-second roll on every step made the figure chase the handle and
-    // stutter, so changes that arrive in a rapid run are followed exactly;
-    // only a lone change (a +/- tap, a new package) rolls.
+    // Rapid changes (slider drags) follow exactly; only a lone change rolls.
     const now = performance.now();
     const rapid = now - lastChange.current < 250;
     lastChange.current = now;

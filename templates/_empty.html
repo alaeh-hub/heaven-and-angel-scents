@@ -1,28 +1,4 @@
-{# Shared empty states for every admin and branch screen.
-
-   Import:   {% import "_empty.html" as empty %}
-
-   Every empty state says what is empty (title), why it matters or what
-   fills it (body) and offers at most one action:
-
-     {{ empty.state('No sales yet', 'Recorded sales show up here.', icon='receipt',
-                    action='Record a sale', href=url_for('branch.record_sale')) }}
-
-   An action can also click a button that is already on the page, which is
-   how "New sale" or "+ Add material" open their dialogs:
-
-     {{ empty.state(..., action='New sale', trigger='openNewSaleBtn') }}
-
-   For anything more than one action, wrap the extras in a call block:
-
-     {% call empty.state('Title', 'Body') %}<a class="btn btn-ghost btn-sm" href="...">Other</a>{% endcall %}
-
-   tone:  'empty' (nothing here yet), 'clear' (good news: nothing needs attention).
-   Search misses use no_match(), which tables.js shows and hides and adds the
-   "Clear search" button to.
-
-   icon: inbox, check, search, users, chart, box, truck, receipt, flask, clock,
-         shield, tag, mail, alert, store. #}
+{# Shared empty states: empty.state(title, body, icon, action, href|trigger), empty.no_match(). #}
 
 {% macro icon_paths(name) -%}
 {%- if name == 'check' -%}<circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/>
@@ -44,7 +20,7 @@
 {%- endmacro %}
 
 {% macro state(title, body='', icon='inbox', tone='empty', action=None, href=None, trigger=None, compact=False, id=None) -%}
-{#- Actions sit to the right in a wide card, and under the text in a compact one (half-width cards), so they never end up alone on a row. -#}
+{#- Actions sit right in a wide card, below the text in a compact one. -#}
 {%- set actions -%}
   {%- if action or caller %}
   <div class="empty-actions">

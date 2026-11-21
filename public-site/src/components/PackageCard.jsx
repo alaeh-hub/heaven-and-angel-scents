@@ -10,21 +10,12 @@ import ProductVisual from './ProductVisual.jsx';
 import { scopeLabel } from './ScopeIcon.jsx';
 
 /**
- * One package in the grid. The whole card is the link (the CTA stretches
- * over it). A normal click carries the list along as `background`, which
- * App.jsx uses to open the package in a sheet over the list, plus the
- * card's on-screen box as `origin`, so the sheet can grow out of the
- * card (see DetailDialog). The href is still the package's own URL, so
- * new-tab and sharing work too.
- *
- * When the card first scrolls in, the price tells the deal in order: a
- * line strikes through the list price, then the partner price counts
- * down to its value from that list price.
- *
- * Cards never animate their own size or position (a layout animation
- * stretched the button inside them when the filter changed); the set
- * swaps as a whole, see PackagesSection. `large` is the big featured
- * tile (three or more packages), `featured` the best-value tag.
+ * One package card; the whole card is the link. A plain click passes the
+ * list as `background` and the card's box as `origin` so the sheet grows
+ * out of it (App.jsx, DetailDialog); the href keeps new-tab/share working.
+ * On first view the list price strikes through and the partner price counts
+ * down. Cards never animate size/position (see PackagesSection). `large` =
+ * featured tile (3+ packages), `featured` = best-value tag.
  */
 const PackageCard = forwardRef(function PackageCard({ slug, pkg, index, featured, large }, ref) {
   const location = useLocation();
@@ -32,8 +23,7 @@ const PackageCard = forwardRef(function PackageCard({ slug, pkg, index, featured
   const profit = pkg.reference_total - pkg.discounted_total;
   const discounted = profit > 0.005;
 
-  // A plain click opens the sheet with the card's box as its origin;
-  // modified clicks (new tab, new window) fall through to the href.
+  // Plain click opens the sheet; modified clicks fall through to the href.
   const open = (e) => {
     if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
     e.preventDefault();

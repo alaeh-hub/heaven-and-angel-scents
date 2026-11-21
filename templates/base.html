@@ -7,15 +7,7 @@
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <meta name="csp-nonce" content="{{ csp_nonce() }}">
     <title>{% block title %}Dashboard{% endblock %} · Heaven &amp; Angel Scents</title>
-    <!-- The tab icon is icon.svg alone now, the PNG/.ico rel="icon"
-         links that used to sit after it here were what actually won in
-         most Chromium browsers (with several same-priority rel="icon"
-         links and no disambiguating media query, the browser tends to
-         use the last one in document order, not the first/best match),
-         so the tab kept showing the old raster favicon instead of this
-         one despite it being declared first. apple-touch-icon is
-         unrelated to the browser tab, only iOS's "Add to Home Screen"
-         icon, so it stays. -->
+    {# Tab icon is icon.svg alone; extra rel=icon links made browsers show the old one. #}
     <link rel="icon" type="image/png" sizes="48x48" href="{{ url_for('static', filename='img/favicon-48.png') }}">
     <link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='img/favicon-32.png') }}">
     <link rel="manifest" href="/manifest.webmanifest">
@@ -113,21 +105,15 @@
     <!--page-head-start-->
     {% block head %}{% endblock %}
     <!--page-head-end-->
+    {# Phone layout only (<= 760px); remove with .m-tabbar and mobile.css. #}
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/mobile.css') }}">
 </head>
 
 <body>
     <a class="skip-link" href="#main-content">Skip to content</a>
 
     {% if show_login_splash %}
-    <!-- One-shot, shown only on the page a fresh login redirects to
-         (see app.py's inject_login_splash() and auth.py's login()) ,
-         a brief centered-logo moment before the app itself appears,
-         same idea as the splash Facebook/Instagram show right after
-         signing in. main.js's initLoginSplash() plays the logo-reveal
-         video (static/video/logo_reveal.mp4, static/video/heaven-angel-
-         scents-reveal.mp4 re-encoded at 2x speed), then fades this out and
-         removes it from the DOM. The static wordmark is the fallback
-         for reduced-motion users or if the video can't play. -->
+    {# Login splash, shown once after login; played by initLoginSplash(). #}
     <div class="login-splash" id="loginSplash" role="status" aria-live="polite" aria-label="Signing you in">
         <img class="login-splash-logo" src="{{ url_for('static', filename='img/new-wordmark.png') }}"
             alt="Heaven &amp; Angel Scents" width="1280" height="719" decoding="async" fetchpriority="high">
@@ -144,10 +130,7 @@
                     </svg>
                 </button>
                 <div class="brand-top">
-                    <!-- Icon-only mark, shown only on the collapsed rail
-                         (see .brand-logo's own comment in style.css) ,
-                         cross-fades with .brand-wordmark below rather
-                         than the two ever showing together. -->
+                    {# Icon-only mark for the collapsed rail; cross-fades with the wordmark. #}
                     <div class="brand-logo" aria-hidden="true">
                         <img src="{{ url_for('static', filename='img/apple-touch-icon.png') }}" alt="">
                     </div>
@@ -155,9 +138,7 @@
                         alt="Heaven &amp; Angel Scents">
                 </div>
                 <div class="brand-sub"><span class="brand-sub-text">Inventory System</span></div>
-                <!-- Keeps the sidebar expanded instead of resting as the
-                     icon-only rail; see initSidebarPinToggle() in main.js
-                     (also bound to Ctrl/⌘+B). -->
+                {# Pin toggle: keeps the sidebar expanded (Ctrl/Cmd+B). #}
                 <button type="button" class="sidebar-pin" id="sidebarPinToggle" aria-pressed="false"
                     aria-label="Keep sidebar open">
                     <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
@@ -621,11 +602,7 @@
                     </svg>
                     <span class="nav-text">Scan Receipt</span>
                 </a>
-                <!-- Halo itself (the chat) moved to the floating widget in
-                     the bottom-right corner (see #haloWidget below), no
-                     longer a sidebar page of its own. Its Drafts review
-                     page stays a real page, since approving/rejecting a
-                     draft needs a proper table, not a chat bubble. -->
+                {# Halo chat is the floating widget; Drafts stays a real page. #}
                 <a class="nav-link {{ 'active' if request.endpoint == 'ai.list_drafts' }}" {% if request.endpoint == 'ai.list_drafts' %}aria-current="page"{% endif %}
                     href="{{ url_for('ai.list_drafts') }}">
                     <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
@@ -667,18 +644,10 @@
                         <span>Settings</span>
                         {% if backup_reminder %}<span class="sr-only">(a backup is due)</span>{% endif %}
                     </button>
-                    <!-- POST, not a plain <a href>, so this goes through CSRFProtect
-               like every other state-changing form in the app, see
-               auth.py's logout() for why a GET here was the actual
-               hole. Reset to look identical to the .footer-action <a>
-               it replaces (buttons carry their own browser chrome by
-               default that a plain link doesn't). -->
+                    {# Logout is a POST so it goes through CSRF protection. #}
                     <form method="POST" action="{{ url_for('auth.logout') }}" style="margin:0;" data-no-soft-submit data-confirm-dialog="Sign out?" data-confirm-detail="You will need to sign in again to get back to your workspace." data-confirm-ok="Sign out">
                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                        <!-- footer-action-btn (style.css) resets button chrome
-                 without the `font: inherit` bug that used to make this
-                 render much bigger than "Change password" above it ,
-                 see style.css's comment on .footer-action-btn. -->
+                        {# Button styled to match the footer links; see .footer-action-btn. #}
                         <button type="submit" class="footer-action footer-action-danger footer-action-btn">
                             <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
                                 <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9" />
@@ -691,9 +660,7 @@
         </aside>
 
         <div class="main">
-            {# Zero-height marker just above the sticky top bar: once it scrolls
-               out of view the bar gets its "content underneath" shadow (an
-               IntersectionObserver in main.js, no scroll listener). #}
+            {# Zero-height marker: top bar shadow appears when it scrolls out of view. #}
             <div class="topbar-sentinel" id="topbarSentinel" aria-hidden="true"></div>
             <div class="topbar" id="topbar">
                 <div class="topbar-progress" id="topbarProgress" aria-hidden="true"></div>
@@ -704,8 +671,7 @@
                             <path d="M4 7h16M4 12h16M4 17h16" />
                         </svg>
                     </button>
-                    {# Shown only on phones (where the sidebar is hidden); on
-                       desktop it stays in the DOM for screen readers. #}
+                    {# Phones only; kept in the DOM on desktop for screen readers. #}
                     <div class="topbar-title">
                         <h1>{% block heading %}{% endblock %}</h1>
                     </div>
@@ -843,10 +809,7 @@
             {% endwith %}
 
             <main class="content" id="main-content" tabindex="-1">
-                {# Page-level tabs for the sidebar entries that group several
-                   pages (the .has-subs links above). Lives inside .content so
-                   soft nav swaps it along with the page. Each tab: label,
-                   endpoint, extra endpoints it should also light up for. #}
+                {# Page tabs for grouped sidebar entries; inside .content so soft nav swaps them. #}
                 {% if session.role == 'Admin' %}
                 {% set subnav_groups = [
                     [('Production Log', 'admin.production', ()), ('Bulk Batches', 'admin.bulk_batches', ()), ('Base Cost of Goods', 'admin.formulas', ()), ('Process Flow', 'admin.process_flow', ())],
@@ -889,10 +852,7 @@
         </div>
     </div>
 
-    <!-- Settings dialog (sidebar footer → Settings). Global chrome like
-         Halo below, so soft nav never touches it. Choices are stored per
-         browser in localStorage ('uiStyle', 'theme'); see initSettings()
-         in main.js and static/css/themes.css. -->
+    {# Settings dialog: global chrome, choices kept in localStorage. #}
     <div class="settings-overlay" id="settingsOverlay" hidden>
         <div class="settings-dialog" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
             <div class="settings-head">
@@ -1099,14 +1059,37 @@
     </div>
 
     {% if session.user_id %}
-    <!-- Halo, the floating AI assistant widget, global chrome, outside
-         .app-shell/.content so a soft nav (see main.js's swapContent())
-         never touches it: it's initialized once in main.js's
-         DOMContentLoaded handler, the same as the notification bell, and
-         its open/closed state + message log persist across every page you
-         navigate to in the same session. The full chat page (ai.chat_page)
-         is still there too, the panel's expand icon opens it, for
-         anyone who wants Halo in a full-size window. -->
+    {# Phone-only bottom tab bar (shown by static/css/mobile.css, hidden everywhere else). #}
+    {% set _ep = request.endpoint or '' %}
+    {% if session.role == 'Admin' %}
+    {% set m_tabs = [
+        ('Home', 'admin.dashboard', ('admin.dashboard',), 'M3 11.5 12 4l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z'),
+        ('Stock', 'admin.low_stock', ('admin.low_stock', 'admin.movement_logs', 'admin.discrepancies'), 'M3.5 8 12 4l8.5 4v8L12 20l-8.5-4zM3.5 8 12 12m8.5-4L12 12m0 8v-8'),
+        ('Sell', 'admin.record_sale', ('admin.record_sale',), 'M4 5h2l2 10h9l2-7H7M10 19.5h.01M17 19.5h.01'),
+        ('Products', 'admin.products', ('admin.products',), 'M9 3h6v3l1.5 2v11a1 1 0 0 1-1 1h-9a1 1 0 0 1-1-1V8L9 6z'),
+    ] %}
+    {% else %}
+    {% set m_tabs = [
+        ('Home', 'branch.dashboard', ('branch.dashboard',), 'M3 11.5 12 4l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z'),
+        ('Stock', 'branch.inventory', ('branch.inventory', 'branch.movement_logs', 'branch.discrepancies', 'branch.receive_stock'), 'M3.5 8 12 4l8.5 4v8L12 20l-8.5-4zM3.5 8 12 12m8.5-4L12 12m0 8v-8'),
+        ('Sell', 'branch.record_sale', ('branch.record_sale',), 'M4 5h2l2 10h9l2-7H7M10 19.5h.01M17 19.5h.01'),
+        ('Orders', 'branch.requests_list', ('branch.requests_list', 'branch.request_stock'), 'M7 4h10a1 1 0 0 1 1 1v15l-3-2-3 2-3-2-3 2V5a1 1 0 0 1 1-1zM9 9h6M9 12.5h4'),
+    ] %}
+    {% endif %}
+    <nav class="m-tabbar" id="mTabbar" aria-label="Main">
+        <span class="m-tab-pill" id="mTabPill" aria-hidden="true"></span>
+        {% for label, endpoint, group, icon in m_tabs %}
+        <a class="m-tab{{ ' active' if _ep in group }}{{ ' m-tab-primary' if label == 'Sell' }}" href="{{ url_for(endpoint) }}"{% if _ep in group %} aria-current="page"{% endif %}>
+            <span class="m-tab-ico"><svg aria-hidden="true" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="{{ icon }}" /></svg></span>
+            <span class="m-tab-label">{{ label }}</span>
+        </a>
+        {% endfor %}
+        <button type="button" class="m-tab" id="mTabMenu" aria-controls="sidebar" aria-label="Open the full menu">
+            <span class="m-tab-ico"><svg aria-hidden="true" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h10" /></svg></span>
+            <span class="m-tab-label">Menu</span>
+        </button>
+    </nav>
+    {# Halo widget: global chrome outside .content so soft nav never touches it. #}
     <div class="halo-widget" id="haloWidget">
         <div class="halo-panel" id="haloPanel" hidden role="dialog" aria-label="Halo, the AI assistant" aria-modal="false">
             <div class="halo-panel-header">
@@ -1199,16 +1182,7 @@
     <script src="{{ url_for('static', filename='js/sfx.js') }}"></script>
     <script src="{{ url_for('static', filename='js/mascot.js') }}"></script>
     {% include '_app_scripts.html' %}
-    <!-- Wrapped in an id'd container, deliberately kept outside
-         <main class="content">, a page's own {% raw %}{% block scripts
-         %}{% endraw %} is what wires up its Chart.js instances (Branch
-         Performance, Reports), its segmented toggles (Record Sale's
-         Type/Payment switches), or a modal's button listeners (Partner
-         Inquiries' remarks dialog); see main.js's runPageScripts(), which
-         re-executes this container's contents every time a soft nav swaps
-         in a new .content, without that id, there'd be nothing for it to
-         find and re-run, and every one of those would stay inert until a
-         real page load. -->
+    {# Keep outside .content: runPageScripts() re-runs this container on soft nav. #}
     <div id="page-scripts">{% block scripts %}{% endblock %}</div>
 </body>
 

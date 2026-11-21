@@ -53,11 +53,13 @@ def shop(sql):
 
 
 def test_template_has_the_receipt_column():
+    """Template has the receipt column."""
     assert si.HEADERS[-1] == "Receipt"
     assert len(si._HEADER_HINTS) == len(si.HEADERS) == len(si._COL_WIDTHS)
 
 
 def test_rows_with_the_same_receipt_label_become_one_receipt(app, sql, shop):
+    """Rows with the same receipt label become one receipt."""
     branch_id, s = shop
     today = datetime.date.today().isoformat()
     inserted, receipts = _run(app, branch_id, [
@@ -75,6 +77,7 @@ def test_rows_with_the_same_receipt_label_become_one_receipt(app, sql, shop):
 
 
 def test_a_typed_1_and_1_point_0_are_the_same_receipt(app, sql, shop):
+    """A typed 1 and 1 point 0 are the same receipt."""
     branch_id, s = shop
     inserted, receipts = _run(app, branch_id, [
         (s[0], "", 1, 50, "Sale", "Cash", "", "", "", "", 1),
@@ -84,6 +87,7 @@ def test_a_typed_1_and_1_point_0_are_the_same_receipt(app, sql, shop):
 
 
 def test_rows_on_one_receipt_must_agree_and_nothing_is_saved_otherwise(app, sql, shop):
+    """Rows on one receipt must agree and nothing is saved otherwise."""
     branch_id, s = shop
     with pytest.raises(ValidationError, match="Receipt 'A' must have the same customer name"):
         _run(app, branch_id, [
@@ -99,6 +103,7 @@ def test_rows_on_one_receipt_must_agree_and_nothing_is_saved_otherwise(app, sql,
 
 
 def test_a_short_scent_rejects_the_whole_file(app, sql, shop):
+    """A short scent rejects the whole file."""
     branch_id, s = shop
     with pytest.raises(TransactionAborted, match="Not enough"):
         _run(app, branch_id, [
@@ -110,6 +115,7 @@ def test_a_short_scent_rejects_the_whole_file(app, sql, shop):
 
 
 def test_a_receipt_has_a_product_limit(app, sql, shop):
+    """A receipt has a product limit."""
     branch_id, s = shop
     rows = [(s[0], "", 1, 50, "Sale", "Cash", "", "", "", "", "BIG")] * 61
     with pytest.raises(ValidationError, match="at most 60"):

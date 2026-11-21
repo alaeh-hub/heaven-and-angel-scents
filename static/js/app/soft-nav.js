@@ -1,24 +1,10 @@
 // Soft navigation: swap page content without a full reload
 // (Part of the app's main script; loaded in order by base.html.)
 
-// Copies a page's own {% block head %} (base.html wraps it in
-// <!--page-head-start-->/<!--page-head-end--> comment markers,
-// specifically so this can find it) from a freshly-fetched document
-// into the live page's <head>. Every page that defines this block puts
-// its own layout-critical <style> there — Record Sale's Type/Payment
-// segmented-control styling, Reports'/Record Sale's .rb-mode-opt
-// buttons, Scan Receipt's .scan-grid layout, AI Assistant's
-// .chat-shell layout, Partner Inquiries' table/icon styling, Branch
-// Performance's .bp-table column widths, and more — none of which live
-// in the shared static/css/style.css, all of which swapContent()
-// replacing .content alone never touches, since <head> isn't part of
-// .content. A soft nav to any of those pages left them relying on
-// whatever page was last *actually* loaded for their <head> — usually
-// nothing matching at all — so their segmented controls, grids, and
-// icons rendered as bare, unstyled markup until a real reload finally
-// rendered that page's own <style> block. Re-syncing this on every
-// swapContent() call fixes that the same way patchTopbar() does for
-// the eyebrow/heading.
+// Copies a page's own {% block head %} (between <!--page-head-start/end--> markers in
+// base.html) from a fetched document into the live <head>. Pages put layout-critical
+// <style> there (segmented controls, .scan-grid, .chat-shell, ...), which a .content
+// swap never touches, so soft-navigated pages would render unstyled. Run on every swap.
 function patchPageHead(freshDoc) {
     function markers(doc) {
         let start = null;
@@ -47,11 +33,8 @@ function patchPageHead(freshDoc) {
     }
 }
 
-// Re-runs everything that turns freshly-swapped-in .content markup
-// into working, interactive UI — the exact same list softRefresh()
-// (realtime pushes) and initSoftNav() (link/form navigation) both
-// need after replacing .content wholesale with a server-rendered
-// fragment that hasn't been through any of this yet.
+// Re-runs everything that makes freshly swapped-in .content interactive; shared by
+// softRefresh() (realtime) and initSoftNav() (link/form navigation).
 function refreshDynamicContent(skipReveal) {
     safeInit(initFillBars, 'fillBars');
     safeInit(initSmartTables, 'smartTables');
@@ -59,37 +42,24 @@ function refreshDynamicContent(skipReveal) {
     safeInit(initDispatchQtyWarnings, 'dispatchQtyWarnings');
     safeInit(initCustomSelects, 'customSelects');
     safeInit(initDatePickers, 'datePickers');
-    // initConfirmDialogs() is intentionally NOT re-called here: it's
-    // delegated on `document` once at page load (see its own comment),
-    // so it already covers any form[data-confirm] that just got
-    // swapped in — re-attaching per element isn't necessary.
-    // revealContent()'s whole-content fade-in (every .content child
-    // popping to opacity:0 then staggering back in) and
-    // initStatCountUp()'s "animate every stat tile up from 0" are both
-    // right for an actual page load/navigation, but skipReveal (passed
-    // for a same-path tab/filter soft nav — see go()'s preserveScroll)
-    // turns them off: fading the whole page out and back in, and every
-    // number on it visibly re-counting from zero, just because one
-    // location tab was clicked, is indistinguishable from a real
-    // reload — exactly the feeling tabs shouldn't give. The swapped-in
-    // server-rendered numbers/markup are already correct as-is without
-    // either animation.
+    // initConfirmDialogs() is not re-called: it is delegated on `document` once.
+    // skipReveal (same-path tab/filter soft nav, see go()'s preserveScroll) turns off the
+    // content reveal and stat count-up: re-animating every number on a tab click feels
+    // like a reload, and the swapped-in markup is already correct.
     if (!skipReveal) {
         safeInit(revealContent, 'revealContent');
-        safeInit(initStatCountUp, 'statCountUp');
-        safeInit(initEntranceStagger, 'entranceStagger');
-        safeInit(initBelowFoldReveal, 'belowFoldReveal');
+        // On phones the page fade is the whole entrance; count-up/stagger/reveal made tabs lag.
+        if (!window.matchMedia('(max-width: 760px)').matches) {
+            safeInit(initStatCountUp, 'statCountUp');
+            safeInit(initEntranceStagger, 'entranceStagger');
+            safeInit(initBelowFoldReveal, 'belowFoldReveal');
+        }
     }
 }
 
-// Replaces the live .content with freshDoc's .content, if it has one.
-// Returns false (and touches nothing) when it doesn't — a page outside
-// the signed-in app shell (the login screen after a session expires
-// mid-navigation, most notably) never renders a .content at all, and
-// swapping nothing in would leave the visible page silently pretending
-// a request that actually landed somewhere else still succeeded.
-// Callers fall back to a real navigation (window.location) when this
-// returns false.
+// Replaces the live .content with freshDoc's .content. Returns false (touching nothing)
+// when there is none (e.g. the login page after a session expires); callers then fall
+// back to a real navigation.
 function swapContent(freshDoc, skipReveal) {
     const freshContent = freshDoc.querySelector('.content');
     const liveContent = document.querySelector('.content');
@@ -100,21 +70,9 @@ function swapContent(freshDoc, skipReveal) {
     patchTopbar(freshDoc);
     patchPageHead(freshDoc);
     refreshDynamicContent(skipReveal);
-    // Deferred two animation frames rather than run inline here: a page
-    // script that measures its own layout at creation time (every
-    // Chart.js instance — new Chart(canvas, ...) reads the canvas's
-    // container size synchronously, once, when it's built) can catch the
-    // browser mid-reflow if it runs in the same tick as the .content
-    // replaceWith() above, before the swapped-in grid/cards have settled
-    // into their final size. That's what let a freshly-drawn chart come
-    // out squashed or stretched on a soft nav — the fixed-height
-    // .chart-canvas-wrap the CSS forces it into afterwards doesn't fix a
-    // canvas whose *internal* drawing-buffer resolution was already
-    // measured wrong. Two rAFs is the standard "wait for a layout+paint
-    // to actually happen" trick: the first fires before the frame the
-    // browser paints the new .content in, the second only after that
-    // frame has been committed, guaranteeing every size read inside
-    // runPageScripts() reflects the real, settled layout.
+    // Deferred two animation frames: scripts that measure layout on creation (every
+    // Chart.js instance) can catch the browser mid-reflow right after the swap and come
+    // out squashed. The second rAF runs after the new layout has painted.
     requestAnimationFrame(() => {
         requestAnimationFrame(() => {
             runPageScripts(freshDoc);
@@ -123,18 +81,9 @@ function swapContent(freshDoc, skipReveal) {
     return true;
 }
 
-// Re-runs the page's own {% block scripts %} (base.html wraps that
-// block's output in #page-scripts, deliberately kept outside .content —
-// see the comment there) every time swapContent() replaces .content. A
-// soft nav only ever *fetches* that markup — DOMParser never executes any
-// <script> it parses — and whatever's already sitting in the live page
-// from the last real load doesn't retroactively apply to whatever new
-// .content just got swapped in. That's what left every page whose
-// behavior lives in {% block scripts %} looking inert after a sidebar
-// click: Branch Performance/Reports' charts never drew, Record Sale's
-// Type/Payment switches and product→unit cascade never got wired up,
-// Partner Inquiries' "Edit remarks" button never opened its modal — all
-// of it worked again only after a real reload actually ran that script.
+// Re-runs the page's {% block scripts %} (#page-scripts, outside .content) after each
+// swap: DOMParser never executes fetched scripts, so without this pages whose behavior
+// lives there (charts, Record Sale switches, modals) stay inert until a real reload.
 function runPageScripts(freshDoc) {
     const freshScripts = freshDoc.getElementById('page-scripts');
     const liveScripts = document.getElementById('page-scripts');
@@ -144,29 +93,10 @@ function runPageScripts(freshDoc) {
 
     const oldScripts = Array.prototype.slice.call(freshScripts.querySelectorAll('script'));
 
-    // Runs the page's scripts strictly one at a time, in document order —
-    // a parser-inserted <script src> blocks the parser until it's fetched
-    // *and* executed before the next <script> runs, even an inline one;
-    // that's what a chart page's inline init code is relying on when it
-    // assumes `Chart` (from an earlier <script src="chart.umd.min.js">)
-    // is already defined by the time it runs on a real page load.
-    //
-    // A previous version of this function tried to recreate that by
-    // setting `.async = false` on each dynamically-created script, but
-    // that guarantee only ever applies to *src* scripts relative to each
-    // other — a dynamically-inserted *inline* script has nothing to
-    // fetch, so per spec it executes the instant it's appended, not
-    // "once every earlier script has actually finished" like a parser
-    // guarantees. That's what let a page's first-ever soft-nav visit
-    // this session (the one time chart.umd.min.js hadn't already been
-    // fetched and cached) run the chart-init inline script before
-    // Chart.js had loaded: `typeof Chart` was still 'undefined', the
-    // script's own `if (typeof Chart === 'undefined') return;` guard
-    // bailed out, and no chart ever got created — invisible unless you
-    // knew to check, since nothing throws. Chaining each script off the
-    // previous *src* script's load/error event (inline scripts have
-    // nothing to wait for, so they run and immediately hand off to the
-    // next one) restores the ordering a real page load gives for free.
+    // Run page scripts strictly one at a time, in document order. A dynamically inserted
+    // inline script runs immediately (async=false only orders src scripts), which let a
+    // chart init run before Chart.js loaded and silently draw nothing. Chain each script
+    // off the previous src script's load/error event to restore real page-load ordering.
     function runNext(index) {
         if (index >= oldScripts.length) return;
         const oldScript = oldScripts[index];
@@ -174,9 +104,8 @@ function runPageScripts(freshDoc) {
         Array.prototype.forEach.call(oldScript.attributes, (attr) => {
             newScript.setAttribute(attr.name, attr.value);
         });
-        // The fetched page carries its own per-response nonce, which the live
-        // page's CSP header doesn't know. Stamp this page's nonce instead
-        // (from <meta name="csp-nonce">, which the browser doesn't hide).
+        // The fetched page has its own CSP nonce the live page doesn't know; stamp this page's
+        // nonce (from <meta name="csp-nonce">).
         const liveNonce = document.querySelector('meta[name="csp-nonce"]');
         if (liveNonce) newScript.nonce = liveNonce.content;
 
@@ -187,15 +116,8 @@ function runPageScripts(freshDoc) {
             return;
         }
 
-        // Inline script — the actual page behavior. Re-inserted verbatim,
-        // its top-level `const`/`let` bindings would land straight in the
-        // page's global lexical environment, which (unlike the <script>
-        // element itself) isn't cleared out by the innerHTML reset above
-        // — so revisiting the same page a second time in one tab, without
-        // a real reload in between, would throw "Identifier '...' has
-        // already been declared" on the very re-declaration this is
-        // trying to make. Wrapping in its own IIFE resets that scope on
-        // every run, the same as a fresh <script> on an actual page load.
+        // Inline script: wrapped in its own IIFE so top-level const/let don't collide
+        // ("already declared") when the same page is revisited without a reload.
         newScript.textContent = '(function () {\n' + oldScript.textContent + '\n})();';
         liveScripts.appendChild(newScript);
         runNext(index + 1);
@@ -204,13 +126,9 @@ function runPageScripts(freshDoc) {
     runNext(0);
 }
 
-// .flashes lives outside .content (see base.html) specifically so a
-// .content swap never touches it — flashes need to survive a swap
-// unbothered, not get wiped and reappear mid-fade. That also means a
-// swap alone won't surface a flash a soft-submitted form's redirect
-// target queued (e.g. "Product added.") — this pulls those in
-// separately, clones them into the live toast stack, and starts their
-// own dismiss timer, same as any flash rendered on a real page load.
+// .flashes lives outside .content so swaps don't wipe it, but that means a soft-submitted
+// form's queued flash ("Product added.") isn't surfaced; this clones those into the live
+// toast stack and starts their dismiss timer.
 function getFlashContainer() {
     let liveContainer = document.querySelector('.flashes');
     if (!liveContainer) {
@@ -223,12 +141,8 @@ function getFlashContainer() {
     return liveContainer;
 }
 
-// Pops a toast from the client side, in the same stack and style as
-// server flashes — used for live bell notifications (see initRealtime())
-// so they're seen as they arrive rather than only as a +1 on the bell.
-// level is the bell's "info" | "success" | "warning"; info uses the
-// plain .flash look. textContent, never innerHTML: the message can
-// carry user-entered text (a partner's company name, an announcement).
+// Pops a client-side toast in the server-flash stack (live bell notifications).
+// level: "info" | "success" | "warning". textContent only, since messages carry user text.
 function showToast(message, level) {
     if (!message) return;
     const el = document.createElement('div');
@@ -250,45 +164,17 @@ function appendFreshFlashes(freshDoc) {
 }
 
 // ---------------------------------------------------------------
-// Soft navigation: clicking a sidebar link, or any other same-app
-// link/form inside .content, no longer throws away and re-fetches the
-// *entire* page (sidebar included) the way a normal navigation does —
-// it fetches just the target page's HTML in the background and swaps
-// .content, the same trick softRefresh() already uses for realtime
-// pushes. The sidebar itself is never torn down and rebuilt, so its
-// own scroll position and hover/focus state ride out every click
-// untouched — the visible effect the "whole sidebar reloads" complaint
-// was describing.
-//
-// Forms get the same treatment on submit: instead of a full-page
-// POST-redirect-GET cycle, this fetches the form's action (fetch()
-// follows the redirect automatically, landing on the same page the
-// browser would have), swaps .content with the result, and pulls in
-// whatever flash message that redirect queued (see appendFreshFlashes)
-// — so "Product added." still shows up exactly like before, but the
-// admin never loses their scroll position or sees the page go blank
-// and repaint from scratch for what's otherwise a one-line change.
-//
-// Deliberately NOT intercepted (left as plain, real navigations):
-//   - anything not same-origin, a hash link, mailto:/tel:, or marked
-//     download
-//   - a link/form targeting a new tab/window (target="_blank") — every
-//     PDF/Excel/CSV download and receipt link in the app already uses
-//     this (see reports.html's Download buttons, and the various
-//     Receipt/Export links), since a file download isn't HTML this
-//     could swap into .content in the first place
-//   - GET forms (none in this app today, but a search form built this
-//     way tomorrow shouldn't silently break)
-//   - anything opted out with data-no-soft-nav / data-no-soft-submit —
-//     used on the sign-out form, which deliberately leaves the signed-
-//     in app shell entirely
-// and as a last resort, any response that isn't HTML containing a real
-// .content (checked via swapContent()'s own return value) falls back
-// to a real navigation there and then, rather than silently doing
-// nothing — this is what makes it safe to leave every other edge case
-// (a session that expired mid-click, an endpoint that turns out to
-// serve a file after all) to that one fallback instead of having to
-// enumerate every such case up front.
+// Soft navigation: sidebar and same-app links/forms fetch the target page and swap
+// only .content (like softRefresh()), so the sidebar keeps its scroll/hover state.
+// Forms are fetched too (fetch() follows the redirect), then .content is swapped and
+// the redirect's flash message pulled in (appendFreshFlashes), so scroll is kept.
+// Not intercepted (real navigations):
+//   - cross-origin, hash, mailto:/tel: or download links
+//   - target="_blank" links/forms (file downloads and receipts, not HTML)
+//   - GET forms
+//   - data-no-soft-nav / data-no-soft-submit (e.g. the sign-out form)
+// Last resort: a response without a real .content (checked via swapContent()'s return
+// value) falls back to a real navigation, covering expired sessions and file endpoints.
 function initSoftNav() {
     let navToken = 0;
 
@@ -324,11 +210,8 @@ function initSoftNav() {
         return true;
     }
 
-    // Every navigation (link or form) funnels through here. `request`
-    // is a function that performs the actual fetch and returns a
-    // Promise<Response> — a GET for a link, a POST with the form's
-    // data for a form — so the two call sites below only differ in
-    // how they build that one request.
+    // Every navigation funnels through here. `request` performs the fetch and returns
+    // Promise<Response> (GET for a link, POST for a form).
     function go(request, url, historyMode, preserveScroll, isPost) {
         const myToken = ++navToken;
         const scrollY = window.scrollY;
@@ -343,25 +226,17 @@ function initSoftNav() {
                 return r.text().then((html) => ({ html, finalUrl: r.url }));
             })
             .then(({ html, finalUrl }) => {
-                // A second soft-nav started (another click/submit) while
-                // this one was still in flight — let that newer one win
-                // and drop this now-stale response instead of clobbering
-                // whatever it already rendered.
+                // A newer soft-nav started while this was in flight: drop this stale response.
                 if (myToken !== navToken) return;
-                // Harmless no-op if a form submit never showed it (a
-                // plain link navigation, say) — see showLoadingOverlay().
+                // No-op if no form showed it (see showLoadingOverlay()).
                 hideLoadingOverlay();
                 navProgress.done();
 
                 const fresh = new DOMParser().parseFromString(html, 'text/html');
                 if (!swapContent(fresh, preserveScroll)) {
-                    // finalUrl reflects wherever the request actually
-                    // ended up (e.g. redirected to /login by an expired
-                    // session) — landing there directly instead of
-                    // re-requesting the original url avoids bouncing
-                    // through the same redirect a second time.
-                    // A POST response page that can't be swapped must not be
-                    // re-requested as a GET (405); reload the current page.
+                    // finalUrl is where the request ended up (e.g. /login after session expiry); go
+                    // there directly to avoid repeating the redirect. A POST response that can't be
+                    // swapped must not be re-requested as a GET (405); reload the current page.
                     if (isPost) window.location.reload(); else window.location.href = finalUrl;
                     return;
                 }
@@ -373,15 +248,8 @@ function initSoftNav() {
                     history.replaceState({ softNav: true }, '', finalUrl);
                 }
                 if (historyMode === 'pop' || preserveScroll) {
-                    // 'pop' (back/forward) always restores where the user
-                    // was. preserveScroll is for a same-path soft nav
-                    // (e.g. a tab/filter link that only changes the query
-                    // string, like Low Stock's location tabs) — that's
-                    // updating the view the user is already looking at,
-                    // not going somewhere else, so snapping to the top
-                    // the way a real page load would is exactly what
-                    // reads as "the page just reloaded" even though
-                    // nothing actually did.
+                    // 'pop' (back/forward) restores the old scroll. preserveScroll is for a same-path
+                    // soft nav (e.g. a tab/filter link): snapping to top would feel like a reload.
                     window.scrollTo({ top: scrollY, behavior: 'auto' });
                 } else {
                     window.scrollTo({ top: 0, behavior: 'auto' });
@@ -399,38 +267,25 @@ function initSoftNav() {
         if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
         const link = e.target.closest('a[href]');
         if (!link) return;
-        if (!link.closest('.sidebar') && !link.closest('.content')) return;
+        // The phone dock (.m-tabbar, mobile.css) is outside both but navigates like the sidebar.
+        if (!link.closest('.sidebar') && !link.closest('.content') && !link.closest('.m-tabbar')) return;
         if (!isInternalNavigableLink(link)) return;
 
         const url = new URL(link.href, window.location.href);
         if (isSamePageNoOpLink(link)) {
-            // e.g. clicking the sidebar tab that's already open.
-            // Nothing on the page needs to change, so this must be a
-            // true no-op: previously this fell through to the
-            // browser's own default click behavior, which is a full
-            // page reload since the href matches the current URL
-            // exactly. That reload reset everything — scroll
-            // position, and (since the sidebar only stays expanded
-            // via CSS :hover/:focus-within, see
-            // initSidebarNavTooltips() above) the sidebar visibly
-            // snapped back to its collapsed rail, looking like the
-            // click had "closed" it.
+            // e.g. clicking the already-open sidebar tab: must be a true no-op. The default
+            // would reload the page, resetting scroll and collapsing the CSS :hover/:focus-within
+            // sidebar as if the click had closed it.
             e.preventDefault();
             return;
         }
         if (url.pathname === window.location.pathname && url.search === window.location.search) {
-            // Same page, but the link targets a real #hash (an
-            // in-page anchor) — let the browser's own default
-            // handling do the jump instead of "navigating" to a
-            // no-op and losing that behavior.
+            // Same page with a real #hash: let the browser do the anchor jump.
             return;
         }
 
         e.preventDefault();
-        // Same path, different query string — a tab/filter link (Low
-        // Stock's location tabs, Requests' status tabs, ...) rather than
-        // a real navigation to a different page. Keep the scroll
-        // position for those; see go()'s preserveScroll param.
+        // Same path, different query (a tab/filter link): keep scroll; see go()'s preserveScroll.
         const preserveScroll = url.pathname === window.location.pathname;
         go(() => fetch(link.href, { headers: { 'X-Requested-With': 'XMLHttpRequest' } }), link.href, 'push', preserveScroll);
     });
@@ -445,13 +300,8 @@ function initSoftNav() {
 
         e.preventDefault();
         const formData = new FormData(form, submitter);
-        // Opt-in for a form that only adds/removes one line of an
-        // in-page list (formulas.html's packaging-materials cart, a
-        // status-update dropdown, ...) rather than navigating anywhere —
-        // snapping to the top and repainting the whole page after every
-        // such action is what reads as "the page just reloaded" even
-        // though nothing actually did, same reasoning as the tab/filter
-        // links above.
+        // Opt-in for a form that only edits one line of an in-page list (cart row, status
+        // dropdown): no scroll-to-top repaint, same as the tab/filter links above.
         const preserveScroll = form.hasAttribute('data-preserve-scroll');
         go(
             () => fetch(form.action, {
@@ -472,53 +322,16 @@ function initSoftNav() {
 }
 
 // ---------------------------------------------------------------
-// Custom select: progressively enhances every <select> in the app
-// with a styled trigger + dropdown panel instead of relying on the
-// browser's native picker — on a phone, that native picker is a
-// full-screen OS-drawn control (iOS's spinning wheel, Android's
-// oversized list) that CSS can never reach or resize, which is what
-// read as "the dropdown is too big" on mobile. This builds a
-// compact, anchored panel instead, styled to match every other
-// input in the app, on both mobile and desktop.
-//
-// The real <select> stays in the DOM exactly where it was — same
-// name/id/required/disabled attributes, same position in its form —
-// just visually replaced: it's positioned invisibly *on top of* the
-// trigger button (see .cs-select select in style.css) so a screen
-// reader / the browser's own required-field validation still finds
-// a real, correctly-positioned control there, with pointer-events
-// disabled so clicks pass through to the button underneath instead
-// of popping the native picker. It's still the actual source of
-// truth for the field's submitted value; this never removes or
-// clones the select — only changes how it's shown and interacted
-// with. An individual select can opt out with a `data-cs-skip`
-// attribute — nothing in the app uses it any more (the Partner
-// Inquiries status picker is now an enhanced select with
-// data-cs-variant="status"; see the .cs-variant-status rules in
-// style.css).
-//
-// Existing code elsewhere in the app sets these selects' .value
-// directly (edit-item modals, the product/unit autocombos on Record
-// Sale/Production/Request Stock) or rebuilds their whole <option>
-// list with innerHTML/appendChild (those same autocombos, as the
-// person picks a product). Rather than auditing and editing every
-// one of those call sites, this hooks into two things that catch
-// all of them automatically, from anywhere, including code that
-// runs after this file:
-//   - a property override on .value that re-syncs the trigger's
-//     label any time anything sets it
-//   - a MutationObserver watching each select's <option> list and
-//     its disabled attribute, so a select whose options get rebuilt
-//     after this ran still ends up with a matching custom panel
-//
-// Called again after softRefresh() swaps in fresh .content HTML
-// (plain, unenhanced <select> markup from the server) — see
-// initRealtime() below — the same way initSmartTables()/
-// initSmartLists() are. dataset.csEnhanced makes re-running this on
-// the *same* elements a no-op, so calling it more than once is safe.
-// Stock-movement types in the order they happen (make, ship, receive,
-// sell, correct), so the Ledger movement legend reads the same way every
-// time instead of in whatever order the data happened to come back.
+// Custom select: enhances every <select> with a styled trigger + dropdown panel, since
+// native pickers on phones are OS-drawn and can't be styled or sized.
+// The real <select> stays in the DOM (name/id/required, form position), laid invisibly
+// over the trigger with pointer-events off, so validation and the submitted value are
+// untouched. A select can opt out with `data-cs-skip` (currently unused).
+// Other code sets `.value` or rebuilds <option>s directly, so two hooks catch it all:
+//   - a `.value` property override that re-syncs the trigger label
+//   - a MutationObserver on the <option> list and the disabled attribute
+// Re-run after softRefresh() swaps in fresh markup; dataset.csEnhanced makes it idempotent.
+// Stock-movement types in lifecycle order, so the Ledger legend order is stable.
 var MOVEMENT_TYPE_ORDER = ['PRODUCTION', 'DISPATCH', 'RECEIPT', 'SALE', 'REFILL', 'FREEBIE', 'ADJUSTMENT', 'DAMAGE',
     'PACKAGE_ORDER', 'PACKAGE_RETURN', 'SALE_VOID'];
 

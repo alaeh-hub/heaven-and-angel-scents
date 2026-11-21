@@ -30,13 +30,10 @@ from heaven_angel.utils import (
 from heaven_angel.routes.admin._common import bp
 
 
-# ---------------------------------------------------------------------------
-# Settings -> Backup: snapshot the database and email it to HQ (see
-# backup.py for the format). Building + sending can take a while, so the
-# POST only starts a background thread; the Settings dialog polls
-# backup_status(), which reads the outcome back from admin_actions (so it
-# doesn't depend on which worker handled the POST).
-# ---------------------------------------------------------------------------
+# Settings -> Backup: email a database snapshot to HQ. The POST starts a background
+# thread; the dialog polls backup_status(), which reads the outcome from admin_actions
+# (so it works across workers).
+# Show only the first letter of the name, e.g. a***@example.com.
 def _mask_email(address):
     name, _, domain = (address or "").partition("@")
     if not domain:
@@ -44,6 +41,7 @@ def _mask_email(address):
     return f"{name[:1]}{'*' * max(2, len(name) - 1)}@{domain}"
 
 
+# POST: start the background email backup (one at a time).
 @bp.route("/backup/email", methods=["POST"])
 @limiter.limit("12 per hour")
 @admin_required
@@ -69,12 +67,11 @@ def backup_email():
     return jsonify(state="running"), 202
 
 
+# Poll: state of the running or latest email backup.
 @bp.route("/backup/status")
 @admin_required
 def backup_status():
-    # Newest success, and the newest failure only if it is more recent than
-    # that success - an old failure must not keep showing once a later
-    # backup worked (or after a restore).
+    # Newest success, plus the newest failure only if more recent (stale failures hide).
     rows = query(
         """SELECT action_id, actor_username, action, details, created_at
            FROM admin_actions WHERE action IN ('BACKUP_EMAIL', 'BACKUP_EMAIL_FAILED')
@@ -107,6 +104,7 @@ def backup_status():
     )
 
 
+# POST: save the automatic backup schedule.
 @bp.route("/backup/schedule", methods=["POST"])
 @limiter.limit("60 per hour")
 @admin_required
@@ -144,8 +142,7 @@ def backup_snooze():
 
 @bp.app_context_processor
 def inject_backup_reminder():
-    """Drives the reminder banner and the dot on the sidebar's Settings
-    button: only for a signed-in admin, never while snoozed today."""
+    """Drive the reminder banner and Settings dot: signed-in admin only, not while snoozed."""
     if session.get("role") != "Admin" or request.endpoint in (None, "static"):
         return {}
     if session.get("backup_snooze_date") == business_today().isoformat():
@@ -156,15 +153,9 @@ def inject_backup_reminder():
         return {}
 
 
-# ---------------------------------------------------------------------------
-# Settings -> Backup -> Restore. Replaces the database with the contents of
-# a backup made by Email backup (see backup.py). Guarded by: admin only,
-# the admin's password + a typed phrase (a short-lived token in the
-# session), a full validation pass before anything is touched, an
-# automatic safety copy of the current data on disk, and a lock so only
-# one runs at a time. While it runs every other request gets a 503, since
-# tables are being dropped and recreated underneath them.
-# ---------------------------------------------------------------------------
+# Settings -> Backup -> Restore. Guards: admin only, password + typed phrase (short-lived
+# session token), full validation first, safety copy on disk, one run at a time.
+# Other requests get a 503 while tables are rebuilt.
 _restore_lock = threading.Lock()
 
 
@@ -186,12 +177,14 @@ _RESTORE_PHRASE = "RESTORE"
 _RESTORE_MAX_BYTES = 250 * 1024 * 1024
 
 
+# Answer 503 to everything but status/static while a restore runs.
 @bp.before_app_request
 def _hold_requests_during_restore():
     if _restore_state["running"] and request.endpoint not in ("admin.restore_status", "static"):
         return ("The system is being restored from a backup. Please wait a minute, then refresh.", 503)
 
 
+# Background thread: run the restore and log the outcome.
 def _restore_job(app, path, actor_id, actor_name):
     with app.app_context():
         zf = None
@@ -204,9 +197,8 @@ def _restore_job(app, path, actor_id, actor_name):
             safety = save_safety_backup()
             _restore_state["phase"] = "Restoring the database"
             run_restore(statements)
-            # The restored tables are exactly what the backup held. A backup older than a feature
-            # lacks its columns (e.g. chemist and labor), and the once-per-process checks already
-            # ran: check again now, so the app does not break until it is restarted.
+            # Backups older than a feature lack its columns (e.g. chemist/labor): re-run the
+            # once-per-process checks now so the app works without a restart.
             try:
                 from heaven_angel.routes.admin.batch_formulas import reapply_data_fixes
                 reapply_data_fixes()
@@ -251,6 +243,7 @@ def _restore_job(app, path, actor_id, actor_name):
             _restore_lock.release()
 
 
+# POST: check password + phrase, then allow a restore for 5 minutes.
 @bp.route("/restore/verify", methods=["POST"])
 @limiter.limit("6 per hour")
 @admin_required
@@ -269,11 +262,8 @@ def restore_verify():
 @bp.route("/restore/chunk", methods=["POST"])
 @admin_required
 def restore_chunk():
-    # The backup is sent in ~4 MB pieces (raw bodies, CSRF token in the
-    # X-CSRFToken header): the app-wide request limit is far smaller than a
-    # backup, and CSRF protection reads every request body up to that
-    # limit, so one big upload cannot get through. Pieces must arrive in
-    # order; the last one starts the restore.
+    # Backup arrives in ~4 MB raw pieces (CSRF in X-CSRFToken): the request limit is far
+    # smaller than a backup. Pieces must arrive in order; the last starts the restore.
     until = session.get("restore_ok_until", 0)
     if time.time() > until:
         return jsonify(error="Confirm your password again, then upload."), 403
@@ -329,13 +319,10 @@ def restore_chunk():
 
 @bp.route("/restore/status")
 def restore_status():
-    # Session-only check on purpose: mid-restore the users table is being
-    # rebuilt, so the usual database-backed admin check could fail.
+    # Session-only check on purpose: mid-restore the users table is being rebuilt.
     if session.get("role") != "Admin":
         abort(403)
-    # Once nothing is running and no result is waiting to be read, the users
-    # table is stable again, so do the full check (account still active,
-    # password unchanged) and don't let a stale session read status.
+    # When idle, do the full check (account active, password unchanged).
     if not _restore_state["running"] and not _restore_state["done"]:
         deny = _require_session(required_role="Admin")
         if deny is not None:

@@ -1,9 +1,5 @@
-"""routes/branch.py's request_stock() — a branch's delivery request to
-HQ. Covers the two guarantees schema.sql's own comments call out: the
-unit price on each line is snapshotted from the catalog at request time
-(so a later price change never rewrites a past delivery's value), and a
-submission naming the same SKU twice is merged into one line rather than
-silently creating two.
+"""Branch request_stock(): unit price is snapshotted from the catalog at request time,
+and the same SKU named twice is merged into one line.
 """
 from factories import (get_form_token, get_inventory_qty, get_request_item,
                         get_in_transit_shipment_items, get_request_status,
@@ -64,6 +60,7 @@ def _latest_request_id(sql, branch_id):
 
 
 def test_request_stock_snapshots_current_price_onto_the_line_item(client, sql):
+    """Request stock snapshots current price onto the line item."""
     branch_id = _signed_in_branch(client, sql)
     sku = make_product(sql, price="123.45")
 
@@ -81,8 +78,7 @@ def test_request_stock_snapshots_current_price_onto_the_line_item(client, sql):
     assert items[0]["requested_qty"] == 7
     assert str(items[0]["unit_price"]) == "123.45"
 
-    # Changing the catalog price afterwards must not retroactively change
-    # what this already-submitted line is worth.
+    # A later catalog price change must not alter this submitted line.
     cur = sql.cursor()
     cur.execute("UPDATE products SET price = 999.00 WHERE sku = %s", (sku,))
     sql.commit()
@@ -92,6 +88,7 @@ def test_request_stock_snapshots_current_price_onto_the_line_item(client, sql):
 
 
 def test_request_stock_merges_duplicate_skus_into_one_line(client, sql):
+    """Request stock merges duplicate skus into one line."""
     branch_id = _signed_in_branch(client, sql)
     sku = make_product(sql, price="10.00")
 
@@ -109,6 +106,7 @@ def test_request_stock_merges_duplicate_skus_into_one_line(client, sql):
 
 
 def test_double_submitting_the_same_request_form_only_creates_one_delivery(client, sql):
+    """Double submitting the same request form only creates one delivery."""
     branch_id = _signed_in_branch(client, sql)
     sku = make_product(sql, price="10.00")
 
@@ -135,12 +133,9 @@ def test_double_submitting_the_same_request_form_only_creates_one_delivery(clien
 
 # ---------------------------------------------------------------- dispatch_request
 def test_dispatch_decrements_hq_stock_and_moves_request_to_in_transit(client, sql):
-    # Deliberately not _signed_in_branch() here — /login short-circuits
-    # to a redirect (without actually switching accounts) if the client
-    # already has a session, so a branch login followed by an admin
-    # login on the same client wouldn't really end up signed in as
-    # Admin. dispatch/reject only need a branch_id to attach the
-    # request to, not an authenticated branch session.
+    # Not _signed_in_branch(): /login redirects without switching accounts if a
+    # session exists. dispatch/reject only need a branch_id, not a branch session.
+    """Dispatch decrements hq stock and moves request to in transit."""
     branch_id = make_branch(sql)
     _signed_in_admin(client, sql)
     sku = make_product(sql, price="10.00")
@@ -165,6 +160,7 @@ def test_dispatch_decrements_hq_stock_and_moves_request_to_in_transit(client, sq
 
 
 def test_dispatch_more_than_hq_stock_on_hand_is_rejected(client, sql):
+    """Dispatch more than hq stock on hand is rejected."""
     branch_id = make_branch(sql)
     _signed_in_admin(client, sql)
     sku = make_product(sql, price="10.00")
@@ -185,6 +181,7 @@ def test_dispatch_more_than_hq_stock_on_hand_is_rejected(client, sql):
 
 
 def test_dispatch_more_than_requested_qty_is_rejected(client, sql):
+    """Dispatch more than requested qty is rejected."""
     branch_id = make_branch(sql)
     _signed_in_admin(client, sql)
     sku = make_product(sql, price="10.00")
@@ -205,6 +202,7 @@ def test_dispatch_more_than_requested_qty_is_rejected(client, sql):
 
 # ---------------------------------------------------------------- receive_stock
 def test_receive_stock_adds_to_branch_inventory_and_marks_fulfilled(client, sql):
+    """Receive stock adds to branch inventory and marks fulfilled."""
     branch_id = _signed_in_branch(client, sql)
     sku = make_product(sql, price="10.00")
     make_inventory(sql, branch_id, sku, stock_qty=5)
@@ -226,10 +224,9 @@ def test_receive_stock_adds_to_branch_inventory_and_marks_fulfilled(client, sql)
 
 
 def test_receive_stock_shortfall_is_logged_as_an_adjustment(client, sql):
-    """dispatched=10 but only 6 received and 0 reported damaged -> 4
-    units unaccounted for must be written to the ledger (ADJUSTMENT),
-    not just flashed and forgotten — see receive_stock()'s comment on
-    this being the actual audit trail HQ follow-up depends on."""
+    """dispatched=10, received=6, damaged=0: the 4 missing units must be written to the
+    ledger (ADJUSTMENT), the audit trail HQ follow-up relies on.
+    """
     branch_id = _signed_in_branch(client, sql)
     sku = make_product(sql, price="10.00")
     make_inventory(sql, branch_id, sku, stock_qty=0)
@@ -258,6 +255,7 @@ def test_receive_stock_shortfall_is_logged_as_an_adjustment(client, sql):
 
 
 def test_receiving_more_than_dispatched_is_rejected(client, sql):
+    """Receiving more than dispatched is rejected."""
     branch_id = _signed_in_branch(client, sql)
     sku = make_product(sql, price="10.00")
     make_inventory(sql, branch_id, sku, stock_qty=0)
@@ -301,6 +299,7 @@ def test_confirming_the_same_delivery_twice_only_receives_it_once(client, sql):
 
 # ---------------------------------------------------------------- reject_request
 def test_rejecting_a_pending_request_marks_it_rejected(client, sql):
+    """Rejecting a pending request marks it rejected."""
     branch_id = make_branch(sql)
     _signed_in_admin(client, sql)
     sku = make_product(sql, price="10.00")

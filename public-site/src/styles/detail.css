@@ -234,10 +234,7 @@
     gap: 32px;
   }
 
-  /* One column, in the order a buyer wants it: the pictures, then the price
-     and the Inquire button, then what is inside and the other packages.
-     detail-main stops being a box of its own so its children can be ordered
-     around the price card. */
+  /* One column in buyer order: pictures, price and Inquire, then contents and other packages (detail-main stops being a box so its children can be ordered). */
   .detail-main {
     display: contents;
   }
@@ -261,9 +258,7 @@
 
 .gallery {
   display: grid;
-  /* A named, shrinkable track: without it the gallery sized itself to its
-     widest content (the thumbnail strip) and ran past its column, under the
-     price card on desktop and off the screen on phones. */
+  /* Named shrinkable track: otherwise the gallery sized to its widest content and overran its column. */
   grid-template-columns: minmax(0, 1fr);
   gap: 14px;
   min-width: 0;
@@ -404,10 +399,7 @@
   object-fit: contain;
 }
 
-/* The scent renders: a 0.6761-aspect layer with the bottle centred 77.3% of
-   the way across (the box layer sits on the left). Sized to the layer's own
-   shape and shifted left by that offset, so the bottle, not the empty layer,
-   is what is centred, and a circular or square crop no longer cuts it in half. */
+/* Scent renders: 0.6761-aspect layer, bottle at 77.3% across. Shifted left by that offset so the bottle is centred, even in a circular or square crop. */
 .product-visual.is-render {
   width: auto;
   height: 100%;
@@ -856,10 +848,7 @@
 
 /* ============================================= mobile inquire bar */
 
-/* Phones and tablets only (the price card is pinned beside the content
-   on desktop). Fixed to the bottom edge: of the screen on the
-   standalone page, of the sheet inside the package sheet (its transform
-   makes it the containing block). */
+/* Phones and tablets only (desktop pins the price card). Fixed to the screen bottom, or the sheet bottom inside the package sheet (its transform is the containing block). */
 .detail-bar {
   display: none;
 }

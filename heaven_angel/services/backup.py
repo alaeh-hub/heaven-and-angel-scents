@@ -17,7 +17,7 @@ Format (decided for "restorable AND readable"):
 Mail servers cap attachment size, so if the full set is too big the
 optional parts are dropped in order (uploads, then CSVs); if even
 database.sql alone won't fit, TooLargeError is raised and the caller points
-the user at the mysqldump command in docs/BACKUP.md.
+the user at the mysqldump command.
 
 The snapshot is taken inside one REPEATABLE READ transaction, so every
 table is read as of the same instant without locking out the live app.
@@ -37,6 +37,7 @@ from heaven_angel.utils import business_now
 
 
 class TooLargeError(Exception):
+    """Raised when a backup is bigger than the email limit."""
     pass
 
 
@@ -44,6 +45,7 @@ _BATCH_ROWS = 200
 
 
 def _sql_literal(value):
+    """Format a Python value as a SQL literal for the dump."""
     if value is None:
         return "NULL"
     if isinstance(value, bool):
@@ -72,6 +74,7 @@ def _sql_literal(value):
 
 
 def _csv_cell(value):
+    """Format a value as a CSV cell."""
     if value is None:
         return ""
     if isinstance(value, (bytes, bytearray)):
@@ -153,6 +156,7 @@ def _uploads():
 
 
 def _manifest(stamp, counts, included):
+    """Text of the README/manifest stored in the backup zip."""
     lines = [
         "Heaven & Angel Scents - backup",
         "Taken: %s (business time)" % stamp,
@@ -165,7 +169,7 @@ def _manifest(stamp, counts, included):
     if "uploads" in included:
         lines.append("  uploads/       product photos (not stored in the database)")
     else:
-        lines.append("  (product photos were NOT included - see docs/BACKUP.md to copy static/uploads)")
+        lines.append("  (product photos were NOT included - copy static/uploads separately)")
     lines += [
         "",
         "To restore into an empty (or existing - tables are dropped and recreated) database:",
@@ -181,6 +185,7 @@ def _manifest(stamp, counts, included):
 
 
 def _zip(entries):
+    """Zip the named (name, bytes) entries and return the bytes."""
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED, compresslevel=9) as zf:
         for name, data in entries:
@@ -217,12 +222,10 @@ def build_backup_zip(max_bytes):
             return data, filename, summary
     raise TooLargeError(
         "The database alone is bigger than the email attachment limit "
-        "(%.0f MB). Use mysqldump instead (see docs/BACKUP.md)." % (max_bytes / 1024 / 1024))
+        "(%.0f MB). Use mysqldump instead." % (max_bytes / 1024 / 1024))
 
 
-# ---------------------------------------------------------------------------
-# Restore (Settings -> Backup -> Restore from a backup)
-# ---------------------------------------------------------------------------
+# Restore (Settings -> Backup -> Restore from a backup).
 class RestoreError(Exception):
     """A problem with the uploaded file or the restore itself, with a
     message that is safe and useful to show the admin."""
@@ -232,9 +235,7 @@ _MAX_SQL_BYTES = 600 * 1024 * 1024        # decompressed database.sql
 _MAX_UPLOAD_FILES = 5000                  # photos
 _HEADER = "-- Heaven & Angel Scents database backup"
 
-# Only the statements backup.py itself writes are ever executed — a
-# hand-edited or hostile file cannot run anything else (no DROP DATABASE,
-# GRANT, UPDATE ..., stored routines, multi-statements, ...).
+# Only statements backup.py writes may run; a hostile file cannot execute anything else.
 _ALLOWED = re.compile(
     r"^(?:SET\s+NAMES\s+utf8mb4"
     r"|SET\s+(?:FOREIGN_KEY_CHECKS|UNIQUE_CHECKS)\s*=\s*[01]"
@@ -270,12 +271,7 @@ def split_sql(text):
 
 
 def _decrypt_emailed_backup(path):
-    """The backup zip's bytes, if `path` is the encrypted .enc file Email backup sends.
-
-    It is opened with BACKUP_ZIP_PASSWORD (see backup_crypto.py) so it can be restored as it
-    is, without decrypting it by hand first. Returns None for anything else (a plain backup
-    zip, a bare .sql), which is read as before.
-    """
+    """Zip bytes if `path` is an emailed .enc backup (opened with BACKUP_ZIP_PASSWORD), else None."""
     with open(path, "rb") as fh:
         head = fh.read(16)
     if not head.startswith(b"HABK1\n"):
@@ -349,27 +345,21 @@ def prepare_restore(path):
         raise
 
 
-# Logs that must survive a restore: the audit trail (which also records the
-# restore itself, and the backup/restore history shown in Settings) and the
-# sign-in security log (failed-login lockouts must not be rewindable by
-# restoring an old file), and the backup schedule. Their current contents
-# are kept as they are.
+# Logs a restore must not overwrite: audit trail, login activity, backup schedule.
 PRESERVE_ON_RESTORE = ("admin_actions", "login_activity", "app_settings")
 _TABLE_OF = re.compile(r"`([^`]+)`")
 
 
 def _is_preserved(stmt):
+    """True if a restore statement touches a PRESERVE_ON_RESTORE table."""
     if stmt.upper().startswith("SET"):
         return False
     m = _TABLE_OF.search(stmt)
     return bool(m) and m.group(1) in PRESERVE_ON_RESTORE
 
 
-# Tables whose rows only make sense next to the rest of the data they were taken with
-# (the oil on hand per scent goes with the materials, batches and costs). A backup made
-# before they existed has no copy of them, and a restore would leave today's oil stock
-# beside the older data. Those are emptied instead; the app creates a row per scent at
-# 0 stock again, and the oil is entered again. Children come before parents.
+# Tables only valid with the rest of the backup (oil stock per scent). If an older
+# backup lacks them they are emptied on restore. Children before parents.
 EMPTY_IF_MISSING = ("scent_oil_restocks", "scent_oils")
 
 
@@ -396,12 +386,7 @@ def empty_tables_missing_from_backup(tables):
 
 def run_restore(statements):
     """Execute pre-validated statements on one connection."""
-    # Drop every table before creating any. Dumps are alphabetical, so a child
-    # table (e.g. ai_stock_draft_items) used to be re-created while the LIVE
-    # parent (products) still existed; if the backup was taken from a database
-    # whose column collation differs, MySQL refused the foreign key (error 3780)
-    # and the restore died part-way with tables already dropped. With the
-    # parents gone first, the foreign keys are simply re-created in the dump.
+    # Drop every table first so foreign keys re-create cleanly (avoids MySQL error 3780).
     drops = [s for s in statements if re.match(r"DROP\s+TABLE", s, re.IGNORECASE)]
     statements = [s for s in statements if s not in drops]
     first_non_set = next((i for i, s in enumerate(statements) if not s.upper().startswith("SET")), 0)

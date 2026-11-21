@@ -1,20 +1,8 @@
-// Footer details, kept in one place like about.js and partner.js.
-//
-// TODO(content): everything below is PLACEHOLDER information. Replace
-// it with the real details before sharing the portal link.
-//
-// Phone and email: if PORTAL_CONTACT_PHONE / PORTAL_CONTACT_EMAIL are
-// set in .env (the same values the closing "Ready to stock our scents?"
-// band uses), the footer shows those instead of the ones below, so the
-// two never disagree. Set them there and these become fallbacks only.
-//
-// Socials: remove any network you don't use; the footer only renders
-// what's listed. `network` picks the logo (facebook, instagram, tiktok,
-// youtube, messenger, x).
-//
-// Marketplaces: official storefronts resellers/affiliates can order from
-// or link to directly. Remove any you don't run; the footer only renders
-// what's listed. `network` picks the logo (shopee, lazada, tiktokshop).
+// Footer details in one place.
+// TODO(content): all PLACEHOLDER; replace before sharing the link.
+// Phone/email: PORTAL_CONTACT_PHONE/EMAIL from .env override these.
+// Socials and marketplaces: only what is listed renders; `network` picks
+// the logo.
 
 export const FOOTER = {
   blurb: 'Luxury fragrance bundles for distributors and resellers, priced below our regular list.',

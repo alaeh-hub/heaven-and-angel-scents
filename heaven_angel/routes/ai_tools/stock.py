@@ -18,6 +18,7 @@ from heaven_angel.routes.ai_tools._common import MAX_ROWS, _branch_filter, _reso
 from heaven_angel.routes.ai_tools.sales import PERIOD_NAMES, PERIOD_TMPL, period_sql
 
 
+# Tool: stock levels by product, scoped by role/branch.
 def check_stock(args, ctx):
     sku = (args.get("sku") or "").strip()
     item_name = (args.get("item_name") or "").strip()
@@ -39,8 +40,7 @@ def check_stock(args, ctx):
         conditions.append("p.item_name LIKE %s")
         params.append(f"%{item_name}%")
     if ctx["role"] != "Admin":
-        # Same as the branch's My Inventory page: branches only stock
-        # bottled sizes, so their (always-0) bulk rows are never shown.
+        # Branches stock bottled sizes only; hide their always-0 bulk rows.
         conditions.append("p.unit <> 'BULK'")
 
     sql = (
@@ -88,6 +88,7 @@ def check_stock(args, ctx):
 # ---------------------------------------------------------------------------
 
 
+# Tool: items at or below their reorder level.
 def get_low_stock(args, ctx):
     branch_name = (args.get("branch_name") or "").strip()
     branch_ids, err = _resolve_branch_ids(ctx, branch_name, include_hq=True)
@@ -99,8 +100,7 @@ def get_low_stock(args, ctx):
         "FROM branch_inventory bi "
         "JOIN branches b ON bi.branch_id = b.branch_id "
         "JOIN products p ON bi.sku = p.sku "
-        # Same rule as the Low Stock page (reports.LOW_STOCK_WHERE):
-        # HQ's warehouse and every branch; BULK has no reorder level.
+        # Same rule as the Low Stock page; BULK has no reorder level.
         "WHERE " + LOW_STOCK_WHERE
     )
     params = []
@@ -135,6 +135,7 @@ def get_low_stock(args, ctx):
 # ---------------------------------------------------------------------------
 
 
+# Line items grouped by request_id.
 def _stock_request_items_by_request(request_ids):
     if not request_ids:
         return {}
@@ -158,6 +159,7 @@ def _stock_request_items_by_request(request_ids):
     return out
 
 
+# Tool: deliveries still pending or in transit.
 def get_pending_deliveries(args, ctx):
     status = (args.get("status") or "").strip()
     valid_statuses = {"Pending", "In Transit", "Partially Fulfilled", "Fulfilled", "Rejected"}
@@ -208,7 +210,7 @@ def get_pending_deliveries(args, ctx):
 
 
 # ---------------------------------------------------------------------------
-# Tool: get_sales_summary
+# Tool: get_discrepancies
 # ---------------------------------------------------------------------------
 
 
@@ -256,10 +258,11 @@ def get_discrepancies(args, ctx):
 
 
 # ---------------------------------------------------------------------------
-# Tool: get_branch_performance  (admin only)
+# Tool: propose_stock_request  (writes a DRAFT only)
 # ---------------------------------------------------------------------------
 
 
+# Tool: save a stock-request DRAFT for human review.
 def propose_stock_request(args, ctx):
     branch_name = (args.get("branch_name") or "").strip()
     items = args.get("items") or []
@@ -301,8 +304,7 @@ def propose_stock_request(args, ctx):
     missing = [s for s in skus if s not in found_skus]
     if missing:
         return {"error": f"Unknown SKU(s): {', '.join(missing)}."}
-    # Same rule as branch.request_stock(): only bottled sizes are ever
-    # requested from HQ.
+    # Only bottled sizes can be requested from HQ.
     bulk = [r["sku"] for r in found if r["unit"] not in BOTTLE_UNITS]
     if bulk:
         return {"error": f"Bulk/Refill products can't be requested from HQ: {', '.join(bulk)}."}
@@ -329,13 +331,7 @@ def propose_stock_request(args, ctx):
         return {"error": "Could not save the draft — please try again."}
 
     if audit:
-        # ctx["branch_name"] only covers a branch-staff caller proposing
-        # for their own branch (see ctx() in ai.py). An Admin can name any
-        # branch via branch_name/_resolve_branch_ids above, so that cached
-        # session value can't be trusted here — look the name up by the
-        # branch_id actually used, so the log reads e.g. "Cebu Branch"
-        # instead of the raw branch_id for every caller, not just Branch
-        # staff.
+        # Look up the branch name by the branch_id used; ctx only covers branch staff.
         branch_row = query(
             "SELECT branch_name FROM branches WHERE branch_id = %s", (branch_id,), fetchone=True
         )

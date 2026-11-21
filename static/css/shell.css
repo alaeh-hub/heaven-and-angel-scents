@@ -1,8 +1,7 @@
 /* App shell styles: sidebar, top bar, notification bell, Halo widget, settings modal, overlays.
-   Loaded after style.css and themes.css (see templates/base.html) so it keeps the same cascade
-   order it had as an inline <style>. */
+   Loaded after style.css and themes.css (see base.html) to keep its original cascade order. */
 
-    /* Hallmark · checked: 2026-10-29 · shape: app screen · genre: modern-minimal (inferred) · built: the project · redesign: full · v2.0.0 */
+    /* App shell redesign v2.0.0 (modern-minimal) */
     html,
     body {
         overflow-x: clip;
@@ -69,8 +68,7 @@
         width: 320px;
         max-height: 380px;
         overflow-y: auto;
-        /* Scrollable, just not visibly so (same as .cs-panel in
-           style.css). */
+        /* Scrollable but not visibly so (same as .cs-panel). */
         scrollbar-width: none;
         -ms-overflow-style: none;
         background: var(--surface);
@@ -79,11 +77,8 @@
         box-shadow: var(--shadow-md);
         z-index: 60;
         transform-origin: top right;
-        /* No opacity transition, this panel opens directly over
-           whatever page content sits under the topbar, and a fade
-           briefly lets that show through mid-transition, reading as
-           a stacking bug even though z-index is fine (see
-           .cs-panel's own comment in style.css for the same fix). */
+        /* No opacity transition: a fade lets page content show through mid-transition and
+           reads as a stacking bug (same fix as .cs-panel in style.css). */
         visibility: hidden;
         transform: translateY(-6px) scale(0.98);
         pointer-events: none;
@@ -94,11 +89,8 @@
         display: none;
     }
 
-    /* On phones a 320px panel pinned to the bell's right edge runs
-       off the left of the screen (the theme toggle sits to the
-       bell's right). Un-positioning .notif-wrap makes the sticky,
-       full-width .topbar the panel's anchor instead, so it spans
-       the screen with a small gutter, just below the topbar. */
+    /* On phones a 320px panel at the bell's right edge runs off-screen. Un-positioning
+       .notif-wrap anchors it to the full-width sticky .topbar instead. */
     @media (max-width: 680px) {
         .notif-wrap {
             position: static;
@@ -205,14 +197,8 @@
     }
 
     /* ---- Halo (floating AI assistant widget) ----
-       Lives here (base.html's own shared <style>, like .notif-* above)
-       rather than in ai/chat.html's own page-head block, since it's
-       now global chrome rendered on every signed-in page, not tied to
-       a page a soft nav ever swaps out. Its DOM node is never
-       destroyed/recreated by swapContent() (see main.js), only
-       .content is, so the panel's open/closed state and message log
-       survive navigating around the app exactly like the notification
-       bell already does. */
+       Global chrome on every signed-in page; swapContent() only replaces .content, so
+       its open state and log survive navigation like the notification bell. */
     .halo-widget {
         position: fixed;
         right: 20px;
@@ -220,9 +206,8 @@
         z-index: 900;
     }
 
-    /* On the full chat page (Halo's "open in full page") the chat is the page, so the
-       floating button and its panel are not shown. Follows soft navigation, because it
-       looks at what is on the page rather than at the address. */
+    /* On the full chat page the chat is the page, so the floating button and panel are
+       hidden. Follows soft nav since it checks page content, not the address. */
     body:has(.chat-back) .halo-widget {
         display: none;
     }
@@ -273,11 +258,7 @@
         transform: rotate(0) scale(1);
     }
 
-    /* A small unread-style dot, reusing .notif-badge's own look,
-       shown on the closed bubble the first time Halo has something
-       to say that the user hasn't opened the panel to see yet, same
-       idea as the notification bell's badge, scoped to this widget's
-       own open/closed state rather than a server-computed count. */
+    /* Unread-style dot (like .notif-badge) on the closed bubble when Halo has unseen output. */
     .halo-fab-badge {
         position: absolute;
         top: 2px;
@@ -372,15 +353,12 @@
         height: 16px;
     }
 
-    /* The mascot is a cut-out character, so the circle has to do the
-       cropping that the old inline glyph didn't need. */
+    /* The mascot is a cut-out, so the circle does the cropping. */
     .halo-avatar.mascot-host {
         overflow: hidden;
     }
 
-    /* Top margin, not just centring: the greeting bubble sits above
-       the mascot and .halo-log scrolls, so without room reserved
-       here the bubble would be clipped by the log's own overflow. */
+    /* Top margin reserves room so the greeting bubble isn't clipped by .halo-log's overflow. */
     .halo-empty-mascot {
         margin: var(--space-xl) auto var(--space-xs);
     }
@@ -604,10 +582,7 @@
         cursor: not-allowed;
     }
 
-    /* Below the app's shared 680px mobile breakpoint, anchoring the
-       panel to a fixed size above the bubble (like desktop) would
-       either overflow the screen or leave it cramped, sized to the
-       viewport instead, same bottom-right anchor. */
+    /* Below the 680px breakpoint the panel is sized to the viewport (same bottom-right anchor). */
     /* The close button and the "full page" link share the header's right edge. */
     .halo-panel-actions {
         display: flex;
@@ -645,9 +620,8 @@
     }
 
     @media (max-width: 680px) {
-        /* On a phone the open panel is the whole screen (it already covered nearly all of it).
-           The floating button is hidden while it is open and a close button sits in the header,
-           so nothing floats over the conversation. */
+        /* On a phone the open panel is the whole screen; the floating button is hidden and a
+           header close button replaces it. */
         .halo-widget.open .halo-fab {
             display: none;
         }
@@ -693,9 +667,8 @@
             transition: transform 0.25s ease, opacity 0.2s ease;
         }
 
-        /* A floating button always sits on top of something on a phone (it covered a Receipt
-           button in the sales list). It tucks off the right edge while you scroll down and comes
-           back when you scroll up (see initHaloTuck in page-init.js); never while its panel is open. */
+        /* A floating button covers content on phones: it tucks off the right edge on scroll
+           down and returns on scroll up (initHaloTuck in page-init.js); never while open. */
         .halo-widget.is-tucked:not(.open) {
             transform: translateX(calc(100% + 24px));
             opacity: 0;

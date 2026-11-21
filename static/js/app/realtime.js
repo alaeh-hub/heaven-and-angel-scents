@@ -127,12 +127,8 @@ function initNotificationBell() {
     return { add };
 }
 
-// Halo — the floating AI assistant widget (see its markup + CSS in
-// base.html). Self-contained like initNotificationBell() above: its DOM
-// lives outside .content, so this only ever runs once per real page load
-// (DOMContentLoaded), and the closure state below (history, open/closed,
-// unread) survives every soft nav in between exactly the way the
-// notification bell's own state does.
+// Halo, the floating AI assistant widget (markup + CSS in base.html). Its DOM lives
+// outside .content, so this runs once per real page load and its state survives soft navs.
 function initHaloWidget() {
     const widget = document.getElementById('haloWidget');
     const fab = document.getElementById('haloFabBtn');
@@ -155,10 +151,7 @@ function initHaloWidget() {
         return div.innerHTML;
     }
 
-    // Same light markdown subset as the full chat page (ai/chat.html) —
-    // the model occasionally uses **/* despite being told to write plain
-    // text. Escaped first, so this never introduces real HTML/script
-    // injection, it only turns already-escaped markers into tags.
+    // Same light markdown subset as ai/chat.html; escaped first, so no HTML injection.
     function formatAssistantText(text) {
         let escaped = escapeHtml(text);
         escaped = escaped.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
@@ -192,8 +185,7 @@ function initHaloWidget() {
         if (isOpen()) closePanel(); else openPanel();
     });
 
-    // On a phone the panel is full screen and the floating button is hidden while it is open,
-    // so this header button is how it closes.
+    // On phones the panel is full screen and the floating button is hidden, so this closes it.
     const closeBtn = document.getElementById('haloClose');
     if (closeBtn) closeBtn.addEventListener('click', closePanel);
 
@@ -227,9 +219,7 @@ function initHaloWidget() {
             if (anim && typeof anim.then === 'function') anim.then(null, () => { });
         }
 
-        // Only reachable for an assistant/error reply that arrives after
-        // the user closed the panel while a request was in flight — the
-        // panel has to be open to send a message in the first place.
+        // Only for an assistant/error reply that arrives after the panel was closed mid-request.
         if (role !== 'user' && !isOpen()) {
             widget.classList.add('has-unread');
         }
@@ -329,7 +319,7 @@ function initRealtime(notifBell) {
         { match: /^\/admin\/users\/?$/, scopes: ['users'] },
         { match: /^\/admin\/(materials|suppliers|formulas|tools)\/?$/, scopes: ['materials'] },
         { match: /^\/admin\/bulk-batches\/?$/, scopes: ['materials', 'production'] },
-        // Process Flow draws materials' prices and stock, the batch and the base cost, so it follows the same changes.
+        // Process Flow shows material prices/stock, batch and base cost, so it follows the same changes.
         { match: /^\/admin\/process-flow\/?$/, scopes: ['materials', 'production'] },
         { match: /^\/admin\/partners\/\d+\/?$/, scopes: ['partners'] },
         { match: /^\/admin\/requests\/\d+\/?$/, scopes: ['requests'] },
@@ -354,22 +344,19 @@ function initRealtime(notifBell) {
         return hit ? hit.scopes : [];
     }
 
-    // Search boxes and GET filter forms hold no data worth protecting, so
-    // they must never block a live refresh.
+    // Search boxes and GET filter forms never block a live refresh.
     function isDataField(el) {
         if (!el || !el.closest) return false;
         if (el.tagName !== 'INPUT' && el.tagName !== 'TEXTAREA' && el.tagName !== 'SELECT') return false;
         if (el.type === 'search' || el.type === 'hidden' || el.type === 'button' || el.type === 'submit') return false;
         if (!el.closest('.content')) return false;
-        // Only fields inside a POST form hold data worth protecting. Table
-        // search boxes and filter dropdowns live outside forms.
+        // Only fields inside a POST form are protected; search boxes and filters are not.
         const form = el.closest('form');
         if (!form || (form.getAttribute('method') || 'get').toLowerCase() === 'get') return false;
         return true;
     }
 
-    // The table search box and filters aren't protected from a refresh, so
-    // carry their values across the content swap instead of resetting them.
+    // Table search box and filters are carried across the swap, not reset.
     const VIEW_CONTROLS = '.smart-search-input, .smart-filter-select';
 
     function snapshotViewControls() {
@@ -394,20 +381,9 @@ function initRealtime(notifBell) {
     let suppressUntil = 0;
     let retryTimer = null;
 
-    // Whether the user has typed/selected anything, anywhere in .content,
-    // that a soft-refresh would silently discard. activeFieldInsideContent()
-    // alone isn't enough: it only reflects the field focused at the exact
-    // instant a refresh is attempted, and there's a brief window while
-    // focus is moving between two fields (e.g. Tab from one input to the
-    // next) where neither the old nor the new field reads as "focused"
-    // yet. A refresh landing in that gap replaces the whole .content DOM
-    // with a fresh server render, wiping every field the user had already
-    // filled in and visibly jumping the page under them. Tracking "has
-    // anything changed" independently of focus closes that gap.
-    // Self-clearing: a field the user touched only counts while its value
-    // still differs from what the server rendered, so cancelling a modal,
-    // resetting a form or clearing the field unblocks refreshes again
-    // (a sticky flag used to block them until a full page reload).
+    // True if the user typed/selected anything in .content that a refresh would discard.
+    // Not focus-based: focus is briefly "nowhere" while tabbing between fields.
+    // Self-clearing: counts only while the value differs from the server render.
     const touchedFields = new WeakSet();
 
     function markTouched(e) {
@@ -443,9 +419,7 @@ function initRealtime(notifBell) {
         }
     }, true);
 
-    // Many sales can land in a burst (and every admin tab hears each one);
-    // a full-page refetch per event would hammer the server, so coalesce
-    // them into one refresh after things go quiet for a moment.
+    // Coalesce a burst of sales events into one refresh after things go quiet.
     let queuedRefresh = null;
     function queueSoftRefresh() {
         clearTimeout(queuedRefresh);
@@ -457,14 +431,9 @@ function initRealtime(notifBell) {
         retryTimer = setTimeout(softRefresh, ms);
     }
 
-    // A dialog opened inside .content (New Sale, Import, ...) is only a
-    // style="display:flex" on a node that the refresh below replaces with a
-    // fresh server render, where it is closed again. Tabbing away and back
-    // fires visibilitychange -> softRefresh, so the dialog (and anything
-    // typed in it) vanished. Hold the refresh while one is open.
-    // Covers role="dialog" plus the page-specific overlays (.pg-overlay,
-    // .pi-modal-overlay, .void-overlay, .temp-overlay, ...): any
-    // fixed-position overlay/modal inside .content that is currently shown.
+    // Hold the refresh while a dialog inside .content is open (the swap would close it and
+    // lose input). Covers role="dialog" and page overlays (.pg-overlay, .pi-modal-overlay,
+    // .void-overlay, .temp-overlay, ...): any shown fixed-position overlay in .content.
     const DIALOG_SELECTOR = '.content [role="dialog"], .content [class*="overlay"], .content [class*="modal"]';
 
     function hasOpenDialog() {
@@ -499,10 +468,8 @@ function initRealtime(notifBell) {
             .then((html) => {
                 const fresh = new DOMParser().parseFromString(html, 'text/html');
 
-                // Same page content as the last refresh: nothing to show, so
-                // don't swap it (a swap re-runs the page and replays its
-                // entrance animation, which looks like a reload). The
-                // sidebar/topbar sit outside .content, so keep those current.
+                // Same content as the last refresh: skip the swap (it would replay the entrance
+                // animation). Sidebar/topbar are outside .content, so keep those current.
                 const freshContent = fresh.querySelector('.content');
                 const sig = freshContent ? freshContent.innerHTML : null;
                 if (sig !== null && lastSigUrl === window.location.href && sig === lastSig) {
@@ -513,11 +480,8 @@ function initRealtime(notifBell) {
                 lastSig = sig;
                 lastSigUrl = window.location.href;
 
-                // A form the user is part-way through filling in is carried
-                // over as-is (same node, so values, listeners and custom
-                // selects survive) while the rest of the page refreshes. If
-                // such a form can't be matched in the new page, hold the
-                // whole refresh back and retry instead of wiping their input.
+                // A half-filled form is carried over as-is (same node, so values and listeners survive).
+                // If it can't be matched in the new page, hold the refresh and retry.
                 const keep = [];
                 for (const form of dirtyForms()) {
                     const freshForm = form.id ? fresh.getElementById(form.id) : null;
@@ -541,14 +505,9 @@ function initRealtime(notifBell) {
             });
     }
 
-    // Safety net: if the socket was down (sleep, Wi-Fi switch, container
-    // restart) any pushes were lost, so catch up when it reconnects or the
-    // tab becomes visible again.
-    //
-    // Not on EVERY return to the tab though: each refresh swaps the whole
-    // page content and replays its reveal animation, which read as the page
-    // reloading itself on every alt-tab. Live pushes keep a connected tab
-    // current, so only catch up after a long absence or a dropped socket.
+    // Safety net: pushes are lost while the socket is down, so catch up on reconnect.
+    // Not on every tab return (each refresh replays the reveal like a reload); only after
+    // a long absence or a dropped socket.
     const STALE_AFTER_HIDDEN_MS = 2 * 60 * 1000;
     let hiddenAt = 0;
     document.addEventListener('visibilitychange', () => {
@@ -574,11 +533,8 @@ function initRealtime(notifBell) {
     }
 
     document.addEventListener('focusout', () => {
-        // Deferred to the next tick: at the instant focusout fires, the
-        // browser hasn't necessarily settled document.activeElement onto
-        // wherever focus is actually landing next (e.g. Tab to the next
-        // field in the same form) — checking synchronously here risks
-        // treating an in-form focus move as "left the form entirely."
+        // Deferred a tick: at focusout, document.activeElement hasn't settled yet, so a
+        // synchronous check could treat an in-form focus move as leaving the form.
         setTimeout(() => {
             if (pendingRefresh && !activeFieldInsideContent() && !hasUnsavedInput()) {
                 softRefresh();
@@ -602,9 +558,7 @@ function initRealtime(notifBell) {
         const mine = currentScopes();
         console.debug('[realtime] data_changed', scopes, 'page listens for', mine);
         if (scopes.some((s) => mine.includes(s))) {
-            // A page can register its own in-place refresh (the Reports pages
-            // do, so a live update keeps the chosen Daily/Weekly/... view and
-            // never wipes the report builder form) instead of a full swap.
+            // A page can register its own in-place refresh (Reports keeps its view and builder form).
             const live = window.__liveRefresh;
             if (live && live.path === window.location.pathname && typeof live.fn === 'function') {
                 live.fn();
@@ -636,9 +590,7 @@ function initPhClock() {
         hour12: true,
     });
 
-    // One span per character; each second only the characters that
-    // actually changed get re-rendered with a short slide-in, so the
-    // ticking seconds read as motion without touching the rest.
+    // One span per character; only changed characters re-render (short slide-in) each second.
     let prev = '';
     let cells = [];
 

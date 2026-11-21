@@ -25,6 +25,7 @@ _reveals = {}
 _REVEAL_TTL = 120
 
 
+# Keep a temporary password in server memory; return its random token.
 def _stash_reveal(username, password):
     now = time.time()
     for k in [k for k, v in _reveals.items() if v[0] < now]:
@@ -34,6 +35,7 @@ def _stash_reveal(username, password):
     return token
 
 
+# Read and remove a stashed password (one-time).
 def _pop_reveal(token):
     entry = _reveals.pop(token, None) if token else None
     if entry and entry[0] >= time.time():
@@ -51,13 +53,8 @@ def users():
         role = request.form.get("role")
         branch_id = request.form.get("branch_id") or None
 
-        # For a Branch account, branch_id must be both present AND
-        # actually point at a real, non-HQ branch. Without the second
-        # check, a hand-crafted POST (bypassing the dropdown, which only
-        # ever lists non-HQ branches) could set branch_id=1 — HQ's own
-        # branch row — and create a "Branch" account that sees and can
-        # sell against the HQ warehouse through the ordinary branch UI,
-        # which every branch-side query trusts blindly via session.
+        # A Branch account needs a real non-HQ branch_id: a crafted POST must not create
+        # a Branch user on the HQ warehouse.
         valid_branch = None
         if role == "Branch" and branch_id:
             valid_branch = query(
@@ -104,10 +101,7 @@ def users():
     )
     branch_list = query(
         "SELECT branch_id, branch_name FROM branches WHERE is_hq = FALSE ORDER BY branch_name")
-    # pop(), not get() — this must only ever be readable once. If it's
-    # left in the session, refreshing this page (or hitting back/forward)
-    # would keep re-showing a temporary password that may already have
-    # been handed to the staff member and could be stale or reused.
+    # pop(), not get(): the temporary password must be readable only once.
     temp_password_reveal = _pop_reveal(session.pop("temp_password_reveal", None))
     return render_template(
         "admin/users.html", accounts=accounts, branch_list=branch_list,
@@ -115,6 +109,7 @@ def users():
     )
 
 
+# POST: activate or deactivate an account.
 @bp.route("/users/<int:user_id>/toggle", methods=["POST"])
 @admin_required
 def toggle_user(user_id):
@@ -144,6 +139,7 @@ def toggle_user(user_id):
     return redirect(url_for("admin.users"))
 
 
+# POST: generate a new temporary password for an account.
 @bp.route("/users/<int:user_id>/reset-password", methods=["POST"])
 @admin_required
 def reset_user_password(user_id):
@@ -158,14 +154,8 @@ def reset_user_password(user_id):
         "UPDATE users SET password_hash = %s, must_change_password = TRUE WHERE user_id = %s",
         (generate_password_hash(temp_password), user_id),
     )
-    # Hand the plaintext password to the one-shot reveal modal in
-    # users.html rather than putting it in a flash message. Flash
-    # messages render as plain banner text mixed in with every other
-    # message on the page — this way it only ever appears once, inside
-    # the dedicated modal that already exists for it (copy button,
-    # "won't be shown again" framing), and users() pops it from the
-    # session immediately after reading it so a page refresh or back
-    # button can't bring it back.
+    # Hand the password to the one-shot reveal modal (not a flash message); users() pops
+    # it from the session so refresh/back cannot show it again.
     session["temp_password_reveal"] = _stash_reveal(target["username"], temp_password)
     disconnect_user(user_id)
     log_action("reset_password", target=target["username"])

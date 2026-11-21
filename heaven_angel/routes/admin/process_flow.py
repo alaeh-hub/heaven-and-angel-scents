@@ -1,12 +1,6 @@
-"""Process Flow: a read-only picture of how a bottle gets made and costed.
+"""Process Flow: read-only walkthrough of how a bottle is made and costed.
 
-It changes nothing. It shows, step by step and for one formula and size at a time,
-what the system does with the numbers it already has: the materials and their
-prices, the formula's amounts, the mix split, the cost of the liquid, the bulk batch
-(bottles, packaging, chemist and labor, cost per bottle), bottling it into a product
-(mL drawn, the flat base cost of goods) and selling it. Every figure is computed by
-the same code the Bulk Batches page uses (batch_formulas.compute_formula), so the
-picture can never disagree with what producing a batch really does.
+Every figure comes from batch_formulas.compute_formula, so it matches real production.
 """
 from flask import render_template
 
@@ -18,6 +12,7 @@ from heaven_angel.routes.admin.batch_formulas import (
 )
 
 
+# Page: one formula and size, step by step, from materials to sale.
 @bp.route("/process-flow")
 @admin_required
 def process_flow():

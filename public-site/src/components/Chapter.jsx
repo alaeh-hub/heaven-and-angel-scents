@@ -1,11 +1,7 @@
 import Reveal from './Reveal.jsx';
 import FlipHeading from './FlipHeading.jsx';
 
-/**
- * The opening of a landing section, set like the start of a chapter:
- * a numbered rule, a serif headline that flips in, and a short lede.
- * `side` puts the lede in a right-hand column on wide screens.
- */
+/** Landing section opener: numbered rule, flipping headline, lede (`side` = right column). */
 export default function Chapter({ n, label, title, lede, children, className = '' }) {
   return (
     <header className={`chapter ${className}`}>

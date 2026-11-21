@@ -1,7 +1,5 @@
-/* Library layer: the CSS the shadcn-registry components expect but do not
-   ship (Vengeance UI flip-text, logo-slider, animated-rays; a nav
-   spotlight in the Vengeance spotlight-navbar style), plus the scent
-   rail and closing-band restyle. Brand tokens only, see tokens.css. */
+/* Library layer: CSS the shadcn-registry components expect (flip-text, logo
+   slider, animated rays, nav spotlight), plus the scent rail and closing band. */
 
 /* ---------- Flip text ---------- */
 .flip-char {

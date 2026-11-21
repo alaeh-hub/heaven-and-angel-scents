@@ -15,6 +15,7 @@ def _material(**over):
 
 def test_first_purchase_and_restock_blend():
     # 100 for 50 first (0.50/unit), then 100 for 80 restock (0.80/unit).
+    """First purchase and restock blend."""
     events = [{
         "material_id": 1, "qty": 100, "cost": 80,
         "purchased_at": datetime(2026, 2, 1), "supplier_name_snapshot": "Acme",
@@ -29,6 +30,7 @@ def test_first_purchase_and_restock_blend():
 
 
 def test_material_without_restocks_has_single_point():
+    """Material without restocks has single point."""
     [m] = build_material_price_history(
         [_material(package_qty=100, package_cost=50)], [])
     assert len(m["points"]) == 1

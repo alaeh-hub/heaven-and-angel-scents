@@ -1,8 +1,7 @@
 """The 80 mm sale receipt grows with its content instead of clipping or overprinting.
 
-A sale is one product line, so the receipt gets longer only through text:
-a wrapped address, a long customer / buyer / branch name, a long scent name.
-Each of those used to run off the slip or over its own label.
+A sale is one product line, so only text lengthens it (wrapped address, long
+customer / buyer / branch / scent name).
 """
 import datetime
 import decimal
@@ -49,6 +48,7 @@ def _height(monkeypatch, **over):
 
 
 def test_slip_is_taller_for_long_text_than_for_short(monkeypatch):
+    """Slip is taller for long text than for short."""
     base = _height(monkeypatch)
     for field, value in (
         ("customer_name", LONG * 2),
@@ -64,5 +64,6 @@ def test_slip_is_taller_for_long_text_than_for_short(monkeypatch):
 
 
 def test_huge_amounts_still_build_one_slip(monkeypatch):
+    """Huge amounts still build one slip."""
     assert _height(monkeypatch, qty_sold=9999, unit_price=D("99999.99")) > 0
     assert _height(monkeypatch, sku="A1-BULK", unit="BULK", qty_sold=12500, unit_price=D("7.50")) > 0

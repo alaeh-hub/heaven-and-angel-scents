@@ -13,6 +13,7 @@ from heaven_angel.utils import (
 
 
 def _branch_name(branch_id):
+    """Branch name for a branch filter, or None for all branches."""
     if branch_id in (None, "all"):
         return None
     row = query("SELECT branch_name FROM branches WHERE branch_id = %s",
@@ -90,8 +91,6 @@ def get_report(report_type, filters, branch_scope=None, actor_label=""):
         "rows": rows,
         "row_count": len(rows),
         "truncated": truncated,
-        # {column_key: summed_value} for every money/int column, or None
-        # — see compute_totals(). Both render_report_pdf() and
-        # render_report_excel() add a bold Total row from this when present.
+        # {column_key: sum} for money/int columns, or None (see compute_totals()).
         "totals": compute_totals(columns, rows),
     }

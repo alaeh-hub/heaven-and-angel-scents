@@ -50,11 +50,13 @@ def today_sales_summary(account=None):
 
 
 def _count(sql, params=()):
+    """Run a COUNT query and return the number."""
     row = db.query(sql, params, fetchone=True)
     return row["c"] if row else 0
 
 
 def _admin_task_counts():
+    """Counts of open admin tasks for the sidebar badges."""
     return {
         "pending_requests_count": _count(
             "SELECT COUNT(*) c FROM stock_requests WHERE status IN ('Pending', 'Partially Fulfilled')"),
@@ -66,6 +68,7 @@ def _admin_task_counts():
 
 
 def _branch_task_counts(branch_id):
+    """Counts of open branch tasks for the sidebar badges."""
     return {
         "in_transit_count": _count(
             "SELECT COUNT(*) c FROM stock_requests WHERE branch_id = %s AND status = 'In Transit'",
@@ -77,19 +80,15 @@ def _branch_task_counts(branch_id):
 
 
 def register_context_processors(app):
+    """Add the shared template variables."""
     @app.context_processor
     def inject_today():
-        # ISO date string for capping date-picker inputs at "today" (e.g.
-        # Add material/supplier, Record sale's backdating field) — a
-        # picker shouldn't let someone log a record dated in the future.
+        # Today's date (ISO) to cap date pickers so no record is dated in the future.
         return {"today": utils.business_today().isoformat()}
 
     @app.context_processor
     def inject_login_splash():
-        # Popped, not just read, so it renders true on exactly one page
-        # load (the dashboard a fresh login redirects to) and never
-        # again on a later refresh — see auth.py's login(), which is the
-        # only place that sets it.
+        # Popped so the login splash shows once, on the page after login.
         return {"show_login_splash": session.pop("show_login_splash", False)}
 
     @app.context_processor
@@ -116,9 +115,7 @@ def register_context_processors(app):
 
     @app.route("/api/today-sales")
     def api_today_sales():
-        # Re-check the account against the database like @login_required
-        # does, so a deactivated or demoted user stops getting revenue
-        # figures immediately instead of when their cookie expires.
+        # Re-check the account in the database so a demoted user loses revenue figures at once.
         account = live_account_or_none()
         summary = today_sales_summary(account) if account else None
         if summary is None:

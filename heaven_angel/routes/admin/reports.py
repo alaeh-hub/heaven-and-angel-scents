@@ -17,22 +17,19 @@ from heaven_angel.services import admin_report_data as report_data
 from heaven_angel.services.trends import TREND_GRANULARITIES
 
 
-# LOW_STOCK_WHERE (imported from reports.py) is the shared low-stock
-# condition for the dashboard, Low Stock page, the Low Stock / Stock
-# reports and ai_tools.py's get_low_stock: HQ's warehouse plus every
-# branch, at or below its own reorder level, never BULK (Bulk/Refill
-# has no reorder level anywhere, HQ included).
+# LOW_STOCK_WHERE (from reports.py): shared low-stock rule (HQ + branches, at/below own
+# reorder level, never BULK). Used by the dashboard, Low Stock page, reports and AI tools.
 
 
 # ---------------------------------------------------------------- reports
+# Reports page: all-time sales, package and partner rankings.
 @bp.route("/reports")
 @admin_required
 def reports():
     branch_list = query(
         "SELECT branch_id, branch_name FROM branches WHERE is_hq = FALSE ORDER BY branch_name")
     catalog = report_catalog("Admin")
-    # All-time, across every branch — qty_sold/unit_price on `sales`
-    # already carries everything this needs, no extra table required.
+    # All-time, across every branch.
     top_sellers = query(
         """SELECT p.sku, p.item_name, p.variant,
                   SUM(s.qty_sold) AS total_units,
@@ -44,14 +41,8 @@ def reports():
            ORDER BY total_units DESC LIMIT 3"""
     )
 
-    # Best-selling packages — same "only Closed counts as a real sale"
-    # rule as everywhere else package revenue is computed (see
-    # partners()'s docstring and schema.sql's note on
-    # partner_inquiries.order_amount). Joined through packages so a
-    # package that's since been deleted (package_id set NULL on the
-    # inquiry) drops out here rather than showing as a nameless row —
-    # its revenue still counts in the totals below, just not in this
-    # per-package breakdown.
+    # Best-selling packages: only Closed counts as a sale. Joined through packages, so
+    # deleted packages drop out of this breakdown (not the totals).
     top_packages = query(
         """SELECT pkg.package_id, pkg.package_name,
                   COUNT(pinq.inquiry_id) AS order_count,
@@ -63,22 +54,9 @@ def reports():
            ORDER BY total_revenue DESC LIMIT 3"""
     )
 
-    # Top partners by package sales — same Closed-only rule. Joined
-    # through partners for the same reason as above (a since-deleted
-    # partner drops out of this breakdown, not out of the totals).
-    #
-    # Grouped by company name (case/whitespace-insensitive), not
-    # partner_id: the Partners page intentionally keeps a separate
-    # partner_id (and its own inquiry history) per submission even when
-    # the same company sends more than one inquiry — see partners.html's
-    # note on name/contact info coming from each inquiry's own first
-    # record. That's correct there, but on this dashboard summary two
-    # partner_id rows for "Hello World" reading as two different
-    # distributors is misleading — this rolls them into one line with a
-    # combined order count and total. MIN(partner_id)/MIN(partner_name)
-    # just picks one representative row per company for the link/label;
-    # MAX(partner_type) does the same for type (all rows for one company
-    # are expected to share a type in practice).
+    # Top partners by package sales (Closed only), grouped by company name
+    # (case/whitespace-insensitive) so repeat submissions roll into one line.
+    # MIN/MAX pick one representative id, name and type per company.
     top_partners = query(
         """SELECT MIN(p.partner_id) AS partner_id, MIN(p.partner_name) AS partner_name,
                   MAX(p.partner_type) AS partner_type,
@@ -102,11 +80,7 @@ def reports():
 @bp.route("/reports/generate")
 @admin_required
 def generate_report():
-    """Download a filtered report as PDF or Excel — see reports.py.
-
-    Any admin can pull any branch's data here (or "all branches"), same
-    as every other admin page; there's no branch scoping to apply.
-    """
+    """Download a filtered report as PDF or Excel; admins can pull any branch or all."""
     report_type = request.args.get("type", "")
     fmt = request.args.get("format", "pdf")
     meta = REPORT_TYPES.get(report_type)
@@ -138,8 +112,7 @@ def generate_report():
 @bp.route("/api/report-preview")
 @admin_required
 def report_preview():
-    """How many rows the builder's current choices would produce, so the page can
-    say "no rows match" before anyone downloads an empty report."""
+    """Row count for the builder's current choices (warns before an empty download)."""
     report_type = request.args.get("type", "")
     meta = REPORT_TYPES.get(report_type)
     if meta is None or not meta["admin"]:
@@ -150,6 +123,7 @@ def report_preview():
                     "title": report["title"], "subtitle": report["subtitle"]})
 
 
+# JSON: chart data for the Reports page.
 @bp.route("/api/reports-data")
 @admin_required
 def reports_data():

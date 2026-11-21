@@ -1,8 +1,6 @@
-/* Site-wide scroll reveals, driven by hooks/useScrollReveal.js.
-   Uses the individual `translate`/`scale`/`opacity` properties, so it never
-   collides with an element's own `transform` (hover lifts, tilts). The
-   `in` state is a keyframe animation with `backwards` fill, so once it has
-   played the element returns to its normal CSS and hover rules apply. */
+/* Scroll reveals (hooks/useScrollReveal.js). Uses the individual translate/
+   scale/opacity properties so an element's own transform is untouched; the
+   `in` keyframe uses `backwards` fill so normal CSS and hover resume after. */
 
 .js [data-sr='hide'] { opacity: 0; }
 .js [data-sr='hide'][data-srv='up'] { translate: 0 28px; }

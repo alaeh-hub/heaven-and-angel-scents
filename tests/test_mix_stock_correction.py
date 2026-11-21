@@ -33,12 +33,14 @@ def _batch(batch_id, alcohol_ml, water_ml, alcohol_rate="0.13209", water_rate="0
 
 
 def test_a_wrong_batch_works_out_to_the_right_split():
+    """A wrong batch works out to the right split."""
     right_a, right_w = fix.correct_split(D("466.667"), D("2333.333"), 1000, 200)
     assert (right_a, right_w) == (D("2333.333"), D("466.667"))
     assert right_a + right_w == D("2800")
 
 
 def test_corrections_total_stock_and_cost_across_batches():
+    """Corrections total stock and cost across batches."""
     lines = _batch(1, "466.667", "2333.333") + _batch(2, "233.333", "1166.667")   # 2800 and 1400 mixes
     out = fix.batch_corrections(lines, ALC, WAT, D(1000), D(200), to_ml)
     assert [c["batch_id"] for c in out] == [1, 2]
@@ -53,12 +55,14 @@ def test_corrections_total_stock_and_cost_across_batches():
 
 
 def test_batches_that_already_used_the_right_split_are_skipped():
+    """Batches that already used the right split are skipped."""
     lines = _batch(7, "2333.333", "466.667") + _batch(8, "466.667", "2333.333")
     out = fix.batch_corrections(lines, ALC, WAT, D(1000), D(200), to_ml)
     assert [c["batch_id"] for c in out] == [8]
 
 
 def test_a_water_line_logged_in_liters_is_converted():
+    """A water line logged in liters is converted."""
     lines = _batch(9, "466.667", "2333.333")
     lines[1]["qty_used"], lines[1]["qty_used_unit"] = D("2.333333"), "Liter"
     out = fix.batch_corrections(lines, ALC, WAT, D(1000), D(200), to_ml)
@@ -66,10 +70,12 @@ def test_a_water_line_logged_in_liters_is_converted():
 
 
 def test_a_batch_missing_one_of_the_two_lines_is_ignored():
+    """A batch missing one of the two lines is ignored."""
     assert fix.batch_corrections(_batch(4, "466.667", "2333.333")[:1], ALC, WAT, D(1000), D(200), to_ml) == []
 
 
 def test_gallon_correction_for_the_opening_alcohol():
+    """Gallon correction for the opening alcohol."""
     spec = importlib.util.spec_from_file_location(
         "gallon_stock_correction", Path(__file__).resolve().parent.parent / "scripts" / "gallon_stock_correction.py")
     gal = importlib.util.module_from_spec(spec)

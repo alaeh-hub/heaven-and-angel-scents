@@ -6,11 +6,7 @@ import { SPRING } from '../motion.js';
 /** How far down (px) the visitor must be before the button appears. */
 const SHOW_AFTER = 600;
 
-/**
- * A floating round button, at the bottom right of the screen, that glides the
- * page back to the top. Hidden until the visitor has scrolled a screen or
- * so down; sits under dialogs and the mobile detail bar lifts it up.
- */
+/** Floating round button that glides back to the top once scrolled down. */
 export default function BackToTop() {
   const reduce = useReducedMotion();
   const [show, setShow] = useState(false);
@@ -21,9 +17,7 @@ export default function BackToTop() {
       frame = 0;
       setShow(window.scrollY > SHOW_AFTER);
     };
-    // Scroll fires far more often than once per frame during momentum
-    // scrolling; batch to one read per rAF, like the page's other
-    // scroll-driven motion (Motion's useScroll does this internally).
+    // Batch scroll reads to one per frame.
     const onScroll = () => {
       if (!frame) frame = requestAnimationFrame(check);
     };

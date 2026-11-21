@@ -1,9 +1,6 @@
-"""Data behind the admin Reports page's charts (the /admin/api/reports-data endpoint).
+"""Data for the admin Reports charts, one function per chart group.
 
-One function per chart group so each query block is findable and the route
-itself only assembles the JSON. Every SQL fragment that depends on the chosen
-granularity comes from the fixed allow-list in services/trends.py — never from
-user text — so interpolating it stays injection-safe.
+Granularity SQL comes only from the fixed allow-list in services/trends.py.
 """
 from heaven_angel.db import query
 from heaven_angel.services.finance import (
@@ -15,9 +12,7 @@ from heaven_angel.utils import business_today
 
 def sales_breakdowns():
     """Units sold by variant, and sales/stock per branch (HQ warehouse excluded)."""
-    # Bottles only: a bulk product's qty_sold is mL, not a unit count, so
-    # it would swamp the bottle figures if added in. Same for every
-    # "units" figure below — bulk mL is reported separately as bulk_ml.
+    # Bottles only: bulk qty_sold is mL and would swamp unit counts (bulk_ml is separate).
     by_variant = query(
         """SELECT p.variant, COALESCE(SUM(s.qty_sold), 0) AS units_sold
            FROM products p LEFT JOIN sales s ON p.sku = s.sku
@@ -25,10 +20,7 @@ def sales_breakdowns():
            GROUP BY p.variant"""
     )
 
-    # Revenue is a straight SUM of qty_sold * unit_price per sale row. Because
-    # unit_price was captured at the moment each sale happened (the branch's
-    # effective price at that time), this stays accurate even though branches
-    # charge different prices from HQ and from each other.
+    # Revenue = SUM(qty_sold * unit_price); unit_price was captured at sale time.
     by_branch = query(
         """SELECT b.branch_name,
                   COALESCE(SUM(CASE WHEN p.unit <> 'BULK' THEN s.qty_sold ELSE 0 END), 0) AS units_sold,
@@ -52,12 +44,7 @@ def sales_breakdowns():
 def movement_trend(trend_bucket):
     """Stock movement per bucket and type, over the chosen window."""
     window_sql = trend_bucket["window"]
-    # Bottles and bulk mL are different units — one PRODUCTION batch of
-    # 10 bottles and another of 2000mL bulk aren't "2010" of anything.
-    # Kept apart here the same way sales/stock totals are split
-    # elsewhere (see units_sold/bulk_ml_sold above): each movement_type
-    # becomes up to two chart series, "<type> (bottles)" and
-    # "<type> (bulk mL)", built client-side from these two columns.
+    # Bottles and bulk mL are different units, so each movement type gives two series.
     movement_trend = query(
         f"""SELECT {trend_bucket['trunc']} AS day, sml.movement_type,
                    COALESCE(SUM(CASE WHEN p.unit <> 'BULK' THEN ABS(sml.change_qty) ELSE 0 END), 0) AS units,
@@ -74,17 +61,7 @@ def movement_trend(trend_bucket):
 
 def all_time_totals():
     """Returns (totals, package_totals) — both all-time."""
-    # Combined totals across every branch, regardless of each branch's price.
-    # All-time — feeds the top stat tiles and the Revenue vs. Capital chart,
-    # neither of which are windowed by the granularity switch.
-    #
-    # Revenue here is branch sales AND closed package orders combined —
-    # same "Closed only counts as a sale" rule used everywhere else
-    # package revenue is computed (see admin.partners()'s docstring and
-    # schema.sql's note on partner_inquiries.order_amount). units/
-    # package_order_count are kept as separate figures rather than added
-    # together, since "a unit sold at a branch" and "a package order" are
-    # not the same kind of count.
+    # All-time totals across branches (not windowed); revenue includes closed package orders.
     branch_totals = query(
         """SELECT COALESCE(SUM(CASE WHEN p.unit <> 'BULK' THEN s.qty_sold ELSE 0 END), 0) AS units,
                   COALESCE(SUM(CASE WHEN p.unit = 'BULK' THEN s.qty_sold ELSE 0 END), 0) AS bulk_ml,
@@ -111,35 +88,7 @@ def all_time_totals():
 def windowed_financials(trend_bucket):
     """Returns (financials, windowed_revenue, windowed_materials_cost) for the chosen window."""
     window_sql = trend_bucket["window"]
-    # Business-level financials.
-    # - capital: no longer a logged ledger (see schema.sql's note on
-    #   capital_contributions being removed) — it's SUM(total_cogs) over
-    #   cogs_logs, i.e. the cost of goods actually produced (each
-    #   formula's cost per unit x units logged as produced against it —
-    #   see production()). Always all-time, paired with all-time
-    #   revenue on the Revenue vs. Capital chart, same as before.
-    # - raw_materials_purchased: SUM(package_cost) over raw_materials,
-    #   all-time — everything ever spent buying material packages. Kept
-    #   purely as a comparison figure alongside capital now (see the
-    #   Revenue vs. Capital chart), it no longer feeds profit itself.
-    # - revenue_windowed / materials_cost / profit: scoped to the same
-    #   window as the granularity switch, for the Revenue, Materials &
-    #   Profit chart. Profit is a simple gross figure — revenue (branch
-    #   sales + closed package orders) minus cost of goods produced in
-    #   that window — it doesn't subtract other costs (rent, payroll,
-    #   etc.), which the app doesn't currently track. materials_cost here
-    #   is windowed by cogs_logs.created_at (when a batch was logged),
-    #   not by raw material purchase date — a batch's cost is incurred
-    #   when the goods are actually produced, not when the ingredients
-    #   were bought.
-    #
-    #   Package orders are windowed by partner_inquiries.created_at,
-    #   same as everything else windowed here — the moment of inquiry,
-    #   not the (untracked) moment an admin later marks it Closed. A
-    #   package inquired within the window but closed after it falls
-    #   outside; one inquired earlier but closed inside the window still
-    #   counts, same limitation the rest of this window-based reporting
-    #   already has for anything without its own "completed_at" column.
+    # Financials: capital = SUM(total_cogs) produced; profit = revenue - cost of goods sold, windowed.
     capital_total = query(
         "SELECT COALESCE(SUM(total_cogs), 0) AS v FROM cogs_logs", fetchone=True
     )["v"]
@@ -158,9 +107,7 @@ def windowed_financials(trend_bucket):
         fetchone=True,
     )["v"]
     windowed_revenue = windowed_branch_revenue + windowed_package_revenue
-    # Cost of goods SOLD in the window (finance.py): what the bottles that
-    # went out the door — sales, refills, freebies, closed package orders —
-    # cost to make. Production batches are capital, not this period's expense.
+    # Cost of goods SOLD in the window (finance.py); production batches are capital, not expense.
     windowed_materials_cost = cogs_sold(
         f"s.sold_at >= NOW() - {window_sql}", f"{PACKAGE_DATE_SQL} >= NOW() - {window_sql}")
     financials = {
@@ -178,10 +125,7 @@ def windowed_financials(trend_bucket):
 def kpi_tiles(granularity, trend_bucket, windowed_revenue, windowed_materials_cost):
     """KPI tiles + the Revenue/Cost/Profit series, with the preceding window for the up/down chips."""
     window_sql = trend_bucket["window"]
-    # --- KPI tiles + Revenue/Cost/Profit chart: one point per bucket over
-    # the same window, plus the immediately preceding window's totals for
-    # the up/down chips. Bucket expressions reuse the allow-listed `trunc`
-    # fragment with its column swapped for the table being bucketed.
+    # KPI tiles and Revenue/Cost/Profit series: one point per bucket, plus the previous window.
     def _bucket(col):
         return trend_bucket["trunc"].replace("sml.created_at", col)
 

@@ -24,8 +24,7 @@ test_logo.pdf
 # Uploaded product images stay local and are not committed
 static/uploads/
 
-# Partner portal front end (public-site/): dependencies, and the build
-# Flask serves — rebuilt on every deploy, see docs/DEPLOY.md
+# Portal dependencies and build output (rebuilt on deploy)
 public-site/node_modules/
 static/public-site/
 
@@ -36,9 +35,7 @@ htmlcov/
 check/
 
 # Local design/media drafts
-# Raw brand sources (icon.png is ~1.3 MB, new_wordmark.png has an opaque
-# black backdrop). The app only needs the files cut from them: favicon-*,
-# apple-touch-icon, og-icon, pwa/icon-*, new-wordmark.png/-sm.webp.
+# Raw brand sources; the app uses only the cut files (favicon-*, pwa/icon-*, etc.)
 static/img/icon.png
 static/img/new_wordmark.png
 static/img/background*.png
@@ -57,22 +54,13 @@ caddy-local-root.crt
 
 # Local media assets and generated files
 static/video/*.mp4
-# ...except the web-sized clip the public site plays, so a fresh clone
-# (see docs/DEPLOY.md) serves it. Keep it small: re-encode, don't swap
-# in a raw export.
+# ...except the small clip the public site plays (keep it web-sized)
 !static/video/craft-perfume.mp4
 
-# Reference-only prototype experiments and standalone scene demos
-public-site/prototype/
-
-# Mascot source art (keyed sheets, original drawings, prompts). Only the
-# built atlases in static/mascots/ are needed to run the app; rebuild them
-# from here with the page-mascot skill's scripts/mascot.py.
+# Mascot source art; only the built atlases in static/mascots/ are needed
 characters/
 
-# Full-size product renders (~7 MB each: box + bottle on a backdrop). The web
-# layers in static/img/scents/ were cut from these; only those are
-# needed to run the app.
+# Full-size product renders; the app uses the cuts in static/img/scents/
 assets/scent-renders/
 
 # Local database backup archives and restore safety copies (never commit)
@@ -80,29 +68,18 @@ backups/
 
 # Generated local test output
 *.pdf
-!docs/*.pdf
 coverage.xml
 
 # Promo video generation workspace (local only)
 promo-video/
 
-# Opening data import notes (local only)
-docs/OPENING_DATA_IMPORT.md
-stocks.txt
+# One-off opening data import scripts (local only)
 scripts/import_opening_*.py
-
-# Open design questions and working notes (local only)
-docs/OPEN_QUESTION_*.md
-
-# Costing reference files: the formulas are seeded in schema.sql, these are only the source sheets
-Costing_Calculator_By_Formula.xlsx
-formula.txt
 
 # Product catalogue exports (re-importable CSV downloads)
 products_*.csv
 
-# Temporary copy of schema.sql that the test suite writes into the repo root
-# (deleted when the run ends; a crashed run can leave it behind)
+# Temp schema copy written by tests (a crashed run can leave it)
 _test_schema_*.sql
 
 # Private keys and certificates: never commit
@@ -114,14 +91,14 @@ desktop.ini
 Thumbs.db
 .DS_Store
 
-# Backup archives and database dumps wherever they land (schema.sql is the only .sql that belongs in git)
+# Backup archives and DB dumps (schema.sql is the only .sql in git)
 *.sql.gz
 *.tar.gz
 heaven-angel-backup-*.zip
 before-restore-*.zip
 before_*_import_*.sql
 
-# Certificates and private working folders, spelled out
+# Certificates and private working folders
 certs/
 docs/private/
 
@@ -130,7 +107,7 @@ docs/private/
 *.tmp
 *.swp
 
-# Encrypted emailed-backup wrappers and any local passphrase notes
+# Encrypted backup wrappers and passphrase notes
 *-encrypted.zip
 backup-passphrase*
 .env.local

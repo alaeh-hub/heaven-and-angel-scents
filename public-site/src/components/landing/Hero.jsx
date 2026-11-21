@@ -22,19 +22,16 @@ const INTRO_S = 1.4;
 const INTRO_DELAY_S = 0.25;
 
 /**
- * 0..1 across [from, to] of the scroll. Mapped in a function on purpose:
- * handing plain ranges straight to style lets Motion offload them to the
- * browser's native scroll timeline, which misplaces short sub-ranges
- * like these (words drifted back to blurred further down the scroll).
+ * 0..1 across [from, to] of the scroll. Mapped in a function so Motion
+ * does not use the native scroll timeline (it misplaces short ranges).
  */
 function useSpan(progress, from, to) {
   return useTransform(progress, (v) => Math.min(1, Math.max(0, (v - from) / (to - from))));
 }
 
 /**
- * Wipe reveal at 0..1: a mask that uncovers the element left to right
- * behind a soft 20% edge. Off entirely once fully shown, since a mask
- * also clips anything outside the element's box (the buttons' glow).
+ * Wipe reveal at 0..1: a mask uncovering left to right behind a soft edge.
+ * Removed once fully shown (a mask also clips the buttons' glow).
  */
 function wipeMask(v) {
   if (v >= 1) return 'none';
@@ -55,25 +52,12 @@ function WipeWord({ progress, from, to, children }) {
 }
 
 /**
- * The opening scene. The offer (headline, lede, buttons) is there from
- * the first second: it wipes in on load, on a short clock of its own,
- * beside the scene rather than after it, so a partner opening a shared
- * link knows what the page is before they scroll at all.
- *
- * The scene plays itself on load, start to finish (the blueprint draws, the
- * surface fills in, the platforms light, the camera eases to rest), so
- * nothing waits on a scroll; scrolling during it only carries it on sooner. On desktop the hero pins for a
- * little over half an extra screen (160vh, see .hero-pin) and scrubs it
- * like a film strip:
- *   on load    golden angel wings unfurl under a halo (PerfumeScene)
- *   0.00-0.85  the wings beat and dissolve into streams of light that
- *              build Uriel H1 and Raphael A3, while the halo splits into
- *              the rings of their two lit platforms
- *   0.60-0.95  a gold glow rises from below
- * On phones the hero doesn't pin (see .hero-pin): the scene sits above
- * the copy in one normal column and plays by itself over AUTOPLAY_S
- * seconds once it has loaded. Under reduced motion none of this runs:
- * see HeroStatic.
+ * The opening scene. The offer (headline, lede, buttons) wipes in on load
+ * on its own clock, beside the scene. The scene plays itself on load
+ * (wings, light streams, two lit platforms, camera easing to rest);
+ * scrolling only carries it on sooner. Desktop pins the hero (160vh,
+ * .hero-pin) and scrubs it; phones play it once in a normal column
+ * over AUTOPLAY_S. Reduced motion: HeroStatic.
  */
 function HeroPinned() {
   const ref = useRef(null);
@@ -91,8 +75,7 @@ function HeroPinned() {
 
   const scene = useSpan(p, 0, 0.85);
   const [sceneReady, setSceneReady] = useState(false);
-  // When the opening ends, a still of its last frame replaces the live
-  // scene (which is then unmounted, freeing its GPU memory and loop).
+  // When the opening ends, a still replaces the live scene (frees GPU memory).
   const [still, setStill] = useState(null);
   const [stillShown, setStillShown] = useState(false);
 
@@ -127,14 +110,9 @@ function HeroPinned() {
   return (
     <section className="hero-pin" id="top" ref={ref}>
       <div className="hero-stage">
-        {/* Desktop: the glow fills the stage itself, outside the scene's
-            box, which sits off to one side (inside it, the glow's edges
-            showed as a rectangle). */}
+        {/* Desktop: glow fills the stage, outside the scene box (inside, its edges showed). */}
         {!narrow && <motion.div className="hero-glow-rise" style={{ opacity: glow }} aria-hidden="true" />}
-        {/* Scoped to the scene's own box (not the whole stage), so on
-            phones, where the stage grows taller than one screen to fit
-            the copy below, the glow stays pinned to the
-            scene instead of stretching down the whole section. */}
+        {/* Scoped to the scene box so on phones the glow does not stretch down the section. */}
         <div className="hero-scene-wrap">
           {narrow && <motion.div className="hero-glow-rise" style={{ opacity: glow }} aria-hidden="true" />}
 
@@ -145,8 +123,7 @@ function HeroPinned() {
             animate={sceneReady ? { opacity: 1, scale: 1 } : { opacity: 0, scale: 0.96 }}
             transition={{ ...SPRING_SOFT, opacity: { duration: 0.8 } }}
           >
-            {/* The still sits under the live scene; only once it has loaded
-                is the scene removed, so the swap shows no jump. */}
+            {/* Still sits under the live scene until loaded, so the swap has no jump. */}
             {still && (
               <img
                 className="hero-scene-still"

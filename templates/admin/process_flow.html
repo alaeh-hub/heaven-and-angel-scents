@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{# Admin: Process Flow, how a bottle is made and costed #}
 {% block title %}Process Flow{% endblock %}
 {% block heading %}Process Flow{% endblock %}
 
@@ -115,9 +116,7 @@
 {% endblock %}
 
 {% block content %}
-{# The numbers this page draws live in a data block INSIDE the page content (not only in the
-   script): the live refresh swaps the page only when the content's HTML changed, so a price or
-   stock change has to change this block, or it would be skipped as "nothing new". #}
+{# Keep the data block inside .content so live refresh sees changed numbers. #}
 <script type="application/json" id="pfData">{{ {
   'catalog': formula_catalog_json, 'specs': formula_specs, 'scent_oils': scent_oils_json,
   'base_cost': base_cost_json, 'bulk_rate': bulk_rate, 'bottle_unit': bottle_unit,

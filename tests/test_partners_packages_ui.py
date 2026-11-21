@@ -1,10 +1,7 @@
-"""Same collapsible mobile-card treatment as Record Sale/Customers (see
-test_record_sale_ui.py) applied to All partners, All packages, Package
-inquiries, and Branches — each row collapses to just its primary
-identity (Partner / Package / Company / Branch), with the rest behind
-a "Details" toggle. Only checks the rendered markup — the collapse/
-expand interaction itself is CSS + client-side JS, out of reach for a
-server-side test.
+"""Collapsible mobile rows (as Record Sale/Customers) for partners, packages, inquiries, branches.
+
+Each row collapses to its primary identity with the rest behind "Details".
+Only the markup is checked; the toggle itself is CSS + JS.
 """
 from factories import (login, make_branch, make_package, make_partner,
                        make_partner_inquiry, make_user)
@@ -25,6 +22,7 @@ def _row_count(sql, table):
 
 
 def test_partners_table_renders_collapsible_mobile_markup(client, sql):
+    """Partners table renders collapsible mobile markup."""
     _signed_in_admin(client, sql)
     make_partner(sql)
 
@@ -35,13 +33,12 @@ def test_partners_table_renders_collapsible_mobile_markup(client, sql):
     assert "table-collapsible" in html
     assert 'class="row-toggle-btn" aria-expanded="false"' in html
     assert 'class="mobile-toggle-row"' in html
-    # Contact, Package sales, Last inquiry collapse away — 3 per row.
-    # Other tests leave their own partners in the shared test database,
-    # so count rows rather than assume 1.
+    # 3 columns collapse per row; count rows (shared DB has other partners).
     assert html.count("mobile-detail") == _row_count(sql, "partners") * 3
 
 
 def test_packages_table_renders_collapsible_mobile_markup(client, sql):
+    """Packages table renders collapsible mobile markup."""
     _signed_in_admin(client, sql)
     make_package(sql)
 
@@ -52,12 +49,12 @@ def test_packages_table_renders_collapsible_mobile_markup(client, sql):
     assert "table-collapsible" in html
     assert 'class="row-toggle-btn" aria-expanded="false"' in html
     assert 'class="mobile-toggle-row"' in html
-    # Items, Reference value, Discount, Order price collapse away — 4
-    # per row (counted, same reason as the partners test above).
+    # 4 columns collapse per row (counted, same reason as above).
     assert html.count("mobile-detail") == _row_count(sql, "packages") * 4
 
 
 def test_partner_inquiries_table_renders_collapsible_mobile_markup(client, sql):
+    """Partner inquiries table renders collapsible mobile markup."""
     _signed_in_admin(client, sql)
     make_partner_inquiry(sql)
 
@@ -68,17 +65,10 @@ def test_partner_inquiries_table_renders_collapsible_mobile_markup(client, sql):
     assert "table-collapsible" in html
     assert 'class="row-toggle-btn" aria-expanded="false"' in html
     assert 'class="mobile-toggle-row"' in html
-    # Contact, Package, Status, Remarks collapse away; When is
-    # mobile-fold (duplicated in Company's own badge row) instead.
-    # Matches the closing quote of a class attribute specifically —
-    # this page's own <style> block also mentions "mobile-detail" a
-    # few times in CSS selectors/comments, which a bare substring count
-    # would double-count.
+    # 4 columns collapse; When is mobile-fold. Match the closing quote of the class
+    # attribute so "mobile-detail" in the page's <style> block is not counted.
     assert html.count('mobile-detail"') == _row_count(sql, "partner_inquiries") * 4
-    # The max-width column-width fix: these classes must land on the
-    # actual data cell, not just the <th> (see the CSS comment above
-    # .pi-col-company in partner_inquiries.html) — a <th>-only max-width
-    # never actually constrains an auto-layout column's real width.
+    # The max-width classes must be on the data cell, not just the <th>.
     assert 'class="pi-col-company"' in html
     assert 'class="pi-col-contact mobile-detail"' in html
     assert 'class="pi-col-package mobile-detail"' in html
@@ -86,6 +76,7 @@ def test_partner_inquiries_table_renders_collapsible_mobile_markup(client, sql):
 
 
 def test_branches_table_renders_collapsible_mobile_markup(client, sql):
+    """Branches table renders collapsible mobile markup."""
     _signed_in_admin(client, sql)
     make_branch(sql)
 
@@ -96,9 +87,7 @@ def test_branches_table_renders_collapsible_mobile_markup(client, sql):
     assert "table-collapsible" in html
     assert 'class="row-toggle-btn" aria-expanded="false"' in html
     assert 'class="mobile-toggle-row"' in html
-    # Location, Accounts, Added collapse away — 3 per row. schema.sql
-    # also seeds a non-HQ branch that's already in the list alongside
-    # the one just created here, so count rows rather than assume 1.
+    # 3 columns collapse per row; schema.sql also seeds a non-HQ branch, so count rows.
     cur = sql.cursor()
     cur.execute("SELECT COUNT(*) FROM branches WHERE is_hq = FALSE")
     branch_count = cur.fetchone()[0]

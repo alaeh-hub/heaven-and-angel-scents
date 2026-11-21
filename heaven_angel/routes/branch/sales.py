@@ -34,6 +34,7 @@ def sale_receipt(sale_id):
     )
 
 
+# Flash text after a sale or refill is recorded.
 def _recorded_message(sales):
     if len(sales) == 1:
         return f"{sales[0].sale_type} recorded."
@@ -109,10 +110,7 @@ def record_sale():
     employees = query(
         "SELECT user_id, username, role FROM users WHERE is_active = TRUE ORDER BY username"
     )
-    # Every distinct customer name logged at this branch, each paired
-    # with the address from that name's *first* sale (see schema.sql's
-    # comment on sales.customer_address) — feeds the Customer name
-    # autocomplete/autofill on the form below.
+    # Distinct customer names with the address from their first sale (autofill).
     customers = query(
         """SELECT s.customer_name AS name, s.customer_address AS address
            FROM sales s
@@ -194,6 +192,7 @@ def import_sales():
 
 
 # ---------------------------------------------------------------- sales history
+# Recent sales for this branch; today's can be voided.
 @bp.route("/sales-history")
 @branch_required
 def sales_history():

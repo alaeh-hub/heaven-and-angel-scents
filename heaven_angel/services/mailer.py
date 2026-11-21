@@ -24,18 +24,13 @@ from urllib.parse import quote
 
 from flask import current_app
 
-# Transient failures (the SMTP server hiccuping, a dropped connection) are
-# worth a couple of quick retries before giving up — a permanent failure
-# (bad credentials, rejected recipient) will just fail the same way again,
-# so this isn't trying to paper over those, only the kind of blip that a
-# second attempt a moment later typically clears. Already called from a
-# background thread (see routes/portal.py), so the extra second or two
-# here never holds up the inquirer's own response.
+# Retry transient SMTP failures; runs in a background thread so it never delays the user.
 _SEND_ATTEMPTS = 3
 _RETRY_DELAY_SECONDS = 2
 
 
 def _smtp_configured(cfg):
+    """True if the SMTP settings are filled in."""
     return bool(cfg.get("MAIL_SERVER") and cfg.get(
         "MAIL_DEFAULT_SENDER") and cfg.get("PARTNER_INQUIRY_NOTIFY_EMAIL"))
 
@@ -48,10 +43,7 @@ def _esc(value):
     return html_lib.escape(str(value))
 
 
-# Brand palette for the inline styles below. Same black + gold as the
-# admin UI and the PDF receipts/reports, so mail, receipts, and reports
-# read as one system. Constants because email has no stylesheet to put
-# them in: every element has to carry its own inline style.
+# Brand palette (black + gold) as constants because email needs inline styles.
 _INK = "#17140D"         # body text
 _MUTED = "#6B6453"       # labels, secondary text (passes AA on white)
 _FAINT = "#9A927E"       # footer / "Not provided" only
@@ -98,9 +90,7 @@ def _contact_actions(*, email, phone, preferred_contact, reference):
         "Email": (f"mailto:{quote(email, safe='@')}?subject={subject}", "Reply by email") if email else None,
         "Call": (f"tel:{dial}", "Call now") if dial else None,
         "SMS": (f"sms:{dial}", "Send SMS") if dial else None,
-        # Viber has no deep link that works reliably from every mail
-        # client for local-format numbers, so a Viber preference just
-        # offers the number itself (tapping it lets the phone pick Viber).
+        # No reliable Viber deep link, so Viber just shows the number.
         "Viber": (f"tel:{dial}", "Message on Viber") if dial else None,
     }
     picked = []
@@ -352,19 +342,7 @@ def send_partner_inquiry_email(
         "Sent automatically by the Heaven & Angel Scents partner portal.",
     ]
 
-    # Building the message (not just sending it) is inside this same
-    # try/except: company_name/package_name land straight in the Subject
-    # header below, and company_name is free text straight from the
-    # public, unauthenticated inquiry form — parse_required_text() only
-    # strips leading/trailing whitespace, so an embedded \r or \n in the
-    # middle of it (trivially sent by anyone POSTing the form directly,
-    # bypassing whatever a browser's <input> would normally allow) makes
-    # Python's own email policy raise ValueError("Header values may not
-    # contain linefeed or carriage return characters") the moment it's
-    # assigned to msg["Subject"] — before smtplib is ever touched. That
-    # used to happen outside this try/except entirely, breaking this
-    # function's "never raises" contract for a plain bad-input case, not
-    # just a real SMTP failure.
+    # Message building is inside the try: a newline in company_name would raise in the Subject header.
     try:
         msg = EmailMessage()
         msg["Subject"] = f"New {partner_type.lower()} inquiry: {company_name} ({package_name})"
@@ -374,10 +352,7 @@ def send_partner_inquiry_email(
             # So HQ can just hit "Reply" in their inbox to answer the
             # inquirer directly, instead of copying their address by hand.
             msg["Reply-To"] = email
-        # Plain text stays the primary body (some clients / spam filters
-        # prefer it, and it's what shows if HTML rendering is off); the HTML
-        # version is attached as an alternative that most inboxes — Gmail
-        # included — will prefer to display when available.
+        # Plain text is the primary body; the HTML version is the preferred alternative.
         msg.set_content("\n".join(body_lines))
         msg.add_alternative(
             _build_html_body(
@@ -419,6 +394,7 @@ def backup_recipient(cfg):
 
 
 def backup_email_configured(cfg):
+    """True if a backup email can be sent."""
     return bool(cfg.get("MAIL_SERVER") and cfg.get("MAIL_DEFAULT_SENDER") and backup_recipient(cfg))
 
 
@@ -464,9 +440,7 @@ def send_backup_email(*, zip_bytes, filename, subject, body):
         return False, ("The cryptography package that encrypts the backup isn't installed here. "
                        "Run: pip install -r requirements.txt, then restart the app.")
     try:
-        # Seal the backup into one opaque AES-256 file (.enc). Not a locked zip: Gmail refuses
-        # an archive it cannot look inside (see backup_crypto.py). Restore opens the .enc as it
-        # is, and scripts/decrypt_backup.py opens it by hand.
+        # AES-256 .enc, not a locked zip: Gmail refuses archives it cannot inspect.
         zip_bytes = encrypt_backup(zip_bytes, password)
         filename = filename.rsplit(".", 1)[0] + ".enc"
         msg = EmailMessage()

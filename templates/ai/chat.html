@@ -1,4 +1,5 @@
-{% extends "base.html" %}
+{% extends "base.html" %}
+{# Halo AI assistant, full-page chat #}
 {% block title %}Halo{% endblock %}
 {% block eyebrow %}{{ 'Admin Overview' if session.role == 'Admin' else session.branch_name }}{% endblock %}
 {% block heading %}Halo{% endblock %}
@@ -408,10 +409,7 @@
 {% endblock %}
 
 {% block content %}
-<!-- Halo's full-page view isn't in the sidebar anymore (only reachable
-     via the floating widget's expand icon, see base.html), so it needs
-     its own way back, the same back link every other page reached by
-     click-through uses (e.g. Package detail). -->
+{# Back link: this page is only reachable from the Halo widget. #}
 <div class="chat-back">
   <a href="{{ url_for('admin.dashboard') if session.role == 'Admin' else url_for('branch.dashboard') }}"
     class="hint">Back to Dashboard</a>

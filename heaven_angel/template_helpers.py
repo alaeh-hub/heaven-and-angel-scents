@@ -8,6 +8,7 @@ from heaven_angel import utils
 
 
 def peso(value):
+    """Format an amount as pesos."""
     try:
         return f"₱{decimal.Decimal(value):,.2f}"
     except (decimal.InvalidOperation, TypeError, ValueError):
@@ -15,6 +16,7 @@ def peso(value):
 
 
 def compact_peso(value):
+    """Format an amount as compact pesos (e.g. 1.2K)."""
     try:
         n = float(value)
     except (TypeError, ValueError):
@@ -28,6 +30,7 @@ def compact_peso(value):
 
 
 def register_template_helpers(app):
+    """Register the Jinja filters and helpers."""
     app.template_filter("compact_peso")(compact_peso)
     app.template_filter("peso")(peso)
     # Used by the product_thumb() macro (templates/_macros.html) to render
@@ -36,6 +39,7 @@ def register_template_helpers(app):
 
 
 def register_error_handlers(app):
+    """Register the error pages."""
     def _error_page(code, message, headers=None):
         response = render_template("errors/error.html", code=code, message=message), code
         return response + (headers,) if headers else response

@@ -12,6 +12,7 @@ def _admin(client, sql):
 
 
 def test_process_flow_page_is_admin_only(client, sql, app):
+    """Process flow page is admin only."""
     assert app.test_client().get(PROCESS_FLOW_URL).status_code in (302, 401, 403)
 
     branch_id = make_branch(sql)
@@ -21,6 +22,7 @@ def test_process_flow_page_is_admin_only(client, sql, app):
 
 
 def test_process_flow_page_renders_the_flow_for_each_formula(client, sql):
+    """Process flow page renders the flow for each formula."""
     _admin(client, sql)
     _save_materials(client, _make_role_materials(sql))
     resp = client.get(PROCESS_FLOW_URL)
@@ -39,6 +41,7 @@ def test_process_flow_page_renders_the_flow_for_each_formula(client, sql):
 
 
 def test_process_flow_is_in_the_production_tabs(client, sql):
+    """Process flow is in the production tabs."""
     _admin(client, sql)
     page = client.get("/admin/bulk-batches").get_data(as_text=True)
     subnav = page[page.index('<nav class="subnav"'):page.index("</nav>", page.index('<nav class="subnav"'))]
@@ -48,6 +51,7 @@ def test_process_flow_is_in_the_production_tabs(client, sql):
 
 
 def test_the_formulas_page_is_now_base_cost_of_goods(client, sql):
+    """The formulas page is now base cost of goods."""
     _admin(client, sql)
     resp = client.get("/admin/formulas")
     assert resp.status_code == 200

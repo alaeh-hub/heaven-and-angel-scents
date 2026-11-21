@@ -5,11 +5,7 @@ import { thumb } from '../../content/scentImages.js';
 
 const WORDS = ['Eau de parfum', 'Partner pricing', 'Small-batch runs', 'Easy reordering', '85 ml bottles', 'Distributors', 'Resellers'];
 
-/**
- * Two slow marquees under the hero, running against each other: the
- * bottles (the breadth of the range), then the house's own words in
- * large serif type. A look at what is on offer before any decision.
- */
+/** Two counter-running marquees under the hero: bottles, then the house's words. */
 export default function ScentRail() {
   const bottles = SCENTS.map((s, i) => (
     <div className="scent-chip" key={s.code}>

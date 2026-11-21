@@ -13,9 +13,7 @@ export default function PackagesSection({ slug, data, loading, scope, onScopeCha
   const options = [['all', 'All packages'], ...partnerTypes.map((t) => [t, `${t}s`])];
   const topDiscount = packages.length ? Math.max(...packages.map((p) => p.discount_percent)) : 0;
   const best = packages.length > 1 ? Math.max(...packages.map((p) => p.discount_percent)) : null;
-  // The big featured tile only exists with three or more packages: with
-  // one or two, every card is the same size, so switching tabs never
-  // resizes a card (the old per-tab size flip is what made them twitch).
+  // The big tile needs 3+ packages, so tabs never resize a card.
   const showLarge = packages.length > 2;
 
   return (
@@ -40,11 +38,7 @@ export default function PackagesSection({ slug, data, loading, scope, onScopeCha
 
         {data && packages.length > 0 && (
           <AnimatePresence mode="wait" initial={false}>
-            {/* One grid per result set (keyed by the scope the data is for, so
-                it swaps when the new data lands, not on the click). The old set fades out, then the new one
-                mounts and its cards rise in one after another. No card
-                animates its own size or position, so nothing stretches
-                or twitches while the set changes. */}
+            {/* One grid per result set, keyed by data scope: old set fades, new cards rise. No card animates size or position. */}
             <motion.div
               key={data.scope || 'all'}
               className="pkg-grid"

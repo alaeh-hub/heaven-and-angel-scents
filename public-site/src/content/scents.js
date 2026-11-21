@@ -1,6 +1,4 @@
-// The scent list: one entry per render in static/img/scents/.
-// One entry per render: the bottle alone and the box beside it, as two
-// transparent layers on a shared canvas (see Collection.jsx).
+// The scent list: one entry per render in static/img/scents/ (bottle and box layers).
 
 export const SCENT_ASPECT = 0.6761; // layer width / height
 export const SCENT_BOTTLE_CENTRE = 0.7732; // bottle centre line, 0-1 across the layer

@@ -13,9 +13,7 @@ from heaven_angel.utils import ValidationError
 
 D = decimal.Decimal
 
-# The oil bought per scent (scent_oil_restocks), counted as purchases of the Oil Scent
-# material, so it lands on that material's supplier (cost, qty, number of purchases and
-# latest date). LEFT JOIN it on material_id; every other material has no row.
+# Oil restocks counted as Oil Scent purchases (per supplier). LEFT JOIN on material_id.
 OIL_PURCHASES_SQL = """(SELECT oil.material_id AS material_id, SUM(sor.cost) AS cost, SUM(sor.qty) AS qty,
                                COUNT(*) AS n, MAX(sor.purchased_at) AS last_at
                         FROM scent_oil_restocks sor
@@ -52,6 +50,7 @@ def ensure_scent_oils(oil_material, scents):
 
 
 def load_scent_oils():
+    """Load every scent with its oil stock."""
     return query("SELECT base_code, scent_name, cost_per_unit, stock_qty FROM scent_oils "
                  "ORDER BY scent_name, base_code")
 
@@ -67,6 +66,7 @@ def oil_summary(rows):
 
 
 def scent_oil_template_csv(rows):
+    """CSV template for importing oil stock."""
     out = io.StringIO()
     writer = csv.writer(out)
     writer.writerow(CSV_HEADER)
@@ -76,6 +76,7 @@ def scent_oil_template_csv(rows):
 
 
 def _cell(raw, label, line):
+    """Parse an optional number from a CSV cell."""
     text = (raw or "").strip().replace(",", "")
     if text == "":
         return None

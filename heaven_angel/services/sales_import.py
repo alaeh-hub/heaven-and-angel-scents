@@ -74,9 +74,7 @@ _HEADER_HINTS = [
 _COL_WIDTHS = [16, 26, 9, 12, 12, 13, 18, 20, 26, 14, 12]
 XL_FONT = "Segoe UI"
 
-# A generous cap on one import batch — big enough for a real backlog of
-# unlogged sales, small enough that one bad file can't lock the sales
-# table for a very long transaction.
+# Cap per import batch, so one bad file cannot hold a long transaction.
 MAX_IMPORT_ROWS = 500
 
 
@@ -107,11 +105,7 @@ def build_sales_import_template(inventory):
     ws.row_dimensions[1].height = 22
     ws.freeze_panes = "A2"
 
-    # Row 2 is a filled-in example so the expected shape/format is
-    # obvious (dropdowns alone don't show a date format or that price is
-    # plain numeric, not "₱120") — parse_sales_import_workbook() always
-    # skips it, so leaving it in place (rather than deleting it first)
-    # can never accidentally import a real sale.
+    # Row 2 is an example row; the parser always skips it.
     example_values = [
         inventory[0]["sku"] if inventory else "SKU-HERE",
         (inventory[0]["item_name"] if inventory else "Example Item") + " — example row, not imported",
@@ -142,9 +136,7 @@ def build_sales_import_template(inventory):
     ws.add_data_validation(payment_dv)
     payment_dv.add(f"F2:F{last_data_row}")
 
-    # SKU dropdown fed by the reference sheet; Item then fills itself in
-    # from whichever SKU was picked. Item is reference-only (never read by
-    # the importer), so the formula is purely a convenience.
+    # SKU dropdown fills Item from the reference sheet (Item is never read on import).
     ref_sheet = "Products (reference)"
     if inventory:
         sku_dv = DataValidation(
@@ -170,10 +162,7 @@ def build_sales_import_template(inventory):
         if r > 2:
             ws.cell(row=r, column=4).number_format = XL_MONEY_FMT
 
-    # Lock the Item column (auto-filled from SKU) so typing over it can't
-    # wipe the formula: protect the sheet, then unlock every other cell
-    # people fill in. No password, so "Unprotect Sheet" still works if an
-    # admin ever needs it. Column/row resizing stays allowed.
+    # Protect the sheet and unlock every cell but Item (no password).
     for r in range(2, last_data_row + 1):
         for c in range(1, len(HEADERS) + 1):
             if c != 2:
@@ -234,9 +223,7 @@ def parse_sales_import_workbook(file_storage):
 
     ws = wb[SHEET_NAME] if SHEET_NAME in wb.sheetnames else wb.worksheets[0]
     rows = []
-    # Bounded read: a sheet that declares a huge empty range can't make the
-    # worker scan it all. Rows beyond the cap are caught by the caller's
-    # MAX_IMPORT_ROWS check.
+    # Bounded read: a huge empty range cannot make the worker scan it all.
     last_row = MAX_IMPORT_ROWS + 1000
     for excel_row_num, row in enumerate(
             ws.iter_rows(min_row=3, max_row=last_row, max_col=12, values_only=True), start=3):
@@ -247,6 +234,7 @@ def parse_sales_import_workbook(file_storage):
 
 
 def _cell(row, idx):
+    """Cell value at an index, or None if the row is short."""
     return row[idx] if idx < len(row) else None
 
 
@@ -276,14 +264,13 @@ def _parse_import_date(raw):
 
 
 def _parse_row(excel_row_num, row):
+    """Validate one import row and return its sale."""
     sku = str(_cell(row, 0) or "").strip()
     if not sku:
         raise ValidationError("SKU is required.")
 
     qty_raw = _cell(row, 2)
-    # Excel stores a whole number typed into a numeric cell as a float
-    # (e.g. 1.0) — str(1.0) is "1.0", which int() rejects outright, so a
-    # perfectly valid quantity would otherwise fail to parse.
+    # Excel stores whole numbers as floats (1.0); int(str()) would reject them.
     if isinstance(qty_raw, float) and qty_raw.is_integer():
         qty_raw = int(qty_raw)
     qty = parse_positive_int(qty_raw, "Qty Sold")
@@ -293,10 +280,7 @@ def _parse_row(excel_row_num, row):
         raise ValidationError(
             f"Sale Type must be one of: {', '.join(SALE_TYPES)}.")
 
-    # Freebie is always ₱0 — a giveaway/comp/sample, whatever the Price
-    # Charged column happens to say (blank is fine for it; every other
-    # sale_type still requires a strictly positive price — see
-    # utils.SALE_TYPES for why Freebie exists as its own type).
+    # Freebie is always 0 whatever the price column says; other types need a positive price.
     if sale_type == "Freebie":
         unit_price = decimal.Decimal("0")
     else:
@@ -305,9 +289,7 @@ def _parse_row(excel_row_num, row):
         if unit_price < decimal.Decimal("0.01"):
             raise ValidationError("Price Charged must be at least 0.01.")
 
-    # Freebie is never actually paid for, so Payment Method doesn't mean
-    # anything for it — forced to Cash regardless of what the column
-    # says, same as the manual Record Sale form does.
+    # Freebie is never paid for, so Payment Method is forced to Cash.
     if sale_type == "Freebie":
         payment_method = "Cash"
     else:
@@ -431,10 +413,7 @@ def import_sales_rows(branch_id, raw_rows, user_id):
                 notes = "Freebie / giveaway (imported)"
             else:
                 notes = "Imported from Excel" if item["payment_method"] == "Cash" else f"Imported from Excel — Credit — {item['buyer_name']}"
-            # Same stock rules as Record Sale (sale_stock.py): each row
-            # re-locks its stock row, so several rows for one SKU in the
-            # same file draw down one running total; a Refill takes HQ
-            # bulk and is refused at a branch.
+            # Same stock rules as Record Sale: rows re-lock stock; a Refill takes HQ bulk and is refused at a branch.
             sale_id = cur.lastrowid
             new_ids[item["row"]] = sale_id
             try:

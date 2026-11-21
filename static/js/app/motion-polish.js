@@ -1,18 +1,11 @@
-// Two small Motion (motion.dev) additions for the back office.
-// (Part of the app's main script; loaded in order by _app_scripts.html.)
-//
-// Both only ever use transform and opacity, both are skipped under
-// prefers-reduced-motion, and neither hides anything unless it is about to
-// animate it back in, so a page with scripting off (or Motion missing) is
-// unchanged.
+// Two small Motion (motion.dev) additions for the back office (loaded by _app_scripts.html).
+// Transform/opacity only, skipped under prefers-reduced-motion, and nothing is hidden
+// unless it is about to animate in, so no-JS or missing Motion leaves the page unchanged.
 
 var FX_EASE = [0.22, 1, 0.36, 1];
 
-// Cards that start below the fold lift in once, the first time they scroll
-// into view. Cards already on screen are left alone: the page-level reveal
-// (revealContent) is the one entrance on load, and an entrance stagger on top
-// of it is exactly what the app moved away from. Runs again after a real
-// soft navigation (see soft-nav.js), never for a same-page tab or filter.
+// Cards below the fold lift in once when first scrolled into view; on-screen cards are
+// left to the page reveal. Re-runs after a real soft navigation.
 function initBelowFoldReveal() {
     var M = window.Motion;
     if (!M || typeof M.inView !== 'function' || PREFERS_REDUCED_MOTION.matches) return;
@@ -33,8 +26,7 @@ function initBelowFoldReveal() {
         el.style.transform = 'translateY(18px)';
         // Returning nothing from the callback makes inView fire once per element.
         M.inView(el, function () {
-            // Motion commits the last keyframe as an inline style when it finishes;
-            // clear it a tick later so the card's own CSS (hover lift) owns transform again.
+            // Motion leaves the last keyframe inline; clear it so the card's CSS owns transform again.
             var clear = function () {
                 window.setTimeout(function () {
                     el.style.opacity = '';
@@ -52,10 +44,8 @@ function initBelowFoldReveal() {
     });
 }
 
-// A field the browser refuses on submit gives a short sideways shake, so the
-// eye lands on what needs fixing (the browser's own bubble says why). One
-// document-level listener, bound once: `invalid` does not bubble, so it is
-// caught in the capture phase and covers fields swapped in by soft navigation.
+// An invalid field shakes sideways on submit. One capture-phase document listener
+// (`invalid` doesn't bubble), so it covers soft-nav content too.
 function initFieldShake() {
     if (window.__fieldShakeBound) return;
     window.__fieldShakeBound = true;

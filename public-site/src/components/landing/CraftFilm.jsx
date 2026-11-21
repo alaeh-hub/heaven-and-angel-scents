@@ -5,13 +5,9 @@ import { useNarrow } from '../../hooks/useNarrow.js';
 import Chapter from '../Chapter.jsx';
 
 /**
- * The behind-the-scenes film. On desktop the frame grows to full width
- * as it scrolls into place; on phones, a scroll-linked transform on
- * something this large tends to lag a frame behind the scroll itself,
- * which reads as the frame shakily resizing rather than smoothly
- * growing, so it just holds its full size there instead. Either way it
- * plays (muted) only while it's on screen; visitors can pause it or
- * turn the sound on, and under reduced motion it never starts by itself.
+ * Behind-the-scenes film. Desktop: grows to full width on scroll; phones
+ * hold full size (a scroll-linked transform lags there). Plays muted only
+ * on screen; never autostarts under reduced motion.
  */
 export default function CraftFilm() {
   const frameRef = useRef(null);

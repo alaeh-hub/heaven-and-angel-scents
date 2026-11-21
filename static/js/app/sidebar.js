@@ -10,6 +10,7 @@ function initMobileSidebar() {
 
     function openMenu() {
         sidebar.classList.add('open');
+        if (typeof syncSidebarIndicator === 'function') syncSidebarIndicator();
         backdrop.classList.add('open');
         openBtn.setAttribute('aria-expanded', 'true');
         document.body.style.overflow = 'hidden';
@@ -23,6 +24,9 @@ function initMobileSidebar() {
     }
 
     openBtn.addEventListener('click', openMenu);
+    // The phone tab bar's Menu tab (mobile.css) opens the same drawer.
+    const tabMenu = document.getElementById('mTabMenu');
+    if (tabMenu) tabMenu.addEventListener('click', openMenu);
     if (closeBtn) closeBtn.addEventListener('click', closeMenu);
     backdrop.addEventListener('click', closeMenu);
 
@@ -32,10 +36,7 @@ function initMobileSidebar() {
 
     sidebar.querySelectorAll('a').forEach((link) => {
         link.addEventListener('click', () => {
-            // Clicking the tab that's already open shouldn't close the
-            // menu — see isSamePageNoOpLink()'s own comment for why
-            // this needs to check that at all instead of always
-            // closing on any sidebar link click.
+            // Clicking the already-open tab shouldn't close the menu (see isSamePageNoOpLink()).
             if (isSamePageNoOpLink(link)) return;
             closeMenu();
         });
@@ -50,15 +51,10 @@ function initSidebarNavTooltips() {
     const sidebar = document.getElementById('sidebar');
     if (!sidebar) return;
 
-    // Collapsed nav-link labels are only clipped out of view, not
-    // display: none (see style.css), so a screen reader still gets the
-    // text, but there's no visible label to read at a glance. Mirror
-    // each one into a native title tooltip as a fallback for anyone who
-    // mouses over the rail without lingering long enough to trigger the
-    // hover-expand.
+    // Collapsed labels are only clipped (screen readers still read them); mirror each
+    // into a title tooltip as a fallback before the hover-expand triggers.
     sidebar.querySelectorAll('.nav-link').forEach((link) => {
-        // Wrap the raw label text node in its own span so style.css can
-        // slide/fade it on expand without touching the icon or badge.
+        // Wrap the label text in a span so CSS can slide/fade it without touching icon/badge.
         link.childNodes.forEach((node) => {
             if (node.nodeType !== Node.TEXT_NODE || !node.textContent.trim()) return;
             const span = document.createElement('span');
@@ -73,8 +69,7 @@ function initSidebarNavTooltips() {
         link.title = clone.textContent.trim();
     });
 
-    // Stagger index for the expand animation (see style.css's
-    // --reveal-delay), top to bottom, capped so long menus don't lag.
+    // Stagger index for the expand animation (--reveal-delay), capped for long menus.
     sidebar.querySelectorAll('.nav-label, .nav-link:not(.nav-sub) .nav-text').forEach((el, i) => {
         el.style.setProperty('--i', String(Math.min(i, 14)));
     });
@@ -86,12 +81,9 @@ function isEditableTarget(el) {
     return !!el && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName));
 }
 
-// Wires up the brand header's pin button (and Ctrl/⌘+B) — the only way
-// to hold the sidebar expanded. Toggles html.sidebar-pinned, which every
-// collapsed-rail rule in style.css is scoped with
-// html:not(.sidebar-pinned), and persists the choice to localStorage.
-// The inline <head> script in base.html applies that stored choice (or
-// a touch/coarse-pointer default) before first paint.
+// Brand header pin button (and Ctrl/Cmd+B): toggles html.sidebar-pinned, which scopes
+// the collapsed-rail rules in style.css, and persists it to localStorage. base.html's
+// head script applies the stored choice (or a touch default) before first paint.
 function initSidebarPinToggle() {
     const btn = document.getElementById('sidebarPinToggle');
     if (!btn) return;
@@ -129,10 +121,8 @@ function initSidebarPinToggle() {
     });
 }
 
-// Expands the collapsed rail only once the pointer has rested on it for
-// a beat, so sweeping the cursor past the left edge doesn't fling the
-// whole menu open, and keeps it open through a brief slip off the edge.
-// Mouse/pen only — touch defaults to pinned (see base.html).
+// Expands the collapsed rail only after the pointer rests on it a beat (not on a
+// sweep past the edge) and keeps it open through a brief slip. Mouse/pen only.
 function initSidebarHoverIntent() {
     const sidebar = document.getElementById('sidebar');
     if (!sidebar) return;
@@ -156,8 +146,7 @@ function initSidebarHoverIntent() {
         schedule(false, CLOSE_DELAY);
     });
 
-    // Keyboard focus opens the rail too, but a mouse click on a link must
-    // not leave it stuck open, so only :focus-visible counts.
+    // Keyboard focus opens the rail, a mouse click must not leave it stuck: :focus-visible only.
     sidebar.addEventListener('focusin', (e) => {
         if (e.target.matches(':focus-visible')) sidebar.classList.add('is-kbd');
     });
@@ -166,16 +155,16 @@ function initSidebarHoverIntent() {
     });
 }
 
-// Positions the shared sliding highlight (#navIndicator) on the active
-// nav link. Called on load, after every soft nav (patchSidebarNav()),
-// when the search filter changes which rows are visible, and on resize.
+// Positions the sliding highlight (#navIndicator) on the active link: on load, after
+// soft nav, when search changes visible rows, and on resize.
 function syncSidebarIndicator() {
     const sidebar = document.getElementById('sidebar');
     const indicator = document.getElementById('navIndicator');
     if (!sidebar || !indicator) return;
+    // The phone drawer is off screen until opened (openMenu syncs it): skip layout reads.
+    if (!window.matchMedia('(min-width: 761px)').matches && !sidebar.classList.contains('open')) return;
 
-    // Groups only really fold away while the sidebar is pinned open (or on
-    // the phone drawer) — on the icon rail they always show (style.css).
+    // Groups fold only while pinned open (or on the phone drawer); the icon rail shows all.
     const foldable = document.documentElement.classList.contains('sidebar-pinned')
         || !window.matchMedia('(min-width: 761px)').matches;
     const link = Array.from(sidebar.querySelectorAll('.nav-link.active'))
@@ -216,8 +205,7 @@ function initSidebarIndicator() {
         }
     }
 
-    // Anything above the active row changing height (the header easing
-    // between layouts, a badge appearing, fonts settling) shifts it.
+    // Anything above the active row changing height (header, badge, fonts) shifts it.
     let raf = 0;
     const resync = () => {
         cancelAnimationFrame(raf);
@@ -233,11 +221,9 @@ function initSidebarIndicator() {
     }
 }
 
-// "Jump to…" filter at the top of the menu. Matches every word typed
-// against a link's label and its section name, highlights the hit, and
-// hides sections left empty. Enter opens the top result, ↓ moves into
-// the list, Esc clears then leaves. Ctrl/⌘+K focuses it from anywhere,
-// which also expands the collapsed rail (it's :focus-visible).
+// "Jump to..." filter: matches every typed word against link label and section,
+// highlights hits, hides empty sections. Enter opens the top result, Down moves into
+// the list, Esc clears then leaves. Ctrl/Cmd+K focuses it (expanding the rail).
 function initSidebarSearch() {
     const sidebar = document.getElementById('sidebar');
     const input = document.getElementById('sidebarSearch');
@@ -286,9 +272,8 @@ function initSidebarSearch() {
         let first = null;
 
         entries.forEach((entry) => {
-            // Group parents give way to their individual pages while searching.
-            // Shared smart matcher (any word order, one small typo); the
-            // plain substring test is only the fallback.
+            // Group parents give way to their pages while searching. Uses the shared smart
+            // matcher (any word order, one typo); substring is the fallback.
             const textMatch = !tokens.length || (window.SmartMatch
                 ? window.SmartMatch.score(raw, entry.haystack, '') !== -1
                 : tokens.every((t) => entry.haystack.includes(t)));
@@ -341,8 +326,7 @@ function initSidebarSearch() {
         }
     });
 
-    // Never leave the rail showing a filtered menu once the user is done
-    // with it: clear after picking a result or once focus leaves the menu.
+    // Clear the filter after picking a result or when focus leaves the menu.
     sidebar.addEventListener('click', (e) => {
         if (e.target.closest('.nav-link')) setTimeout(reset, 0);
     });
@@ -366,10 +350,8 @@ function initSidebarSearch() {
     });
 }
 
-// Top-bar search for laptops and desktops: a full field in the top bar. Focus
-// or typing drops a panel of pages built from the sidebar's own links (so the
-// two never drift apart). Choosing a result clicks the real sidebar link,
-// which keeps soft navigation and the active-page highlight as they were.
+// Top-bar search (desktop): a panel of pages built from the sidebar's own links, so
+// they never drift apart. Choosing one clicks the real sidebar link (keeps soft nav).
 function initTopbarSearch() {
     const sidebar = document.getElementById('sidebar');
     const root = document.getElementById('topbarSearch');
@@ -499,8 +481,7 @@ function initTopbarSearch() {
     input.addEventListener('blur', () => setTimeout(() => { if (document.activeElement !== input) close(); }, 120));
 }
 
-// Installable app (PWA): the service worker is what lets the browser offer
-// its own Install option (address-bar icon, menu). Static files only are
+// PWA: the service worker lets the browser offer Install. Static files only are
 // cached, never pages or data (static/sw.js).
 function registerServiceWorker() {
     if ('serviceWorker' in navigator) {
@@ -510,9 +491,8 @@ function registerServiceWorker() {
     }
 }
 
-// Arrow keys move between visible menu links (Home/End jump to the
-// ends; ↑ from the first link returns to the search field), the same as
-// a native list, instead of tabbing through two dozen links one by one.
+// Arrows move between visible menu links (Home/End jump; up from the first returns
+// to the search field), instead of tabbing through every link.
 function initSidebarKeyboardNav() {
     const sidebar = document.getElementById('sidebar');
     if (!sidebar) return;
@@ -537,8 +517,7 @@ function initSidebarKeyboardNav() {
     });
 }
 
-// Gives the sticky footer a lift shadow only while menu items are
-// scrolled underneath it.
+// Lift shadow on the sticky footer only while menu items scroll underneath it.
 function initSidebarScrollShadow() {
     const sidebar = document.getElementById('sidebar');
     if (!sidebar) return;
@@ -557,12 +536,10 @@ function initSidebarScrollShadow() {
     }
 }
 
-// Sidebar groups (Overview, Catalog & Supply, …) as drop-downs: each
-// .nav-label becomes a toggle and its links are wrapped so they can ease
-// open/closed (see "Collapsible nav groups" in style.css). The group
-// holding the current page opens on load and on every soft nav; other
-// groups default to closed (the first, Overview, to open) and remember
-// the user's choice in localStorage ('navGroups').
+// Sidebar groups as drop-downs: each .nav-label toggles its wrapped links (see
+// "Collapsible nav groups" in style.css). The current page's group opens on load and
+// soft nav; others default closed (Overview open) and the choice persists in
+// localStorage ('navGroups').
 function initNavAccordion() {
     const sidebar = document.getElementById('sidebar');
     if (!sidebar) return;
@@ -613,8 +590,7 @@ function initNavAccordion() {
             });
             if (n > 0) label.setAttribute('data-badge', n > 99 ? '99+' : String(n));
             else label.removeAttribute('data-badge');
-            // Page count, shown faintly on a closed group (grouped pages
-            // count once, via their parent link).
+            // Page count on a closed group (grouped pages count once, via their parent).
             label.setAttribute('data-count', String(inner.querySelectorAll('.nav-link:not(.nav-sub)').length));
         };
 
@@ -682,8 +658,7 @@ function initNavAccordion() {
         persist();
     });
 
-    // Soft nav moves .active between links (and badge counts can change):
-    // open the group of the new page, and refresh the counts.
+    // Soft nav moves .active and badge counts: open the new page's group, refresh counts.
     let queued = false;
     let activeMoved = false;
     new MutationObserver((mutations) => {

@@ -25,6 +25,7 @@ def _seed_admin_actions(sql, count, marker):
 
 
 def test_audit_log_page_2_shows_older_rows_not_on_page_1(client, sql):
+    """Audit log page 2 shows older rows not on page 1."""
     _signed_in_admin(client, sql)
     marker = f"pg-{unique_suffix()}"
     _seed_admin_actions(sql, 305, marker)
@@ -37,6 +38,7 @@ def test_audit_log_page_2_shows_older_rows_not_on_page_1(client, sql):
 
 
 def test_login_activity_page_param_preserves_outcome_filter(client, sql):
+    """Login activity page param preserves outcome filter."""
     _signed_in_admin(client, sql)
     resp = client.get(f"{LOGIN_ACTIVITY_URL}?outcome=failed&page=1")
     assert resp.status_code == 200

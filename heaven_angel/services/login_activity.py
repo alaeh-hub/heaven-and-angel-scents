@@ -13,10 +13,7 @@ from flask import current_app, request
 
 from heaven_angel.db import execute, query
 
-# Short, fixed labels for why an attempt failed — kept as an allow-list
-# (matching the same handful of branches login() can actually take)
-# rather than free text, so this stays filterable/groupable instead of
-# every row carrying a slightly different hand-written message.
+# Fixed failure labels (allow-list) so the log stays filterable.
 FAILURE_MISSING_FIELDS = "missing_fields"
 FAILURE_BAD_CREDENTIALS = "bad_credentials"
 FAILURE_WRONG_ROLE_TAB = "wrong_role_tab"
@@ -31,19 +28,9 @@ LOGIN_FAILURE_REASONS = {
     FAILURE_LOCKED_OUT: "Temporarily locked out (too many failed attempts)",
 }
 
-# Per-username lockout, on top of auth.login's IP-based rate limit
-# (10/min via flask-limiter). The IP limit alone doesn't stop a
-# distributed brute force against one specific account from many IPs;
-# this stops that regardless of how many source IPs are involved.
-#
-# A username is locked out once it has this many failed attempts within
-# LOCKOUT_WINDOW_MINUTES *since its last successful login* (a success
-# resets the count immediately, it doesn't just age out of the window).
+# Per-username lockout after repeated failures since the last success (beats distributed brute force).
 LOCKOUT_FAILURE_THRESHOLD = 5
-# Failures are counted per (username, source IP), so a stranger guessing the
-# admin's password from their own IP can't lock the real admin out from theirs.
-# A much higher total across ALL IPs still locks the account (distributed
-# brute force) - except for an IP that has signed in as that user before.
+# Failures count per (username, IP); a much higher all-IP total also locks the account.
 LOCKOUT_GLOBAL_THRESHOLD = 30
 LOCKOUT_WINDOW_MINUTES = 15
 

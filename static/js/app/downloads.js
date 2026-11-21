@@ -30,11 +30,8 @@ function showGenerateOverlay() {
     el.hidden = false;
 }
 
-// Called as real response bytes come in (see runFileGeneration()) —
-// switches the bar from the indeterminate sliding state (generation
-// has no measurable progress; send_file only hands back a
-// Content-Length once the file is already fully built) to a real,
-// determinate width.
+// Called as response bytes arrive: switches the bar from indeterminate to a real width
+// (Content-Length is only known once the file is fully built).
 function setGenerateProgress(fraction) {
     if (!generateOverlayEl) return;
     generateOverlayEl.querySelector('#genProgressTrack').classList.remove('indeterminate');
@@ -80,9 +77,7 @@ function triggerBlobDownload(blob, filename) {
     a.click();
     a.remove();
     if (window.Sfx) window.Sfx.play('download');
-    // Not revoked immediately — some browsers start the actual save
-    // asynchronously right after the click, and revoking too early can
-    // cancel that in-flight save.
+    // Revoke later: some browsers start the save asynchronously after the click.
     setTimeout(() => URL.revokeObjectURL(blobUrl), 30000);
 }
 
@@ -96,10 +91,7 @@ async function runFileGeneration(url) {
         const isFile = /application\/pdf|spreadsheetml|text\/csv/i.test(contentType);
 
         if (!res.ok || !isFile) {
-            // Not a file — e.g. an expired session bouncing to /login,
-            // or generate_report() redirecting back with a "no data
-            // matches those filters" flash. fetch() already followed
-            // any redirect, so res.url is wherever that landed.
+            // Not a file (e.g. expired session redirect or a "no data" flash); res.url is where it landed.
             window.location.href = res.url || url;
             return;
         }
@@ -126,9 +118,7 @@ async function runFileGeneration(url) {
         const filename = generateFileNameFromHeader(res.headers.get('content-disposition'));
         triggerBlobDownload(blob, filename);
     } catch (err) {
-        // Network hiccup, or a browser that doesn't support one of the
-        // fetch/stream APIs used above — fall back to a real navigation
-        // so the download still happens, just without the dialog.
+        // Network or unsupported-API failure: fall back to a plain navigation (no dialog).
         window.location.href = url;
     } finally {
         generateInFlight = false;

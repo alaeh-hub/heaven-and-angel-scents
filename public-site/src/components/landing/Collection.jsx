@@ -8,8 +8,7 @@ import Chapter from '../Chapter.jsx';
 import Reveal from '../Reveal.jsx';
 import DotField from './DotField.jsx';
 
-/** Women's and men's scents alternate along the shelf, so the red and
-    blue labels trade places; whichever side has more fills the tail. */
+/** Alternates women's and men's scents along the shelf; the larger side fills the tail. */
 function interleave(scents) {
   const her = scents.filter((s) => s.variant === 'Female');
   const him = scents.filter((s) => s.variant === 'Male');
@@ -23,9 +22,7 @@ function interleave(scents) {
 
 const SHELF = interleave(SCENTS);
 
-/** The shelf's frame is sized from the render's own proportions, and the
-    bottle's centre line, so the CSS can park the bottle in the middle of
-    the tile at rest and slide the whole shot back on hover. */
+/** Frame sized from the render's proportions and bottle centre line (CSS parks and slides it). */
 export const SHELF_VARS = {
   '--scent-aspect': SCENT_ASPECT,
   '--scent-centre': `${(SCENT_BOTTLE_CENTRE * 100).toFixed(2)}%`,
@@ -33,23 +30,17 @@ export const SHELF_VARS = {
 };
 
 /**
- * One scent: its bottle on its own, with the gift box tucked behind it.
- * Hovering (or focusing, or tapping on a touch screen, which has no hover)
- * slides the box out beside the bottle and shows the scent's name. The
- * two layers are cut from the same studio render on one canvas (see
- * static/img/scents/), so together they rebuild the original
- * shot exactly.
+ * One scent tile: bottle with its gift box behind. Hover, focus or tap
+ * slides the box out and shows the name (layers share one render canvas).
  */
 export function ScentTile({ scent, hidden, active, auto, eager, nearby }) {
   const [open, setOpen] = useState(false);
   const forHim = scent.variant === 'Male';
 
   const toggleOnTouch = (e) => {
-    // Mouse users get the box from hover alone; a click shouldn't
-    // fight it. Touch (and pen) has no hover, so a tap flips it.
+    // Mouse uses hover alone; touch and pen have no hover, so a tap flips it.
     if (e.pointerType === 'mouse') return;
-    // The swipe row opens whichever tile is centred; a tap just brings
-    // the tapped one to the centre.
+    // The swipe row opens the centred tile; a tap just centres the tapped one.
     if (auto) {
       e.currentTarget.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'smooth' });
       return;
@@ -92,8 +83,7 @@ export function ScentTile({ scent, hidden, active, auto, eager, nearby }) {
           draggable={false}
         />
       </div>
-      {/* Revealed with the box on hover, so the shelf can be browsed by
-          name; always shown where there's no hover. */}
+      {/* Shown with the box on hover; always shown without hover. */}
       <span className="bottle-tile-meta" aria-hidden="true">
         <span className="bottle-tile-code">{scent.code}</span>
         <span className="bottle-tile-name">{scent.name}</span>
@@ -104,14 +94,9 @@ export function ScentTile({ scent, hidden, active, auto, eager, nearby }) {
 }
 
 /**
- * The one marquee on the page: a slow, continuous shelf of the
- * collection's scents, each shown as its bottle alone. Pauses on hover,
- * where the bottle under the pointer slides over and its box appears
- * beside it. On touch screens (nothing to hover, so no way to pause it
- * or pick a bottle) and under reduced motion it becomes a still row the
- * visitor swipes through instead, tapping a bottle to see its box (see
- * the CSS). Sits over its own interactive dot grid (DotField), lit by
- * the cursor only within this section.
+ * The page's one marquee: a slow shelf of bottles that pauses on hover.
+ * On touch or reduced motion it is a swipe row (tap shows the box).
+ * Sits over its own DotField, lit only within this section.
  */
 export default function Collection() {
   const { slug } = useParams();
@@ -119,10 +104,7 @@ export default function Collection() {
   // Code of the tile centred in the swipe row (touch screens only).
   const [centred, setCentred] = useState(null);
 
-  // The track's own animation is compositor-only (transform) and cheap,
-  // but left running it's a layer the compositor keeps ticking forever;
-  // paused the moment the shelf scrolls off screen, like the canvas and
-  // WebGL loops elsewhere on the page.
+  // Pause the CSS animation off screen so the compositor stops ticking.
   useEffect(() => {
     const marquee = sectionRef.current?.querySelector('.marquee');
     if (!marquee) return undefined;
@@ -133,8 +115,7 @@ export default function Collection() {
     return () => io.disconnect();
   }, []);
 
-  // On a touch screen there is no hover, so the shelf is a swipe row and
-  // the tile nearest its centre is the one that opens its box.
+  // Touch: the tile nearest the swipe row centre opens its box.
   useEffect(() => {
     const marquee = sectionRef.current?.querySelector('.marquee');
     const track = marquee?.querySelector('.marquee-track');
@@ -168,8 +149,7 @@ export default function Collection() {
     };
   }, []);
 
-  // The boxes of the centred tile and its neighbours are fetched ahead of
-  // the swipe, so a box is already there when its tile opens.
+  // Preload boxes of the centred tile and neighbours so they are ready.
   const centredAt = SHELF.findIndex((s) => s.code === centred);
 
   return (
@@ -183,8 +163,7 @@ export default function Collection() {
                 View all products <ArrowRightIcon size={16} weight="bold" />
               </Link>
             </motion.div>
-            {/* Grouped so these two wrap as a pair if space runs low,
-                never splitting one onto its own line. */}
+            {/* Grouped so the pair wraps together. */}
             <div className="collection-cta-links">
               <Link to={`${productsPath(slug)}?gender=Male`} className="link-arrow">
                 For him <ArrowRightIcon size={16} weight="bold" />

@@ -1,9 +1,4 @@
-"""Shared pieces for the admin blueprint's route modules.
-
-Every module in this package registers its routes on the single `bp`
-below, so URLs and `url_for("admin.<endpoint>")` names are unchanged by
-the split into per-feature files.
-"""
+"""Shared blueprint `bp`: every admin route module registers on it."""
 from flask import Blueprint
 
 bp = Blueprint("admin", __name__, url_prefix="/admin")

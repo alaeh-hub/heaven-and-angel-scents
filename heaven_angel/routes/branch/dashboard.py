@@ -12,6 +12,7 @@ from heaven_angel.routes.branch._common import _branch_id, bp
 
 
 # ---------------------------------------------------------------- dashboard
+# Branch home: low stock, deliveries and today's sales.
 @bp.route("/")
 @branch_required
 def dashboard():
@@ -22,31 +23,20 @@ def dashboard():
            WHERE bi.branch_id = %s ORDER BY p.item_name""",
         (bid,),
     )
-    # BULK (Bulk/Refill) is left out: branches can't request it from
-    # HQ (see request_stock()), so flagging it as "reorder" is noise.
+    # BULK left out: branches can't request it, so a reorder flag is noise.
     low_stock = [row for row in inventory
                  if row["unit"] in BOTTLE_UNITS and row["stock_qty"] <= row["reorder_level"]]
-    # "SKUs carried" counts by base code, same as admin's Products page
-    # (A1-85ML, A1-50ML and A1-BULK are one SKU).
+    # SKUs carried count by base code (A1-85ML, A1-BULK... are one SKU).
     sku_count = len({base_code_from_sku(row["sku"], row["unit"]) for row in inventory})
 
-    # Suggested reorder quantity: top back up to the same "full" reference
-    # the dashboard/branch_stock fill-bar visualizations use elsewhere
-    # (reorder_level * 3), never less than 1. Purely a starting point —
-    # see the Reorder button below, which pre-fills Request Stock's cart
-    # with this but leaves it fully editable there before submitting.
+    # Suggested reorder qty: top up to reorder_level * 3, min 1; editable in the cart.
     for row in low_stock:
         row["suggested_qty"] = max(
             (row["reorder_level"] * 3) - row["stock_qty"], 1)
         # Only bottle sizes can be requested from HQ (see request_stock()).
         row["requestable"] = row["unit"] in BOTTLE_UNITS
 
-    # Pre-built querystring for "Reorder all low stock" — repeated sku/qty
-    # pairs that request_stock.html's JS reads with URLSearchParams.getAll()
-    # to seed the cart on load. Built here (not in the template) since a
-    # list-valued url_for() kwarg produces the same repeated-key querystring
-    # but doing it as plain urlencode keeps the two sku[]/qty[] lists
-    # trivially guaranteed to line up positionally.
+    # Querystring for "Reorder all low stock": repeated sku/qty keys seed the cart.
     reorder_all_url = None
     reorderable = [row for row in low_stock if row["requestable"]]
     if reorderable:
@@ -55,9 +45,7 @@ def dashboard():
         reorder_all_url = url_for(
             "branch.request_stock") + "?" + urlencode(pairs)
 
-    # A "request" is now a multi-item delivery (see stock_request_items) —
-    # this dashboard widget only needs the header plus a couple of totals,
-    # not the line-item detail itself (that's what the receipt is for).
+    # A request is a multi-item delivery; this widget needs the header and totals only.
     pending_requests = query(
         """SELECT sr.request_id, sr.delivery_number, sr.status, sr.requested_at,
                   COUNT(sri.item_id) AS item_count,
@@ -102,9 +90,7 @@ def dashboard():
     prev_week_revenue = sum(spark_revenue[:7])
     week_trend = percent_change(week_revenue, prev_week_revenue)
 
-    # Trend arrow on the Today's sales tile: today's revenue vs.
-    # yesterday up to this same time of day, so a morning isn't
-    # compared against a whole finished day.
+    # Trend arrow: today vs yesterday up to the same time of day.
     yesterday_revenue = query(
         """SELECT COALESCE(SUM(qty_sold * unit_price), 0) AS revenue
            FROM sales WHERE branch_id = %s

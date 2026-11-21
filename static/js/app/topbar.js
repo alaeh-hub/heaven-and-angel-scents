@@ -1,11 +1,7 @@
 // Flash messages, badges, sidebar/topbar patching, today's-sales chip
 // (Part of the app's main script; loaded in order by base.html.)
 
-// Fades a flash/toast out and removes it from the DOM 5s after it
-// appears — shared by the initial page-load flashes above and by
-// initSoftNav()'s appendFreshFlashes() below (a flash that shows up
-// after a soft-submitted form, without ever going through a real page
-// load, needs the exact same treatment or it never disappears).
+// Fades a flash/toast out and removes it after 5s; shared with soft-nav's appendFreshFlashes().
 function attachFlashDismiss(el) {
     setTimeout(() => {
         el.classList.add('flash-exit');
@@ -13,18 +9,9 @@ function attachFlashDismiss(el) {
     }, 5000);
 }
 
-// Brief scale bounce on a badge whose count just went up (a new stock
-// request, a new inquiry) — the same feedback treatment the theme
-// toggle already uses on click, applied here to a real, sparse state
-// change rather than every render.
-// Animates the standalone CSS `scale` property rather than `transform`,
-// so it composes with whatever positioning transform the badge already
-// has from CSS (e.g. .nav-badge's translateY(-50%), which the collapsed
-// sidebar rail swaps for translateY(0)) instead of replacing it. Plain
-// WAAPI with no fill, so nothing is left behind as an inline style once
-// it ends — an earlier Motion-based version pinned the expanded rail's
-// translateY(-50%) inline after every pulse, knocking the badge half
-// out of view on the collapsed rail.
+// Scale bounce on a badge whose count rose. Uses the CSS `scale` property so it composes
+// with the badge's positioning transform; plain WAAPI with no fill leaves no inline style
+// (a Motion version pinned translateY(-50%) inline and misplaced the collapsed-rail badge).
 function pulseBadge(el) {
     if (!el || typeof el.animate !== 'function'
         || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
@@ -34,14 +21,8 @@ function pulseBadge(el) {
     );
 }
 
-// Copies sidebar nav-link state (unread-count badges, and which link
-// is "active") from a freshly-fetched document onto the live page's
-// sidebar, which a soft nav/refresh never re-fetches or replaces
-// itself (see swapContent() below — only .content is swapped, the
-// sidebar stays the exact same DOM nodes throughout the session so
-// its own scroll position/hover state etc. isn't disturbed by every
-// navigation). Links are matched by href since that's the one thing
-// guaranteed identical between the live and freshly-rendered sidebar.
+// Copies sidebar badge counts and the active link from a fetched document onto the live
+// sidebar (only .content is swapped). Links are matched by href.
 function patchSidebarNav(freshDoc) {
     document.querySelectorAll('.nav-link[href]').forEach((link) => {
         const href = link.getAttribute('href');
@@ -71,20 +52,19 @@ function patchSidebarNav(freshDoc) {
         if (current) link.setAttribute('aria-current', current);
         else link.removeAttribute('aria-current');
     });
+    // Phone bottom tab bar (mobile.css): follow the fresh page's current tab.
+    document.querySelectorAll('.m-tab[href]').forEach((tab) => {
+        const freshTab = freshDoc.querySelector(`.m-tab[href="${tab.getAttribute('href')}"]`);
+        if (!freshTab) return;
+        tab.classList.toggle('active', freshTab.classList.contains('active'));
+        if (freshTab.getAttribute('aria-current')) tab.setAttribute('aria-current', 'page');
+        else tab.removeAttribute('aria-current');
+    });
     syncSidebarIndicator();
 }
 
-// Copies the topbar's eyebrow + heading (base.html's {% block eyebrow %}
-// / {% block heading %}) from a freshly-fetched document onto the live
-// page. Same reason this needs its own patch function as
-// patchSidebarNav() above: the topbar lives outside <main class="content">
-// (deliberately — see base.html), so swapContent() replacing .content
-// alone never touches it, and it was just sitting there still showing
-// whatever page the last *real* load rendered. That's what left the
-// page title/eyebrow stuck on (say) "Reports" after soft-navigating to
-// Record Sale, Scan Receipt, Partner Inquiries, AI Assistant, etc. —
-// .content, the sidebar's active link, and document.title all updated
-// correctly, only this was left behind.
+// Copies the topbar eyebrow + heading ({% block eyebrow/heading %}) from a fetched
+// document onto the live page; the topbar is outside .content, so swapContent() misses it.
 function patchTopbar(freshDoc) {
     const liveEyebrow = document.querySelector('.topbar .eyebrow');
     const freshEyebrow = freshDoc.querySelector('.topbar .eyebrow');
@@ -103,9 +83,8 @@ function patchTopbar(freshDoc) {
 
 const PREFERS_REDUCED_MOTION = window.matchMedia('(prefers-reduced-motion: reduce)');
 
-// Gold hairline along the top bar's bottom edge while a soft navigation
-// is in flight. Waits a beat before showing so instant loads don't
-// flicker it; finishing sweeps it to full width and fades it out.
+// Gold hairline on the top bar's edge during a soft navigation; delayed so instant
+// loads don't flicker.
 const navProgress = (() => {
     let showTimer = null;
     let shown = false;
@@ -140,10 +119,8 @@ const navProgress = (() => {
     return { start, done };
 })();
 
-// One-time entrance for the top bar's items on a full page load (never
-// on soft navigation, which keeps the same bar), plus the "content is
-// scrolled underneath" shadow, driven by an IntersectionObserver on a
-// marker above the sticky bar instead of a scroll listener.
+// Top bar entrance on a full page load only, plus the "scrolled underneath" shadow via
+// an IntersectionObserver on a marker above the sticky bar.
 function initTopbarMotion() {
     const bar = document.getElementById('topbar');
     if (!bar) return;
@@ -163,9 +140,7 @@ function initTopbarMotion() {
     }
 }
 
-// Odometer: each digit is a 0-9 column that slides to its value, so a
-// changing figure rolls instead of blinking. Transform-only, and only
-// the digits whose value changed actually move.
+// Odometer: each digit is a 0-9 column sliding to its value; transform-only, changed digits only.
 function setOdometer(el, text, opts) {
     if (!el) return;
     text = String(text);
@@ -215,10 +190,8 @@ function setOdometer(el, text, opts) {
     el.dataset.odoText = text;
 }
 
-// Top bar "Today" chip: re-fetched (small JSON, not a page render) when
-// a sale is recorded/voided anywhere this user can see, when the tab
-// comes back into view, and every few minutes so it rolls over at
-// midnight even on a quiet day.
+// Top bar "Today" chip: re-fetched (small JSON) on any visible sale/void, on tab
+// return, and every few minutes so it rolls over at midnight.
 let todaySalesInFlight = false;
 
 function refreshTodaySales() {
@@ -277,8 +250,7 @@ function initTodaySalesChip() {
         if (e.target === chip) chip.classList.remove('is-updated');
     });
 
-    // First paint: lay the odometers out at zero, then roll them up to
-    // today's figures once the top bar has entered.
+    // First paint: odometers at zero, then roll up to today's figures after the bar enters.
     let data = null;
     try { data = JSON.parse(chip.dataset.summary); } catch (e) { }
     if (data) {

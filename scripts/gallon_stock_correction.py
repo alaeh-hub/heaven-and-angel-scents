@@ -1,27 +1,17 @@
-"""Correct the opening Perfume Alcohol for a gallon that is 3,200 mL.
+"""Correct the opening Perfume Alcohol for a 3,200 mL gallon.
 
-scripts/import_opening_stock.py stocked the opening alcohol as 9 gallons, worked
-out with the US gallon (3,785.411784 mL): 34,068.706 mL for 4,500 pesos. The jugs
-actually hold 3,200 mL, so those 9 gallons are 28,800 mL: the purchase quantity
-and the stock were overstated by 9 x (3785.411784 - 3200) = 5,268.706 mL, and the
-cost per mL was understated (4500 / 34,068.706 = 0.1321 instead of 0.15625).
+The opening import used the US gallon, so 9 gallons came out as 34,068.706 mL
+instead of 28,800 mL (overstated by 5,268.706 mL, cost per mL understated).
+This takes the overstatement off the purchase quantity and stock and recomputes
+cost per mL. Run it on the server (it uses the app's database):
 
-This script takes that overstatement off the alcohol's purchase quantity and its
-stock, and recomputes the cost per mL from the package cost. It uses whatever
-database the app is configured for, so run it on the server:
-
-    python scripts/gallon_stock_correction.py            # report only, changes nothing
+    python scripts/gallon_stock_correction.py            # report only
     python scripts/gallon_stock_correction.py --apply    # correct it (asks to confirm)
+    docker compose exec web python scripts/gallon_stock_correction.py   # Docker
 
-Docker deployment:
-
-    docker compose exec web python scripts/gallon_stock_correction.py
-
-The app and schema.sql already make this exact correction by themselves when the
-alcohol record still matches the original import (34,068.706 mL for 4,500 pesos), so
-this script is for a record that has changed since (a restock, an edit): it takes
-only the opening overstatement off. Apply it ONCE. Restocked purchases are kept. Pass --gallons if the opening purchase was a
-different number of gallons.
+The app and schema.sql already fix a record that still matches the original
+import; use this for a record edited since. Apply ONCE; restocks are kept.
+Pass --gallons if the opening purchase was a different number of gallons.
 """
 import argparse
 import decimal

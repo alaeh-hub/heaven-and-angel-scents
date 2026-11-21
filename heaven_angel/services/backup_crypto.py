@@ -30,6 +30,7 @@ class BackupDecryptError(Exception):
 
 
 def _key(password, salt):
+    """Derive the encryption key from the passphrase with scrypt."""
     return Scrypt(salt=salt, **_SCRYPT).derive(password.encode("utf-8"))
 
 

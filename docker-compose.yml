@@ -1,7 +1,7 @@
 # Production stack: Caddy (HTTPS) -> web (gunicorn) -> db (MySQL), plus a
 # one-shot schema migration and a daily backup job.
 # Required in .env (see .env.example): DOMAIN, DB_ROOT_PASSWORD, DB_APP_PASSWORD,
-# SECRET_KEY. Full steps in docs/DOCKER_DEPLOY.md.
+# SECRET_KEY. Used by CI's smoke test and local runs; production uses systemd (see docs/PRODUCTION.md).
 
 x-logging: &default-logging
   driver: json-file
@@ -17,10 +17,10 @@ services:
     environment:
       MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:?set DB_ROOT_PASSWORD in .env}
       MYSQL_DATABASE: ${MYSQL_DB:-heaven_and_angel_scents}
-      # Limited user the app connects as; it only has rights on MYSQL_DATABASE.
+      # Limited app user, rights on MYSQL_DATABASE only.
       MYSQL_USER: ${DB_APP_USER:-heaven_app}
       MYSQL_PASSWORD: ${DB_APP_PASSWORD:?set DB_APP_PASSWORD in .env}
-    # Host-only access for MySQL Workbench; 3306 on the host is the local MySQL84.
+    # Host-only port for MySQL Workbench (host 3306 is local MySQL).
     ports:
       - "127.0.0.1:3307:3306"
     volumes:
@@ -36,9 +36,7 @@ services:
       retries: 30
       start_period: 20s
 
-  # Applies schema.sql on every `up`. It is idempotent (CREATE ... IF NOT EXISTS
-  # plus guarded migration blocks), so this covers both the first run and later
-  # schema changes. Back up before deploying schema changes (see docs/BACKUP.md).
+  # Applies schema.sql on every `up` (idempotent). Back up before schema changes.
   migrate:
     image: mysql:8.4
     restart: "no"
@@ -50,10 +48,7 @@ services:
       MYSQL_PWD: ${DB_ROOT_PASSWORD}
     volumes:
       - ./schema.sql:/schema.sql:ro
-    # Retries only while the db isn't accepting connections yet (after a
-    # Docker daemon restart containers start without honouring depends_on).
-    # Any other failure is a real SQL error in schema.sql: print it and stop
-    # at once instead of re-running the same failing script for 100 seconds.
+    # Retry only while the db is not up; any other failure is a real SQL error, so stop.
     command:
       - sh
       - -c
@@ -82,26 +77,23 @@ services:
     logging: *default-logging
     env_file: .env
     environment:
-      # The app only needs the limited heaven_app DB user; never hand it root.
-      # (environment: overrides whatever env_file brings in.)
+      # App gets the limited DB user, never root (overrides env_file).
       DB_ROOT_PASSWORD: ""
       MYSQL_ROOT_PASSWORD: ""
       APP_ENV: production
       FLASK_DEBUG: "0"
       ALLOW_DATA_RESET: "0"
-      # Set to 1 in .env ONLY to wipe test data via Admin > Clear Data, then set it back to 0.
+      # Set 1 in .env only to wipe test data via Clear Data, then back to 0.
       ALLOW_DATA_RESET_IN_PRODUCTION: ${ALLOW_DATA_RESET_IN_PRODUCTION:-0}
       MYSQL_HOST: db
       MYSQL_PORT: "3306"
       MYSQL_USER: ${DB_APP_USER:-heaven_app}
       MYSQL_PASSWORD: ${DB_APP_PASSWORD}
       MYSQL_DB: ${MYSQL_DB:-heaven_and_angel_scents}
-      # Only Caddy can reach this container (no published port), so trusting
-      # its X-Forwarded-* headers is safe.
-      # "same-origin" accepts whichever host the browser used (domain or LAN IP),
-      # unlike a fixed https://DOMAIN which silently kills realtime on other hosts.
+      # Only Caddy reaches this container, so X-Forwarded-* is trusted.
+      # "same-origin" accepts any host used (domain or LAN IP) for realtime.
       SOCKETIO_CORS_ALLOWED_ORIGINS: ${SOCKETIO_CORS_ALLOWED_ORIGINS:-same-origin}
-      # Required: the shared partner-portal link must survive restarts.
+      # Required so the portal link survives restarts.
       PARTNER_PORTAL_SLUG: ${PARTNER_PORTAL_SLUG:?set PARTNER_PORTAL_SLUG in .env}
       TRUST_PROXY: "1"
       FORWARDED_ALLOW_IPS: "*"
@@ -114,7 +106,7 @@ services:
       - "8000"
     volumes:
       - uploads:/app/static/uploads
-      # Safety copies written by Settings -> Backup -> Restore; kept across rebuilds.
+      # Restore safety copies; kept across rebuilds.
       - appbackups:/app/backups
 
   caddy:
@@ -134,8 +126,7 @@ services:
       - caddy_data:/data
       - caddy_config:/config
 
-  # Daily database dump + uploads archive into ./backups on the host. Copy that
-  # folder off the server too (see docs/BACKUP.md "Off-site copy").
+  # Daily DB dump + uploads archive into ./backups; copy it off the server too.
   backup:
     image: mysql:8.4
     restart: unless-stopped
@@ -156,13 +147,12 @@ services:
     entrypoint: ["/bin/bash", "-c"]
     command:
       - |
-        # pipefail: a failed mysqldump must fail the pipeline, otherwise gzip's
-        # success hides it and an empty .sql.gz is reported as "backup ok".
+        # pipefail: a failed mysqldump must not look like "backup ok".
         set -o pipefail
         while true; do
           ts=$$(date +%Y%m%d_%H%M%S)
           tmp="/backups/$${MYSQL_DB}_$$ts.sql.gz.tmp"
-          # Retry briefly so a daemon restart (db not up yet) doesn't cost a whole day.
+          # Retry briefly in case the db is still starting.
           ok=0
           for attempt in 1 2 3 4 5 6; do
             if mysqldump -h db -uroot --single-transaction --routines --triggers --events "$$MYSQL_DB" | gzip > "$$tmp" && [ "$$(stat -c %s "$$tmp")" -gt 200 ]; then
@@ -174,8 +164,7 @@ services:
           if [ "$$ok" = 1 ]; then
             mv "$$tmp" "/backups/$${MYSQL_DB}_$$ts.sql.gz"
             echo "backup ok: $$ts"
-            # Dead-man's-switch: ping only on success, so the monitor alerts when
-            # pings stop (failure, container down, or host down). Optional.
+            # Optional dead-man's-switch: ping only on success.
             if [ -n "$${BACKUP_HEARTBEAT_URL:-}" ]; then
               curl -fsS -m 10 --retry 3 "$$BACKUP_HEARTBEAT_URL" >/dev/null || echo "heartbeat ping FAILED: $$ts" >&2
             fi
@@ -187,12 +176,11 @@ services:
           sleep 86400
         done
 
-  # Optional off-host copy of ./backups (enable with: docker compose --profile offsite up -d).
-  # Configure the remote purely through .env, e.g. S3-compatible storage:
+  # Optional off-host copy of ./backups (--profile offsite), configured in .env:
   #   RCLONE_CONFIG_OFFSITE_TYPE=s3  RCLONE_CONFIG_OFFSITE_PROVIDER=Cloudflare
   #   RCLONE_CONFIG_OFFSITE_ACCESS_KEY_ID=...  RCLONE_CONFIG_OFFSITE_SECRET_ACCESS_KEY=...
   #   RCLONE_CONFIG_OFFSITE_ENDPOINT=...  OFFSITE_DEST=offsite:my-bucket/heaven-angel
-  # Uses `copy` (never `sync`), so deleting local files never deletes the off-host copy.
+  # Uses `copy`, not `sync`, so local deletes never reach the off-host copy.
   offsite:
     image: rclone/rclone:1.68
     profiles: ["offsite"]
@@ -200,7 +188,7 @@ services:
     logging: *default-logging
     env_file: .env
     environment:
-      # rclone only needs its own RCLONE_* / OFFSITE_* settings: blank every app secret.
+      # rclone needs only RCLONE_*/OFFSITE_*; blank the app secrets.
       SECRET_KEY: ""
       DB_ROOT_PASSWORD: ""
       DB_APP_PASSWORD: ""

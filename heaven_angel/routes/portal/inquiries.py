@@ -22,6 +22,7 @@ class _PartnerLockUnavailable(Exception):
     """Raised when an identity lock cannot be acquired before its timeout."""
 
 
+# Lock name for one partner identity (MySQL names max 64 bytes).
 def _partner_lock_name(kind, identity):
     normalized = (identity or "").strip().casefold()
     digest = hashlib.sha256(normalized.encode("utf-8")).hexdigest()
@@ -121,6 +122,7 @@ def _match_or_create_partner(partner_type, company_name, contact_person, phone, 
     return partner_id
 
 
+# The package if it exists and is active, else None.
 def active_package_or_none(package_id):
     return query(
         "SELECT * FROM packages WHERE package_id = %s AND is_active = TRUE",
@@ -169,16 +171,8 @@ CONTACT_METHODS = ("Call", "SMS", "Viber", "Email")
 GENERAL_INQUIRY_LABEL = "General inquiry"
 
 
-# The inquiry endpoints are the only writes (and the only endpoints that
-# fan out to email + a DB row per hit) anywhere in the unauthenticated
-# portal blueprint — there's no login to throttle abuse through the way
-# auth.login() does ("10 per minute"), so they get their own limit
-# instead. Two windows, same style as AI_CHAT_RATE_LIMIT in config.py:
-# tight enough to blunt a scripted flood of fake inquiries, loose enough
-# that a real distributor fumbling the form a few times in a row (or
-# several people behind the same office/shared IP) never gets blocked.
-# Shared between the package and general endpoints, so alternating
-# between the two doesn't double what one visitor can send.
+# Inquiry endpoints are the only unauthenticated writes, so they get their own
+# rate limit, shared by both endpoints.
 _inquiry_limit = limiter.shared_limit("5 per minute;30 per day", scope="portal-inquire")
 
 
@@ -262,6 +256,7 @@ def _honeypot_tripped(data):
     return bool(str(data.get("website") or "").strip())
 
 
+# Pretend success to bots so they learn nothing.
 def _fake_success():
     return jsonify(message="Thanks! Your inquiry has been sent.", reference=None), 201
 
@@ -273,21 +268,14 @@ def _record_inquiry(fields, *, package_id, package_name, package_snapshot, order
     201 response, carrying the inquiry's reference."""
     try:
         with _identity_locks(fields["email"], fields["phone"], package_id):
-            # End the snapshot this request's earlier SELECTs opened
-            # (REPEATABLE READ): after taking the locks, the duplicate
-            # and partner lookups below must see whatever a racing
-            # request has just committed.
+            # End the earlier snapshot so lookups see any racing commit.
             get_db().commit()
 
             duplicate = _recent_duplicate(fields, package_id)
             if duplicate:
                 return _inquiry_response(duplicate["inquiry_id"])
 
-            # The partner link, the inquiry and its package-contents
-            # snapshot (partner_inquiry_items, what Fulfill later takes
-            # out of HQ stock) are saved together: an inquiry can never
-            # exist without its items, and a failed insert can't leave a
-            # partner behind with an inquiry_count it never earned.
+            # Partner link, inquiry and item snapshot are saved together or not at all.
             with transaction() as conn:
                 partner_id = _match_or_create_partner(
                     fields["partner_type"], fields["company_name"], fields["contact_person"],
@@ -318,10 +306,7 @@ def _record_inquiry(fields, *, package_id, package_name, package_snapshot, order
             error="Your inquiry couldn't be matched safely right now. Please try again shortly."
         ), 503
 
-    # Off the request thread — see _send_inquiry_notification_async()'s
-    # docstring above. The inquiry row is already committed at this
-    # point, so the visitor's own response below no longer waits on
-    # mailer.py's smtplib call (up to a 10s timeout) at all.
+    # Email goes out off-thread; the inquiry is already committed.
     threading.Thread(
         target=_send_inquiry_notification_async,
         args=(
@@ -333,10 +318,7 @@ def _record_inquiry(fields, *, package_id, package_name, package_snapshot, order
         daemon=True,
     ).start()
 
-    # Realtime: every open HQ Admin tab's "Partner Inquiries" sidebar
-    # badge (and the Partners page, since a new partner may have just
-    # been created) updates immediately — see main.js's initRealtime(),
-    # which already refetches that badge on the "partner_inquiries" scope.
+    # Realtime: refresh HQ's inquiry badge and Partners page.
     notify_admin(["partners", "partner_inquiries"])
     notify_bell(
         f"New {fields['partner_type'].lower()} inquiry from {fields['company_name']} — {package_name}",
@@ -381,16 +363,8 @@ def inquire(slug, package_id):
     if pkg["partner_scope"] not in ("Both", fields["partner_type"]):
         return jsonify(error="That package isn't available for your partner type."), 403
 
-    # order_amount snapshots what this partner would actually pay for the
-    # package right now — same reference-total-then-discount math as
-    # api_package_detail() above, computed fresh here rather than
-    # trusting anything the browser sends. Frozen permanently at insert
-    # time, same "snapshot, don't recompute later" philosophy as
-    # package_name_snapshot itself — see schema.sql's note on
-    # partner_inquiries.order_amount for why this only counts once an
-    # admin marks the inquiry Closed.
-    # The item rows themselves are also snapshotted onto the inquiry
-    # (partner_inquiry_items) — they're what Fulfill takes out of HQ stock.
+    # order_amount snapshots the partner's price now (never browser-sent); it counts
+    # only once an admin marks the inquiry Closed. Item rows are snapshotted too.
     items = query(
         """SELECT pi.sku, pi.qty, p.item_name, p.unit, p.price
            FROM package_items pi JOIN products p ON p.sku = pi.sku

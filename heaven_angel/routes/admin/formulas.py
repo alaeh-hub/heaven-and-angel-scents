@@ -21,33 +21,16 @@ from heaven_angel.routes.admin._common import bp
 @bp.route("/formulas")
 @admin_required
 def formulas():
-    """Cost-of-goods settings: the Bulk/Refill rate per mL (unchanged —
-    see bulk_rate_settings/save_bulk_rate() below), a flat base cost per
-    Bottled packaging size (see unit_cogs_settings in schema.sql) — this
-    is what production() actually charges a Bottled run — plus a
-    reference-only packaging materials formula per size (see
-    unit_formula_items/formula_items_by_unit() and
-    add_formula_item()/delete_formula_item() below). The formula's
-    computed total is only ever a reference for setting the base cost
-    above by hand; nothing here feeds production()'s cogs_per_unit
-    automatically. Each size's own cost-per-new-bottle/cost-per-refill
-    reference is pulled straight from whichever active bulk batch(es)
-    actually targeted that size at creation (see create_bulk_batch()'s
-    target_unit/target_bottle_qty) — a size nobody has targeted yet
-    shows no reference, rather than a generic cross-batch guess.
+    """Cost-of-goods settings: Bulk/Refill rate per mL and flat base cost per Bottled size.
+
+    Formula items per size are reference only; production() charges the base cost.
+    References come from active batches that targeted that size (none if untargeted).
     """
     bulk_rate = query(
         "SELECT rate_per_ml FROM bulk_rate_settings WHERE id = 1", fetchone=True,
     )["rate_per_ml"]
-    # Same idea as the per-size reference below, but for the one shared
-    # Bulk/Refill rate: averaged all-in cost per mL (total_cost ÷
-    # total_volume_ml — same figure the Bulk Batches page itself shows
-    # as each batch's "Cost / mL", see all_in_cost_per_ml there) across
-    # every active batch (remaining_ml > 0), so the two pages always
-    # agree on what a batch "costs per mL" rather than this one quietly
-    # using the liquid-only cost_per_ml column instead. Purely
-    # informational, same as the Bottled reference above — Save rate
-    # still has to be clicked by hand.
+    # Bulk/Refill reference: average all-in cost per mL across active batches (same
+    # figure as the Bulk Batches page). Informational; Save rate is manual.
     active_batches_for_rate = query(
         "SELECT total_cost, total_volume_ml FROM bulk_batches WHERE remaining_ml > 0")
     reference_rate_per_ml = None
@@ -64,15 +47,8 @@ def formulas():
     cogs_rows = query(
         "SELECT unit, base_cost_per_unit FROM unit_cogs_settings")
     cogs_by_unit = {r["unit"]: r["base_cost_per_unit"] for r in cogs_rows}
-    # Reference numbers now come from actual batches that picked THIS
-    # size as their target (see create_bulk_batch()'s target_unit/
-    # target_bottle_qty) — same real cost_per_new_bottle/
-    # cost_per_refill_bottle split the Bulk Batches page computes for
-    # that batch, averaged if more than one active batch targets the
-    # same size. A size nobody has ever targeted yet (or whose only
-    # batches are already depleted) gets no reference at all, instead of
-    # a generic cross-batch/formula estimate that isn't really about
-    # that size.
+    # Per-size reference: averaged cost_per_new/refill_bottle of active batches that
+    # targeted this size; none if no batch did.
     target_batches = query(
         """SELECT batch_id, target_unit, target_bottle_qty, total_cost
            FROM bulk_batches
@@ -102,9 +78,7 @@ def formulas():
         refs_by_unit.setdefault(b["target_unit"], []).append(
             (cost_per_new, cost_per_refill))
 
-    # FORMULA_UNITS is PRODUCT_UNITS minus BULK — every bottle size gets a
-    # row here (defaulting to 0 if somehow missing) so admins always see
-    # the full picture.
+    # FORMULA_UNITS is PRODUCT_UNITS minus BULK; every size gets a row (default 0).
     units = []
     for u in FORMULA_UNITS:
         refs = refs_by_unit.get(u)

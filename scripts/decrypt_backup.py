@@ -1,15 +1,10 @@
-"""Open an encrypted backup file (.enc) by hand.
-
-The emailed backup is encrypted with BACKUP_ZIP_PASSWORD (see services/backup_crypto.py). The
-app's Restore screen opens it as it is; this script is for when you want the backup zip itself,
-for example to look inside it or to restore it with mysql.
+"""Decrypt an emailed backup (.enc) back to its zip, for inspection or mysql restore.
 
     python scripts/decrypt_backup.py heaven-angel-backup-20261119-1430.enc
     python scripts/decrypt_backup.py backup.enc restored.zip
 
-The passphrase is asked for at a hidden prompt (or read from the BACKUP_ZIP_PASSWORD environment
-variable), never given as an argument, so it does not land in shell history. Nothing is changed
-except the output file, which is never overwritten if it already exists.
+The passphrase (BACKUP_ZIP_PASSWORD) is read from a hidden prompt or that env
+variable. The output file is never overwritten. The app's Restore opens .enc itself.
 """
 import getpass
 import os

@@ -11,11 +11,8 @@ import Reveal from '../Reveal.jsx';
 const viberLink = (number) => `viber://chat?number=${encodeURIComponent(`+${number.replace(/\D/g, '')}`)}`;
 
 /**
- * The last thing on the page before the footer, built to get an inquiry:
- * a short headline, one big button, three reasons to send it (each one a
- * promise the page already makes elsewhere) and, under them, every
- * direct line HQ has configured (config.py's PORTAL_CONTACT_*). Channels
- * that aren't set are left out, so there's never a placeholder number.
+ * Closing inquiry band: headline, big button, three reasons and the direct
+ * lines HQ configured (PORTAL_CONTACT_*); unset channels are left out.
  */
 export default function ClosingCta() {
   const { site, openInquiry } = useSite();

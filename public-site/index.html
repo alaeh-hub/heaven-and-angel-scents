@@ -9,10 +9,7 @@
   <title>Business Partners · Heaven &amp; Angel Scents</title>
   <meta name="description" content="Browse Heaven &amp; Angel Scents' wholesale perfume packages and submit a partner inquiry — pricing, bundles, and bottle details for distributors and resellers.">
   <meta name="robots" content="noindex, nofollow">
-  <!-- Link-preview card (Messenger/Viber/Facebook) for the portal link HQ
-       shares directly with a distributor/reseller — this page is never
-       linked publicly (see routes/portal.py's slug gating), but a shared
-       chat link still gets unfurled by the recipient's app. -->
+  <!-- Link-preview card for shared portal links (page itself is unlisted). -->
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="Heaven &amp; Angel Scents">
   <meta property="og:locale" content="en_PH">
@@ -32,11 +29,7 @@
   <link rel="icon" type="image/png" sizes="48x48" href="/static/img/favicon-48.png">
   <link rel="icon" type="image/png" sizes="32x32" href="/static/img/favicon-32.png">
   <link rel="apple-touch-icon" sizes="180x180" href="/static/img/apple-touch-icon.png">
-  <!-- The hero scene's bottle labels (textures in PerfumeScene), fetched
-       alongside the app bundle so the first frame isn't waiting on them.
-       crossorigin matches three.js's TextureLoader (it requests images in
-       anonymous CORS mode); without it the browser can't reuse these and
-       downloads each label a second time. -->
+  <!-- Preload the hero bottle labels; crossorigin matches three.js loading. -->
   <link rel="preload" as="image" href="/static/img/scene/label-h1-uriel.webp" crossorigin="anonymous">
   <link rel="preload" as="image" href="/static/img/scene/label-a3-raphael.webp" crossorigin="anonymous">
 </head>

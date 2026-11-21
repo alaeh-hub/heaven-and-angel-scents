@@ -11,21 +11,12 @@ const ANY = '';
 const VIA = { Call: 'phone call', SMS: 'SMS', Viber: 'Viber', Email: 'email' };
 
 /**
- * The inquiry dialog, for one package (from its detail view) or for no
- * package at all (the general "Send an inquiry" buttons, see
- * InquiryProvider). `fixedType` fixes "You are a" for a package scoped
- * to one partner type; otherwise it's asked. The name field relabels for
- * a Reseller, who may be an individual rather than a business (it's
- * stored as company_name either way, see routes/portal.py).
- *
- * `submit(payload)` does the actual request (and any CSRF retry) and
- * resolves to the server's {message, reference}. Server errors show
- * inline above the buttons; success swaps the form for a confirmation
- * with the inquiry's reference and what happens next.
- *
- * Inside the package sheet its fixed overlay covers the sheet (the
- * sheet's transform makes it the containing block); opened from the
- * page itself, it covers the whole page.
+ * Inquiry dialog for one package or none (general inquiry, see
+ * InquiryProvider). `fixedType` fixes "You are a"; Resellers get a
+ * name label that allows individuals (stored as company_name).
+ * `submit(payload)` sends (with CSRF retry) and resolves to the server's
+ * {message, reference}; errors show inline, success swaps in a confirmation.
+ * Its fixed overlay covers the package sheet when opened inside it.
  */
 export default function InquirySheet({
   title,
@@ -48,8 +39,7 @@ export default function InquirySheet({
   const firstFieldRef = useRef(null);
   useBodyScrollLock(open);
 
-  // A general inquiry can arrive pre-filled ("I'm interested in ..."
-  // from a product card); only fill an untouched message box.
+  // Prefill a general inquiry only into an untouched message box.
   useEffect(() => {
     if (open && initialMessage) setFields((f) => (f.message ? f : { ...f, message: initialMessage }));
   }, [open, initialMessage]);
@@ -59,7 +49,7 @@ export default function InquirySheet({
     const focusTimer = setTimeout(() => firstFieldRef.current?.focus(), 120);
     const onKey = (e) => {
       if (e.key === 'Escape') {
-        // Don't also close the package sheet underneath.
+        // Do not also close the package sheet underneath.
         e.stopImmediatePropagation();
         onClose();
       }
@@ -96,8 +86,7 @@ export default function InquirySheet({
     }
   };
 
-  // The server's message already carries the reply time, so it isn't
-  // repeated here.
+  // The server message already carries the reply time.
   const nextSteps = [
     'Our team reviews your inquiry.',
     `We reach you by ${VIA[sent.via] || 'phone or email'}.`,
@@ -197,8 +186,7 @@ export default function InquirySheet({
                   </div>
 
                   <form onSubmit={onSubmit}>
-                    {/* Fields pair up two per .inquiry-row so the dialog stays
-                        short on desktop; the rows stack on phones. */}
+                    {/* Two fields per .inquiry-row (stacked on phones). */}
                     <div className="inquiry-row">
                       <div className="field">
                         <label htmlFor="partner_type">You are a</label>
@@ -265,9 +253,7 @@ export default function InquirySheet({
                     <div className="inquiry-row">
                       <div className="field">
                         <label htmlFor="phone">Phone</label>
-                        {/* Every punctuation mark in `pattern` is escaped: browsers
-                            compile it with the regex `v` flag, which rejects a bare
-                            ( ) or - inside a character class. */}
+                        {/* Punctuation in `pattern` is escaped: the regex `v` flag rejects a bare ( ) or -. */}
                         <input
                           id="phone"
                           className="input"
@@ -335,9 +321,7 @@ export default function InquirySheet({
                       />
                     </div>
 
-                    {/* Bot trap: invisible and unreachable for people (off-screen,
-                        skipped by Tab and screen readers); the server drops any
-                        inquiry that arrives with it filled in. */}
+                    {/* Bot trap: hidden from people; the server drops filled-in inquiries. */}
                     <div aria-hidden="true" style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', clipPath: 'inset(50%)', whiteSpace: 'nowrap' }}>
                       <label htmlFor="website">Leave this field empty</label>
                       <input

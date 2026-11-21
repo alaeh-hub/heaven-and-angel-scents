@@ -1,23 +1,12 @@
-// System sound effects.
-//
-// Deliberately sparse: nothing plays for ordinary clicks, typing, tabs,
-// menus or navigation. Sounds mark things the SYSTEM did and the user
-// should notice: a success or failure toast, a bell notification, a
-// scan result, a finished download.
-//
-// Every sound is synthesised with the Web Audio API at the moment it
-// plays, so there are no audio files to download, cache or license.
-// Listening is delegated from `document`, which means it keeps working
-// across soft navigation and for controls that are built at runtime
-// (custom selects, date pickers, toasts) without any per-page wiring.
-//
-// Opt-outs and overrides, on any element:
-//     data-sfx="off"       stay silent
-//     data-sfx="success"   play that sound instead of the guessed one
-//
-// Other scripts can call window.Sfx.play('name') directly. The speaker
-// button (#sfxToggle / .sfx-toggle) mutes everything; the choice is
-// remembered per browser.
+// System sound effects. Deliberately sparse: only things the SYSTEM did that the
+// user should notice (success/failure toast, bell, scan result, finished download);
+// nothing for ordinary clicks, typing, tabs or navigation.
+// Sounds are synthesised with Web Audio at play time (no audio files to ship).
+// Listening is delegated from `document`, so it survives soft nav and runtime-built
+// controls without per-page wiring.
+// Per-element overrides: data-sfx="off" stays silent; data-sfx="success" plays that sound.
+// Other scripts can call window.Sfx.play('name'). The speaker button (#sfxToggle /
+// .sfx-toggle) mutes everything; the choice is remembered per browser.
 (function () {
     'use strict';
 
@@ -46,8 +35,7 @@
         return ctx;
     }
 
-    // Browsers keep audio suspended until a user gesture. Resume on every
-    // early gesture so the very first click is already audible.
+    // Browsers suspend audio until a gesture; resume on early gestures so click one is audible.
     function unlock() {
         const c = context();
         if (c && c.state === 'suspended') c.resume();
@@ -123,9 +111,8 @@
         tone({ freq: freq * 3.97, at: at, dur: d * 0.3, gain: gain * 0.15, attack: 0.003 });
     }
 
-    // The iOS family of sounds is built from three things: glass (a pure
-    // high sine with an inharmonic overtone that dies quickly), wood (the
-    // keyboard "tock", a short filtered knock) and air (soft noise sweeps).
+    // Built from glass (high sine with a fast-dying overtone), wood (short filtered
+    // knock) and air (soft noise sweeps).
     function glass(freq, at, gain, dur) {
         const d = dur || 0.35;
         tone({ freq: freq, at: at, dur: d, gain: gain, attack: 0.002 });
@@ -142,8 +129,7 @@
         tone({ freq: [190, 90], at: at, dur: 0.09, gain: gain, type: 'sine', attack: 0.002 });
     }
 
-    // Pitch alternates a little between repeats so identical sounds in a
-    // row do not read as a machine gun.
+    // Pitch alternates slightly between repeats so they don't sound like a machine gun.
     let flip = 0;
     function drift() { flip = (flip + 1) % 3; return 1 + (flip - 1) * 0.025; }
 
@@ -244,8 +230,7 @@
 
     // ---- public API ---------------------------------------------------
 
-    // Sounds that fire this often get squashed into one: a burst of ten
-    // table rows hovering past is one tick, not ten.
+    // Sounds that fire this often are squashed into one (ten hovered rows = one tick).
     const lastPlayed = {};
     const MIN_GAP = {
         key: 38, tab: 40, click: 30, tap: 30, nav: 60, arrive: 400,
@@ -263,8 +248,7 @@
         const c = context();
         if (!c) return;
         if (c.state === 'suspended') {
-            // No gesture yet: queue nothing, rather than a burst of stale
-            // sounds the moment the first click unlocks audio.
+            // No gesture yet: queue nothing, so no burst of stale sounds on the first click.
             c.resume();
             if (c.state !== 'running') return;
         }
@@ -287,9 +271,7 @@
         });
     }
 
-    // Toasts and flashes appear as new nodes, server-rendered or built by
-    // showToast(). They are the app's way of reporting what happened, so
-    // they are the main thing that makes a sound.
+    // Toasts and flashes (server-rendered or showToast()) are the main source of sound.
     function watchFlashes() {
         const seen = new WeakSet();
         const obs = new MutationObserver(function (records) {
@@ -304,8 +286,7 @@
         obs.observe(document.body, { subtree: true, childList: true });
     }
 
-    // Toasts: success, error, warning or plain, with the till's ring for
-    // anything about money changing hands.
+    // Toasts: success/error/warning/plain; money events get the till's ring.
     function playFlash(el) {
         if (el.dataset.sfx === 'off') return;
         const text = (el.textContent || '').toLowerCase();
@@ -338,9 +319,8 @@
     function init() {
         syncToggles();
         watchFlashes();
-        // Flashes already on the page when it loads: the sign-in failure
-        // buzz, the signed-out chime. A beat after load so it reads as a
-        // response, and only if audio is already unlocked.
+        // Flashes already on the page at load (sign-in failure buzz, signed-out chime): played
+        // a beat later, and only if audio is already unlocked.
         document.querySelectorAll('.flashes .flash').forEach(function (flash, i) {
             setTimeout(function () { playFlash(flash); }, 350 + i * 220);
         });

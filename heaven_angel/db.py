@@ -6,17 +6,12 @@ import mysql.connector.errors
 import mysql.connector.pooling
 from flask import current_app, g
 
-# One pool per (host, port, user, db) config, built lazily on first use and
-# reused for the lifetime of the process — opening a brand-new TCP+auth
-# connection on every single request doesn't scale past a handful of
-# concurrent users. mysql.connector's pool hands out an existing idle
-# connection when one's available and only opens a new one (up to
-# pool_size) when the pool is empty, and a pooled connection's own
-# .close() returns it to the pool instead of actually closing the socket.
+# One lazily built connection pool per config, reused for the process lifetime.
 _pool = None
 
 
 def _get_pool():
+    """Return the shared connection pool, building it on first use."""
     global _pool
     if _pool is None:
         _pool = mysql.connector.pooling.MySQLConnectionPool(
@@ -69,6 +64,7 @@ def get_db():
 
 
 def close_db(e=None):
+    """Return this request's connection to the pool."""
     db = g.pop("db", None)
     if db is not None:
         db.close()
@@ -82,10 +78,7 @@ def query(sql, params=None, fetchone=False, dictionary=True):
         cur.execute(sql, params or ())
         return cur.fetchone() if fetchone else cur.fetchall()
     finally:
-        # Always close, even if execute()/fetch*() raised (bad SQL, a
-        # dropped connection, a deadlock) — otherwise the cursor is
-        # simply never closed on that path, and this request's
-        # connection lives on with it dangling until teardown.
+        # Always close the cursor, even if the query raised.
         cur.close()
 
 
@@ -105,12 +98,7 @@ def execute(sql, params=None, commit=True):
             conn.commit()
         return lastrowid, rowcount
     except Exception:
-        # Only roll back when this call owns the transaction (commit=
-        # True). With commit=False, an outer `with transaction():`
-        # block owns this connection's commit/rollback — rolling back
-        # here out from under it would silently discard writes that
-        # block already made earlier in the same transaction, instead
-        # of leaving the decision to its own except/rollback.
+        # Roll back only if this call owns the transaction; an outer transaction() owns it otherwise.
         if commit:
             conn.rollback()
         raise
@@ -178,4 +166,5 @@ def transaction():
 
 
 def init_app(app):
+    """Hook the database into the Flask app."""
     app.teardown_appcontext(close_db)

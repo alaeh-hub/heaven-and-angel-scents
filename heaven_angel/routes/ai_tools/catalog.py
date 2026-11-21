@@ -7,6 +7,7 @@ from heaven_angel.routes.ai_tools._common import MAX_ROWS
 from heaven_angel.routes.ai_tools.sales import PERIOD_NAMES, PERIOD_TMPL, period_sql
 
 
+# Tool: raw materials with stock and price history (admin).
 def get_raw_materials(args, ctx):
     name = (args.get("name") or "").strip()
     sql = (
@@ -21,7 +22,7 @@ def get_raw_materials(args, ctx):
     sql += " ORDER BY rm.stock_qty ASC, rm.material_name LIMIT %s"
     params.append(MAX_ROWS)
     rows = query(sql, tuple(params))
-    # What each purchase actually cost, so "cost_per_unit" (a blended average) is not mistaken for the latest price.
+    # Actual purchase costs, so the blended "cost_per_unit" is not read as the latest price.
     history = {m["name"]: m for m in load_material_price_history(name or None)}
     results = []
     for r in rows:
@@ -89,6 +90,7 @@ def get_scent_oils(args, ctx):
     }
 
 
+# Tool: suppliers and what was bought from them (admin).
 def get_suppliers(args, ctx):
     name = (args.get("name") or "").strip()
     sql = (
@@ -139,6 +141,7 @@ def get_formulas(args, ctx):
     return result
 
 
+# Tool: bulk batches with cost, remaining mL and yield (admin).
 def get_bulk_batches(args, ctx):
     from heaven_angel.routes.admin.batch_formulas import ensure_cost_columns
     ensure_cost_columns()
@@ -159,15 +162,14 @@ def get_bulk_batches(args, ctx):
         results.append({
             "batch_code": r["batch_code"], "scent_code": r["base_code"], "scent": r["scent_name"],
             "formula": r["formula_label"], "notes": r["notes"],
-            # A batch with its packaging recorded had the bottles, stickers and seals taken out of stock when it was
-            # made; for any other batch they come out of stock as bottles are produced from it.
+            # Packaging recorded: bottles/stickers/seals left stock at batch time;
+            # otherwise they leave as bottles are produced.
             "packaging_recorded": bool(r["has_packaging"]),
             "total_volume_ml": float(r["total_volume_ml"] or 0), "remaining_ml": remaining,
             "cost_per_ml": float(r["cost_per_ml"] or 0), "total_cost": float(r["total_cost"] or 0),
-            # A formula batch's total_cost includes these two flat charges (a set amount per bottle it yields).
+            # total_cost on a formula batch includes chemist and labor (flat per bottle).
             "chemist_cost": float(r["chemist_cost"] or 0), "labor_cost": float(r["labor_cost"] or 0),
-            # Same yield figure the Bulk Batches page shows: how many full
-            # bottles of each size the remaining mL could still fill.
+            # Same yield as the Bulk Batches page: full bottles the remaining mL can fill.
             "bottles_possible": {u: int(remaining // float(bottle_size_ml(u))) for u in BOTTLE_UNITS},
             "created_at": r["created_at"].isoformat(),
         })
@@ -216,6 +218,7 @@ def get_production_costs(args, ctx):
     }
 
 
+# Tool: partner packages and their contents (admin).
 def get_packages(args, ctx):
     include_inactive = bool(args.get("include_inactive"))
     sql = (
@@ -244,6 +247,7 @@ def get_packages(args, ctx):
 _INQUIRY_STATUSES = {"New", "Contacted", "Follow-up", "On Hold", "Closed", "Declined"}
 
 
+# Tool: partner inquiries and their status (admin).
 def get_partner_inquiries(args, ctx):
     status = (args.get("status") or "").strip()
     if status and status not in _INQUIRY_STATUSES:

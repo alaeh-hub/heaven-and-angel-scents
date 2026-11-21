@@ -1,0 +1,1102 @@
+/* Phone layout (max-width 760px): re-composes the shell, desktop untouched. Uses existing tokens only.
+   To revert: remove this file's <link> and the <nav class="m-tabbar"> block in templates/base.html
+   (both marked). Nothing above 760px reads a rule from here. */
+
+/* The tab bar markup is in the page for every width; it only exists on phones. */
+.m-tabbar {
+  display: none;
+}
+
+@media (max-width: 760px) {
+  :root {
+    --m-gutter: 0.875rem;
+    --m-bar: 3.75rem;
+    --m-dock: 3.75rem;
+    --m-dock-radius: 1.5rem;
+    --m-tab: calc(var(--m-dock) + var(--space-xs) * 2);
+    --m-radius: var(--radius-lg);
+    --m-field: 3rem;
+    --m-inset-b: env(safe-area-inset-bottom, 0px);
+    --m-sheet-top: 2.5rem;
+    --m-sheet-radius: 1.25rem;
+  }
+
+  html,
+  body {
+    overflow-x: clip;
+  }
+
+  /* Room for the tab bar so the last row of every page can scroll clear of it. */
+  body {
+    padding-bottom: calc(var(--m-tab) + var(--m-inset-b));
+  }
+
+  /* ---------- Top bar ----------
+     Large-title header: page name over a quiet line of today's takings, bare icons on
+     the right. Fixed height so the pinned section chips sit right under it. */
+  html body .topbar {
+    height: var(--m-bar);
+    box-sizing: border-box;
+    padding: 0 var(--space-xs) 0 var(--m-gutter);
+    gap: var(--space-xs);
+  }
+
+  html body .topbar-left {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    align-content: center;
+    justify-items: start;
+    row-gap: var(--space-3xs);
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  /* The menu lives in the dock now. */
+  html body .menu-toggle {
+    display: none;
+  }
+
+  html body .topbar-title {
+    position: static;
+    width: 100%;
+    height: auto;
+    margin: 0;
+    overflow: hidden;
+    clip: auto;
+    min-width: 0;
+  }
+
+  html body .topbar-title h1 {
+    margin: 0;
+    font-size: 1.1875rem;
+    font-weight: var(--display-weight);
+    letter-spacing: var(--tracking-display);
+    line-height: 1.15;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* Today's takings: a line under the title; tap opens Sales History. */
+  html body .today-chip {
+    grid-row: 2;
+    height: auto;
+    min-height: 1.25rem;
+    padding: 0;
+    gap: var(--space-xs);
+    border: 0;
+    border-radius: var(--radius-sm);
+    background: none;
+    box-shadow: none;
+    color: var(--ink-faint);
+    font-size: var(--text-xs);
+    font-weight: 500;
+    overflow: visible;
+    max-width: 100%;
+  }
+
+  html body .today-chip:hover {
+    border-color: transparent;
+    box-shadow: none;
+  }
+
+  html body .today-chip-icon,
+  html body .today-chip-full,
+  html body .today-chip-trend {
+    display: none;
+  }
+
+  html body .today-chip-label {
+    display: inline;
+    font-size: var(--text-xs);
+    font-weight: 500;
+    color: var(--ink-faint);
+  }
+
+  html body .today-chip-compact {
+    display: inline;
+  }
+
+  html body .today-chip-amount {
+    font-size: var(--text-xs);
+    font-weight: 700;
+    color: var(--ink);
+  }
+
+  html body .today-chip-meta {
+    display: inline-flex;
+    padding-left: var(--space-xs);
+    border-left: 1px solid var(--border-strong);
+    font-size: var(--text-xs);
+    color: var(--ink-faint);
+  }
+
+  /* The chip has a full line now, so "sales" returns (an older rule hid it). */
+  html body .today-chip-count [data-today-field="count_word"] {
+    display: inline;
+  }
+
+  html body .topbar-right {
+    gap: 0;
+  }
+
+  /* Bare icons, 44px to touch, a soft wash when pressed. */
+  html body .notif-toggle,
+  html body .theme-toggle {
+    width: 2.75rem;
+    height: 2.75rem;
+    border: 0;
+    border-radius: var(--radius-pill);
+    background: transparent;
+    box-shadow: none;
+    color: var(--ink-soft);
+    transition: background-color var(--dur-short) var(--ease-out), color var(--dur-short) var(--ease-out);
+  }
+
+  html body .notif-toggle:active,
+  html body .theme-toggle:active {
+    background: var(--accent-soft);
+    color: var(--ink);
+  }
+
+  html body .notif-toggle svg,
+  html body .theme-toggle svg {
+    width: 1.375rem;
+    height: 1.375rem;
+  }
+
+  /* ---------- Bottom dock ----------
+     Floating dock with four destinations and a raised Sell in the middle. A sliding pill
+     (mobile-tabbar.js) marks the current tab; without the script the active tab has its own. */
+  .m-tabbar {
+    position: fixed;
+    left: var(--space-xs);
+    right: var(--space-xs);
+    bottom: calc(var(--m-inset-b) + var(--space-xs));
+    z-index: 30;
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    align-items: stretch;
+    height: var(--m-dock);
+    padding: 0 var(--space-3xs);
+    background: var(--surface);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--m-dock-radius);
+    box-shadow: var(--shadow-lg);
+    will-change: transform;
+  }
+
+  /* The sliding pill. Hidden until the script has measured the active tab. */
+  .m-tab-pill {
+    position: absolute;
+    top: var(--space-2xs);
+    bottom: var(--space-2xs);
+    left: 0;
+    width: 0;
+    border-radius: calc(var(--m-dock-radius) - var(--space-2xs));
+    background: var(--accent-soft);
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 38%, transparent);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity var(--dur-short) var(--ease-out);
+  }
+
+  html.m-pill-on .m-tab-pill {
+    opacity: 1;
+  }
+
+  .m-tab {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-3xs);
+    min-width: 0;
+    padding: 0;
+    border: 0;
+    border-radius: calc(var(--m-dock-radius) - var(--space-2xs));
+    background: none;
+    color: var(--ink-faint);
+    font: inherit;
+    font-size: 0.75rem;
+    font-weight: 500;
+    line-height: 1.15;
+    text-decoration: none;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+    transition: color var(--dur-short) var(--ease-out);
+  }
+
+  .m-tab-ico {
+    display: grid;
+    place-items: center;
+    width: 1.75rem;
+    height: 1.75rem;
+  }
+
+  .m-tab svg {
+    width: 1.5rem;
+    height: 1.5rem;
+    flex-shrink: 0;
+    fill: transparent;
+    transition: fill var(--dur-short) var(--ease-out), color var(--dur-short) var(--ease-out);
+  }
+
+  .m-tab.active {
+    color: var(--ink);
+    font-weight: 600;
+  }
+
+  .m-tab.active svg {
+    color: var(--accent-ink);
+    fill: color-mix(in srgb, var(--accent) 30%, transparent);
+  }
+
+  /* No script: the active tab draws its own pill. */
+  html:not(.m-pill-on) .m-tab.active:not(.m-tab-primary)::before {
+    content: "";
+    position: absolute;
+    inset: var(--space-2xs) var(--space-3xs);
+    z-index: -1;
+    border-radius: inherit;
+    background: var(--accent-soft);
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 38%, transparent);
+  }
+
+  .m-tab:focus-visible {
+    outline: 2px solid var(--color-focus);
+    outline-offset: -3px;
+  }
+
+  /* Sell: a gold disc that rises out of the dock. */
+  .m-tab-primary {
+    justify-content: flex-end;
+    padding-bottom: var(--space-xs);
+    color: var(--ink);
+    font-weight: 600;
+    overflow: visible;
+  }
+
+  .m-tab-primary .m-tab-ico {
+    position: absolute;
+    top: calc(var(--space-lg) * -1);
+    left: 50%;
+    width: 3.375rem;
+    height: 3.375rem;
+    margin-left: -1.6875rem;
+    border-radius: var(--radius-pill);
+    background: var(--accent);
+    color: var(--gold-contrast);
+    box-shadow:
+      0 0 0 var(--space-2xs) var(--bg),
+      0 var(--space-2xs) var(--space-md) color-mix(in srgb, var(--accent) 42%, transparent);
+    transition: box-shadow var(--dur-short) var(--ease-out);
+  }
+
+  .m-tab-primary .m-tab-ico svg,
+  .m-tab-primary.active .m-tab-ico svg {
+    width: 1.625rem;
+    height: 1.625rem;
+    color: var(--gold-contrast);
+    fill: transparent;
+  }
+
+  .m-tab-primary.active .m-tab-ico {
+    box-shadow:
+      0 0 0 var(--space-2xs) var(--bg),
+      0 0 0 calc(var(--space-2xs) + 2px) var(--accent),
+      0 var(--space-2xs) var(--space-md) color-mix(in srgb, var(--accent) 42%, transparent);
+  }
+
+  .m-tab-primary:focus-visible {
+    outline: none;
+  }
+
+  .m-tab-primary:focus-visible .m-tab-ico {
+    outline: 2px solid var(--color-focus);
+    outline-offset: 4px;
+  }
+
+  /* Scrolling down tucks the dock away; the Halo button drops with it. */
+  html.m-dock-away .halo-widget {
+    transform: translateY(calc(var(--m-dock) + var(--space-sm)));
+  }
+
+  .halo-widget {
+    transition: transform var(--dur-long) var(--ease-out);
+  }
+
+  /* A dialog or Settings owns the screen: html.m-sheet-open (set by mobile-tabbar.js).
+     A body:has(...) rule here restyled the whole page on every pill move. */
+  html.m-sheet-open .m-tabbar,
+  html.m-sheet-open .halo-widget {
+    display: none;
+  }
+
+  html.m-sheet-open body {
+    padding-bottom: 0;
+  }
+
+  /* The drawer and its backdrop sit above the bar (their z-index is 50 / 40). */
+  html body .sidebar {
+    width: min(20rem, 88vw);
+  }
+
+  /* A shorter brand block so the menu opens on the links, not the logo. */
+  html body .sidebar .brand {
+    padding-top: var(--space-md);
+    padding-bottom: var(--space-xs);
+  }
+
+  html body .sidebar .brand-wordmark {
+    width: auto;
+    max-width: 62%;
+    max-height: 3.75rem;
+    object-fit: contain;
+  }
+
+  html body .sidebar .brand-sub {
+    display: none;
+  }
+
+  html body .sidebar-close {
+    top: var(--space-sm);
+    width: 2.5rem;
+    height: 2.5rem;
+  }
+
+  /* Halo's button rides above the bar, smaller, out of the reading column. */
+  html body .halo-widget {
+    right: var(--space-sm);
+    bottom: calc(var(--m-tab) + var(--m-inset-b) + var(--space-sm));
+  }
+
+  html body .halo-fab {
+    width: 3rem;
+    height: 3rem;
+    opacity: 0.94;
+  }
+
+  /* ---------- Page frame ---------- */
+  html body .content {
+    max-width: none;
+    padding: var(--space-md) var(--m-gutter) var(--space-lg);
+  }
+
+  html body .backup-reminder {
+    margin: var(--space-sm) var(--m-gutter) 0;
+  }
+
+  /* Section pages (Production Log | Bulk Batches ...) become a pinned chip row. */
+  html body .subnav {
+    position: sticky;
+    top: var(--m-bar);
+    z-index: 4;
+    gap: var(--space-xs);
+    margin: calc(var(--space-md) * -1) calc(var(--m-gutter) * -1) var(--space-md);
+    padding: var(--space-xs) var(--m-gutter);
+    background: var(--bg);
+    border-bottom: 1px solid var(--border);
+    scroll-snap-type: x proximity;
+    scroll-padding-inline: var(--m-gutter);
+  }
+
+  html body .subnav-link {
+    min-height: 2.25rem;
+    padding: 0 var(--space-md);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-pill);
+    font-size: var(--text-sm);
+    scroll-snap-align: start;
+  }
+
+  html body .subnav-link::after {
+    display: none;
+  }
+
+  html body .subnav-link.active {
+    background: var(--accent-soft);
+    border-color: var(--accent);
+    color: var(--ink);
+  }
+
+  /* In-page tabs: a full-width segmented control that scrolls when it has to. */
+  html body .content > .tabs,
+  html body .content > div > .tabs {
+    display: flex;
+    width: 100%;
+    overflow-x: auto;
+    scrollbar-width: none;
+    margin-bottom: var(--space-md);
+  }
+
+  html body .content > .tabs::-webkit-scrollbar,
+  html body .content > div > .tabs::-webkit-scrollbar {
+    display: none;
+  }
+
+  html body .content > .tabs > .tab,
+  html body .content > div > .tabs > .tab {
+    flex: 1 0 auto;
+    display: grid;
+    place-items: center;
+    min-height: 2.5rem;
+    white-space: nowrap;
+    text-align: center;
+  }
+
+  /* ---------- Cards and panels: tighter, never a card inside a card ---------- */
+  html body .card {
+    border-radius: var(--m-radius);
+  }
+
+  html body .card-pad {
+    padding: var(--space-md);
+  }
+
+  html body .card-header {
+    padding: var(--space-md) var(--space-md) var(--space-xs);
+    gap: var(--space-3xs) var(--space-sm);
+  }
+
+  html body .card-header h2 {
+    font-size: var(--text-title);
+  }
+
+  html body .card > .table-wrap,
+  html body .card > div > .table-wrap {
+    border-top: 1px solid var(--border);
+  }
+
+  html body .grid {
+    gap: var(--space-sm);
+  }
+
+  html body .mt-24 {
+    margin-top: var(--space-md);
+  }
+
+  /* ---------- Figures: two to a row on a hairline grid ---------- */
+  html body [class*="ledger"],
+  html body .kpi-grid,
+  html body .stat-grid,
+  html body .grid:has(> .stat-tile) {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0;
+    margin-bottom: var(--space-md);
+    border-top: 1px solid var(--border-strong);
+  }
+
+  html body [class*="ledger"] > *,
+  html body .kpi-grid > *,
+  html body .stat-grid > *,
+  html body .grid:has(> .stat-tile) > * {
+    min-width: 0;
+    margin: 0;
+    padding: var(--space-sm) var(--space-sm) var(--space-sm) 0;
+    border: 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  html body [class*="ledger"] > *:nth-child(even),
+  html body .kpi-grid > *:nth-child(even),
+  html body .stat-grid > *:nth-child(even),
+  html body .grid:has(> .stat-tile) > *:nth-child(even) {
+    padding-left: var(--space-sm);
+    padding-right: 0;
+    border-left: 1px solid var(--border);
+  }
+
+  html body [class*="ledger"] > *:last-child:nth-child(odd),
+  html body .kpi-grid > *:last-child:nth-child(odd),
+  html body .stat-grid,
+  html body .grid:has(> .stat-tile) > *:last-child:nth-child(odd) {
+    grid-column: 1 / -1;
+  }
+
+  html body .stat-tile {
+    border-top: 0;
+  }
+
+  html body .stat-label {
+    font-size: var(--text-xs);
+  }
+
+  html body .stat-value,
+  html body [class*="ledger"] .stat-value,
+  html body [class*="ledger"] .kpi-value {
+    font-size: var(--text-2xl);
+    line-height: 1.15;
+    font-variant-numeric: tabular-nums;
+  }
+
+  html body .stat-foot,
+  html body .kpi-meta {
+    font-size: var(--text-xs);
+    line-height: 1.35;
+  }
+
+  html body .stat-foot {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  /* The two headline figures (revenue, profit) keep a full row each, but shorter. */
+  html body .db-money {
+    display: grid;
+    gap: 0;
+    margin-bottom: var(--space-sm);
+  }
+
+  html body .db-money > * {
+    padding: var(--space-sm) 0;
+    min-height: 0;
+  }
+
+  html body .kpi-spark {
+    height: 1.75rem;
+    max-height: 1.75rem;
+  }
+
+  html body .db-fig {
+    display: block;
+    height: auto;
+    min-height: 0;
+    padding-bottom: var(--space-xs);
+  }
+
+  html body .db-fig .kpi-spark {
+    margin-top: var(--space-xs);
+  }
+
+  html body .db-fig .kpi-meta {
+    min-height: 0;
+  }
+
+  /* ---------- Lists: a table row becomes one compact entry ---------- */
+  @media (max-width: 680px) {
+    html body .table-wrap.table-wrap tbody tr {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      column-gap: var(--space-md);
+      row-gap: var(--space-2xs);
+      margin: 0;
+      padding: var(--space-sm) var(--space-md);
+      border: 0;
+      border-bottom: 1px solid var(--border);
+      border-radius: 0;
+      overflow: visible;
+      background: transparent !important;
+    }
+
+    html body .table-wrap.table-wrap tbody tr:last-child {
+      border-bottom: 0;
+    }
+
+    html body .table-wrap.table-wrap td {
+      display: block;
+      min-width: 0;
+      padding: 0;
+      border: 0;
+      text-align: left !important;
+      font-size: var(--text-sm);
+      overflow-wrap: anywhere;
+    }
+
+    html body .table-wrap.table-wrap td[data-label]:not([data-label=""])::before {
+      display: block;
+      margin-bottom: 1px;
+      font-size: var(--text-xs);
+      font-weight: 400;
+      color: var(--ink-faint);
+    }
+
+    /* The first cell is the entry's title: full width, no label. */
+    html body .table-wrap.table-wrap td:first-child,
+    html body .table-wrap.table-wrap td[colspan],
+    html body .table-wrap.table-wrap td.mobile-inline-anchor,
+    html body .table-wrap.table-wrap td:has(.item-sub),
+    html body .table-wrap.table-wrap td:has(.item-thumb-row),
+    html body .table-wrap.table-wrap td.mobile-toggle-row {
+      grid-column: 1 / -1;
+    }
+
+    html body .table-wrap.table-wrap td[data-label]:first-child::before,
+    html body .table-wrap.table-wrap td[data-label].mobile-inline-anchor::before,
+    html body .table-wrap.table-wrap td[data-label]:has(.item-sub)::before,
+    html body .table-wrap.table-wrap td[data-label]:has(.item-thumb-row)::before {
+      display: none;
+    }
+
+    html body .table-wrap.table-wrap td:first-child {
+      font-size: var(--text-md);
+      font-weight: 600;
+    }
+
+    /* Row buttons become one footer line, each a real tap target. */
+    html body .table-wrap.table-wrap tr:has(> td.mobile-inline-action) {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      align-items: start;
+    }
+
+    html body .table-wrap.table-wrap tr:has(> td.mobile-inline-action) > td.mobile-inline-anchor,
+    html body .table-wrap.table-wrap tr:has(> td.mobile-inline-action) > td:not(.mobile-inline-anchor):not(.mobile-inline-action) {
+      grid-row: auto;
+    }
+
+    html body .table-wrap.table-wrap td.mobile-inline-action {
+      grid-row: auto;
+      grid-column: 1 / -1;
+      order: 99;
+      display: flex;
+      gap: var(--space-xs);
+      padding-top: var(--space-xs);
+    }
+
+    html body .table-wrap.table-wrap td.mobile-inline-action > * {
+      flex: 1 1 0;
+      justify-content: center;
+    }
+
+    html body .table-wrap.table-wrap td.mobile-inline-action .btn {
+      min-height: 2.5rem;
+    }
+
+    html body .table-wrap.table-wrap td:has(.item-sub) {
+      display: block;
+    }
+
+    html body .table-wrap.table-wrap td.mobile-fold {
+      display: none;
+    }
+
+    html body .table-wrap.table-wrap .item-thumb-row {
+      align-items: center;
+      gap: var(--space-sm);
+    }
+
+    html body .table-wrap.table-wrap .item-thumb-row > div {
+      flex: 1 1 0;
+      min-width: 0;
+      max-width: none;
+    }
+
+    html body .table-wrap.table-wrap .item-name {
+      max-width: none;
+      white-space: normal;
+    }
+
+    html body .table-wrap.table-wrap .item-name {
+      font-size: var(--text-md);
+    }
+
+    html body .table-wrap.table-wrap .item-sub {
+      font-size: var(--text-xs);
+    }
+
+    html body .table-toolbar {
+      padding: var(--space-xs) var(--space-md) var(--space-sm);
+    }
+  }
+
+  /* Long lists: the browser skips layout and paint for rows that are off screen. */
+  @media (max-width: 680px) {
+    html body .table-wrap.table-wrap tbody tr {
+      content-visibility: auto;
+      contain-intrinsic-size: auto 7.5rem;
+    }
+  }
+
+  /* Closed drawer's backdrop is a full-screen blur; don't keep it alive while hidden. */
+  html body .sidebar-backdrop:not(.open) {
+    visibility: hidden;
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+
+  /* ---------- Forms: 48px fields, 16px text so the phone never zooms ---------- */
+  html body input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="hidden"]),
+  html body select,
+  html body textarea {
+    min-height: var(--m-field);
+    font-size: var(--text-md);
+  }
+
+  html body .btn {
+    min-height: 2.75rem;
+  }
+
+  html body .btn-sm {
+    min-height: 2.5rem;
+  }
+
+  html body .form-row,
+  html body .dialog-cols {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  html body .form-row {
+    display: grid;
+    gap: var(--space-sm);
+  }
+
+  /* ================ DIALOGS (phones only) ================
+     Form dialogs (.pg-overlay .rs-dialog .void-overlay .pi-modal-overlay .temp-overlay),
+     Settings (.settings-overlay, full screen), confirm (.confirm-overlay, short sheet),
+     Halo and bell (.halo-panel .notif-panel). Form and confirm dialogs rise from the
+     bottom as sheets with a grip, pinned title and pinned action bar. */
+
+  /* The scrim and the way a sheet sits. */
+  html body .pg-overlay,
+  html body .void-overlay,
+  html body .rs-dialog,
+  html body .pi-modal-overlay,
+  html body .temp-overlay,
+  html body .confirm-overlay {
+    align-items: flex-end;
+    justify-content: stretch;
+    padding: var(--m-sheet-top) 0 0;
+  }
+
+  html body .pg-overlay > .card,
+  html body .void-overlay > .card,
+  html body .rs-dialog > .card,
+  html body .pi-modal-overlay > .card,
+  html body .temp-overlay > .card {
+    position: relative;
+    width: 100%;
+    max-width: none;
+    max-height: calc(100dvh - var(--m-sheet-top));
+    margin: 0;
+    padding: var(--space-md) var(--space-md) calc(var(--space-md) + var(--m-inset-b));
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    border: 0;
+    border-top: 1px solid var(--border-strong);
+    border-radius: var(--m-sheet-radius) var(--m-sheet-radius) 0 0;
+    box-shadow: var(--shadow-lg);
+  }
+
+  /* The grip: says "this sheet can be dismissed", sits above the title. */
+  html body .pg-overlay > .card::before,
+  html body .void-overlay > .card::before,
+  html body .rs-dialog > .card::before,
+  html body .pi-modal-overlay > .card::before,
+  html body .temp-overlay > .card::before,
+  html body .confirm-dialog::before {
+    content: "";
+    display: block;
+    width: 2.25rem;
+    height: 0.25rem;
+    margin: calc(var(--space-2xs) * -1) auto var(--space-sm);
+    border-radius: var(--radius-pill);
+    background: var(--color-edge);
+    opacity: 0.55;
+  }
+
+  html body .rs-dialog > .card::before {
+    display: none;
+  }
+
+  html body .rs-dialog-head::before {
+    content: "";
+    position: absolute;
+    top: var(--space-xs);
+    left: 50%;
+    width: 2.25rem;
+    height: 0.25rem;
+    margin-left: -1.125rem;
+    border-radius: var(--radius-pill);
+    background: var(--color-edge);
+    opacity: 0.55;
+  }
+
+  /* Titles: a clear head, the note under it quiet. */
+  html body .pg-overlay h2,
+  html body .void-overlay h2,
+  html body .rs-dialog h2,
+  html body .pi-modal-overlay h2,
+  html body .temp-overlay h2 {
+    font-size: var(--text-xl);
+    font-weight: var(--display-weight);
+    letter-spacing: var(--tracking-display);
+    line-height: 1.2;
+    margin-bottom: var(--space-3xs);
+  }
+
+  html body .pg-note,
+  html body .rs-note,
+  html body .void-note,
+  html body .pi-modal-lead {
+    font-size: var(--text-sm);
+    line-height: 1.45;
+    margin-bottom: var(--space-md);
+  }
+
+  /* Sheets with a head row (New sale, Upload sales): pinned, with a rule. */
+  html body .rs-dialog-head {
+    position: sticky;
+    top: calc(var(--space-md) * -1);
+    z-index: 2;
+    margin: calc(var(--space-md) * -1) calc(var(--space-md) * -1) var(--space-sm);
+    padding: var(--space-lg) var(--space-md) var(--space-sm);
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+  }
+
+  html body .rs-dialog-head .btn {
+    flex-shrink: 0;
+    width: 2.75rem;
+    min-height: 2.75rem;
+    padding: 0;
+    justify-content: center;
+  }
+
+  /* Field groups in a dialog: tighter rhythm, labels above, 48px controls. */
+  html body .pg-overlay .field,
+  html body .rs-dialog .field,
+  html body .void-overlay .field,
+  html body .pi-modal-overlay .field,
+  html body .temp-overlay .field {
+    margin-bottom: var(--space-sm);
+  }
+
+  html body .pg-overlay label,
+  html body .rs-dialog label,
+  html body .void-overlay label,
+  html body .pi-modal-overlay label {
+    font-size: var(--text-sm);
+  }
+
+  html body .pi-modal textarea {
+    min-height: 6rem;
+  }
+
+  /* Action bar: pinned on its own surface, clear of the home bar. */
+  html body .pg-actions,
+  html body .void-actions,
+  html body .pi-modal-actions {
+    position: sticky;
+    bottom: calc((var(--space-md) + var(--m-inset-b)) * -1);
+    z-index: 2;
+    margin: var(--space-md) calc(var(--space-md) * -1) calc((var(--space-md) + var(--m-inset-b)) * -1);
+    padding: var(--space-sm) var(--space-md) calc(var(--space-sm) + var(--m-inset-b));
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+    flex-direction: column-reverse;
+    gap: var(--space-xs);
+  }
+
+  html body .pg-actions .btn,
+  html body .void-actions .btn,
+  html body .pi-modal-actions .btn {
+    flex: 0 0 auto;
+    width: 100%;
+    min-height: 3rem;
+  }
+
+  /* The sale and upload forms end in one primary button: pinned the same way. */
+  html body .rs-dialog .rs-submit {
+    position: sticky;
+    bottom: calc((var(--space-md) + var(--m-inset-b)) * -1);
+    z-index: 2;
+    width: 100%;
+    min-height: 3rem;
+    margin-top: var(--space-md);
+    box-shadow: 0 0 0 var(--space-sm) var(--surface), 0 var(--m-inset-b) 0 var(--space-sm) var(--surface);
+  }
+
+  /* ---------- Confirm: a short sheet with one big thumb target ---------- */
+  html body .confirm-dialog {
+    width: 100%;
+    max-width: none;
+    padding: var(--space-md) var(--space-md) calc(var(--space-md) + var(--m-inset-b));
+    border: 0;
+    border-top: 1px solid var(--border-strong);
+    border-radius: var(--m-sheet-radius) var(--m-sheet-radius) 0 0;
+  }
+
+  html body .confirm-dialog-title {
+    font-size: var(--text-xl);
+    font-weight: var(--display-weight);
+    letter-spacing: var(--tracking-display);
+    margin-bottom: var(--space-2xs);
+  }
+
+  html body .confirm-dialog-detail {
+    font-size: var(--text-md);
+    line-height: 1.45;
+  }
+
+  html body .confirm-dialog-actions {
+    flex-direction: column-reverse;
+    gap: var(--space-xs);
+    margin-top: var(--space-md);
+  }
+
+  html body .confirm-dialog-actions .btn {
+    width: 100%;
+    min-height: 3rem;
+  }
+
+  /* ---------- Settings: a whole screen, chips for sections ---------- */
+  html body .settings-overlay {
+    padding: 0;
+    align-items: stretch;
+  }
+
+  html body .settings-dialog {
+    width: 100%;
+    height: 100dvh;
+    max-height: none;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  html body .settings-head {
+    min-height: var(--m-bar);
+    box-sizing: border-box;
+    padding: calc(var(--space-xs) + env(safe-area-inset-top, 0px)) var(--space-md) var(--space-xs);
+  }
+
+  html body .settings-head h2 {
+    font-size: var(--text-xl);
+    font-weight: var(--display-weight);
+    letter-spacing: var(--tracking-display);
+  }
+
+  html body .settings-head p {
+    font-size: var(--text-xs);
+  }
+
+  html body .settings-close {
+    width: 2.75rem;
+    height: 2.75rem;
+  }
+
+  html body .settings-tabs {
+    gap: var(--space-xs);
+    padding: var(--space-xs) var(--space-md);
+    scrollbar-width: none;
+    scroll-snap-type: x proximity;
+    scroll-padding-inline: var(--space-md);
+    -webkit-mask-image: linear-gradient(to right, var(--bg) calc(100% - 1.5rem), transparent);
+    mask-image: linear-gradient(to right, var(--bg) calc(100% - 1.5rem), transparent);
+  }
+
+  html body .settings-tabs::-webkit-scrollbar {
+    display: none;
+  }
+
+  html body .settings-tab {
+    flex: 0 0 auto;
+    min-height: 2.5rem;
+    padding: 0 var(--space-md);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-pill);
+    font-size: var(--text-sm);
+    scroll-snap-align: start;
+  }
+
+  html body .settings-tab[aria-selected="true"] {
+    background: var(--accent-soft);
+    border-color: var(--accent);
+    color: var(--ink);
+  }
+
+  html body .settings-body {
+    padding: var(--space-md);
+  }
+
+  html body .settings-panel {
+    gap: var(--space-md);
+  }
+
+  html body .settings-label,
+  html body .settings-note {
+    font-size: var(--text-sm);
+  }
+
+  html body .settings-chip,
+  html body .settings-account-link,
+  html body .settings-row .btn {
+    min-height: 2.75rem;
+  }
+
+  html body .settings-foot {
+    padding: var(--space-sm) var(--space-md) calc(var(--space-sm) + var(--m-inset-b));
+    font-size: var(--text-xs);
+  }
+
+  /* ---------- Halo: the whole screen, its own close button ---------- */
+  html body .halo-panel {
+    inset: 0;
+    width: auto;
+    height: 100dvh;
+    max-height: none;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  html body .halo-widget.open .halo-fab {
+    display: none;
+  }
+
+  /* ---------- Notifications: a sheet under the top bar ---------- */
+  html body .notif-panel {
+    top: calc(var(--m-bar) + var(--space-3xs));
+    left: var(--space-xs);
+    right: var(--space-xs);
+    width: auto;
+    max-height: calc(100dvh - var(--m-bar) - var(--m-tab) - var(--m-inset-b) - var(--space-lg));
+    border-radius: var(--radius-lg);
+  }
+
+  html body .notif-clear {
+    min-height: 2.5rem;
+    padding: 0 var(--space-xs);
+  }
+
+  /* Report groups: one scrolling chip row instead of a wrapped block. */
+  html body .rbx-tabs {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  html body .rbx-tabs::-webkit-scrollbar {
+    display: none;
+  }
+
+  html body .rbx-tab {
+    flex: 0 0 auto;
+    white-space: nowrap;
+  }
+
+  /* Report builder's pinned download bar rides above the tab bar. */
+  html body .rbx-bar {
+    bottom: calc(var(--m-tab) + var(--m-inset-b) + var(--space-xs));
+  }
+
+  /* Page-level toasts clear the bar. */
+  html body .flashes {
+    top: calc(var(--m-bar) + var(--space-xs));
+  }
+}
+
+@media (max-width: 760px) and (prefers-reduced-motion: reduce) {
+  .m-tab,
+  .m-tab svg,
+  .m-tab-primary .m-tab-ico,
+  .halo-widget {
+    transition: none;
+  }
+}

@@ -19,22 +19,10 @@ from heaven_angel.routes.admin._common import bp
 @bp.route("/partners", methods=["GET", "POST"])
 @admin_required
 def partners():
-    """Distributors and resellers HQ sells to in bulk, outside the retail
-    branch network. This page is the partner directory — who they are
-    and how to reach them.
+    """Partner directory (distributors/resellers HQ sells to in bulk).
 
-    Partners don't "invest" in the old sense — there's no way to log a
-    manual contribution here anymore. What used to be "Total invested"
-    is now "Total package sales": the sum of order_amount across every
-    inquiry this partner has made that's marked Closed (i.e. an admin
-    has confirmed the order actually went through and was received —
-    see partner_inquiries.status and its migration note in schema.sql).
-    New/Contacted inquiries are leads, not sales, so they're excluded.
-
-    partner_investments is no longer read here at all — nothing has
-    written to it since packages/inquiries replaced manual investment
-    logging, so it would only ever show stale, frozen figures alongside
-    numbers that are actually still growing.
+    "Total package sales" = sum of order_amount over a partner's Closed inquiries
+    (New/Contacted are leads). partner_investments is no longer read.
     """
     if request.method == "POST":
         return_type = request.form.get("return_type", "all")
@@ -76,11 +64,8 @@ def partners():
         where_sql = "WHERE p.partner_type = %s"
         params = (type_filter,)
 
-    # order_amount is only ever counted once an inquiry is Closed — see
-    # the docstring above and schema.sql's note on
-    # partner_inquiries.order_amount. The AND sits inside the LEFT JOIN
-    # (not a WHERE) so a partner with zero Closed orders still appears
-    # in the list with 0 sales, rather than disappearing entirely.
+    # order_amount counts only when Closed; the AND is in the LEFT JOIN so partners with
+    # no sales still appear.
     partner_list = query(
         f"""SELECT p.*,
                    COALESCE(SUM(pinq.order_amount), 0) AS total_invested,
@@ -133,16 +118,7 @@ def partners():
 @bp.route("/partners/<int:partner_id>")
 @admin_required
 def partner_detail(partner_id):
-    """One partner's full inquiry history — every package inquiry they've
-    ever submitted through the public portal, in the exact form they
-    submitted it in. This is the permanent record referenced in
-    portal.py's _match_or_create_partner(): a repeat inquiry from a
-    known email/phone no longer overwrites the partner's name/contact/
-    address above (see partners.html), so this page is where the full
-    story — including whatever changed between visits — actually lives.
-    partners.last_inquiry_at/inquiry_count are just a rollup of what's
-    queried here, kept in sync on every new inquiry.
-    """
+    """One partner's full inquiry history, exactly as submitted (the permanent record)."""
     partner = query("SELECT * FROM partners WHERE partner_id = %s",
                     (partner_id,), fetchone=True)
     if not partner:
@@ -158,11 +134,5 @@ def partner_detail(partner_id):
         "admin/partner_detail.html", partner=partner, inquiries=inquiries,
     )
 
-# NOTE: partners no longer "invest" — a distributor/reseller's money comes
-# from the packages they order and Close (see the Packages tab and
-# partners()'s "Total invested" query above, which sums order_amount on
-# Closed partner_inquiries rows). The old POST /admin/partners/investment
-# route has been removed, and partner_investments is no longer read
-# anywhere in this file — the table itself is left in place purely so any
-# pre-existing rows in it aren't destructively dropped, but nothing
-# reads or writes it anymore.
+# Partners no longer "invest": money comes from Closed package orders (see partners()).
+# partner_investments is kept in place but nothing reads or writes it.

@@ -17,43 +17,35 @@ from heaven_angel.services.audit import log_action
 from heaven_angel.sockets import notify_all
 from heaven_angel.utils import (
     BOTTLE_UNITS, PRODUCT_UNITS, ValidationError,
-    base_code_from_sku, build_sku, business_now, parse_base_code, parse_non_negative_decimal,
+    base_code_from_sku, build_sku, business_now, is_duplicate_error, parse_base_code,
+    parse_non_negative_decimal,
 )
 
 from heaven_angel.routes.admin._common import bp
 
 
 # ---------------------------------------------------------------- product images
-# Uploaded product photos are stored under <static>/uploads/products/ and
-# referenced from products.image_path as a path relative to the static
-# folder (e.g. "uploads/products/<uuid>.jpg"), so they can be rendered
-# anywhere with url_for('static', filename=...).
+# Product photos live in <static>/uploads/products/; products.image_path is relative to static.
 ALLOWED_IMAGE_EXTENSIONS = {"jpg", "jpeg", "png", "webp"}
 
 
 PRODUCT_IMAGE_SUBDIR = "uploads/products"
 
 
-# Belt-and-suspenders on top of app.py's global MAX_CONTENT_LENGTH — this
-# caps just the image field itself to something no legitimate product
-# photo needs, rather than however big the whole request is allowed to be.
+# Caps the image field itself, on top of the app-wide MAX_CONTENT_LENGTH.
 MAX_PRODUCT_IMAGE_BYTES = 5 * 1024 * 1024
 
 
-# What Pillow's Image.format reports for each extension we accept — used
-# to confirm the file's actual bytes are the kind of image its extension
-# claims, not just anything renamed to end in .png/.jpg/.webp.
+# Pillow's Image.format per accepted extension, to confirm the bytes match the extension.
 _IMAGE_FORMAT_BY_EXTENSION = {
     "jpg": "JPEG", "jpeg": "JPEG", "png": "PNG", "webp": "WEBP",
 }
 
 
 def _save_product_image(file_storage):
-    """Validate and persist an uploaded product image. Returns the
-    image_path to store on the product row, or None if no file was
-    actually chosen (the field is optional). Raises ValidationError on
-    an unsupported file type, an oversized file, or a file whose actual
-    content isn't a decodable image matching its extension.
+    """Validate and save an uploaded product image; return its image_path (None if none).
+
+    Raises ValidationError for a bad type, size or undecodable content.
     """
     if not file_storage or not file_storage.filename:
         return None
@@ -71,18 +63,8 @@ def _save_product_image(file_storage):
     if size > MAX_PRODUCT_IMAGE_BYTES:
         raise ValidationError("Product image is too large (max 5MB).")
 
-    # Confirm this is actually a decodable image of the claimed type —
-    # trusting the extension alone would let anything (a non-image blob,
-    # a corrupt/hostile file) through, to later be served back as
-    # image/* purely because of its filename. Image.open() is lazy, so
-    # a first pass calls .verify() (checks structural integrity without
-    # decoding pixel data), then a second, fresh open decodes it for
-    # real via .load() — verify() alone can pass some files a real
-    # decode would still reject, and an object that's been verify()'d
-    # can't be reused for anything else per Pillow's own docs. Pillow's
-    # default Image.MAX_IMAGE_PIXELS guard also rejects a decompression-
-    # bomb-style image here (raises DecompressionBombError, caught by
-    # the bare except below same as any other bad-image case).
+    # Confirm it decodes as the claimed type: verify() first, then a fresh open + load()
+    # (verify alone can miss bad files). Pillow's MAX_IMAGE_PIXELS also rejects bombs.
     try:
         with Image.open(stream) as img:
             img.verify()
@@ -103,9 +85,7 @@ def _save_product_image(file_storage):
         current_app.static_folder, *PRODUCT_IMAGE_SUBDIR.split("/"))
     os.makedirs(upload_dir, exist_ok=True)
 
-    # Random filename — never trust/re-use the uploader's own filename
-    # beyond checking its extension, and this also sidesteps any
-    # collision between products.
+    # Random filename: never reuse the uploader's name (also avoids collisions).
     stored_name = f"{uuid.uuid4().hex}.{ext}"
     file_storage.save(os.path.join(upload_dir, stored_name))
     return f"{PRODUCT_IMAGE_SUBDIR}/{stored_name}"
@@ -115,11 +95,7 @@ SCENT_IMAGE_DIR = "img/scents"
 
 
 def default_scent_image(base_code):
-    """The built-in photo for a scent code (A1, H4...), as a path relative to the
-    static folder, or None when that scent has no render. It is the square,
-    bottle-centred thumbnail (the full renders are wide canvases with the bottle on
-    the right, which looks off-centre in a small square). Used when no photo is
-    uploaded, so a product shows its own scent's bottle instead of a blank."""
+    """Built-in square thumbnail path for a scent code (A1, H4...), or None if it has none."""
     code = (base_code or "").strip().lower()
     if not code:
         return None
@@ -132,11 +108,10 @@ def default_scent_image(base_code):
 
 
 def _delete_product_image(image_path):
-    """Best-effort removal of a product image file that's being replaced
-    or cleared. Never raises — a missing/already-gone file shouldn't
-    block the request that's replacing it. Only files this page uploaded
-    (uploads/products/) are ever deleted: the built-in scent photos in
-    img/scents/ are shared by every size of a scent and must stay."""
+    """Best-effort delete of a replaced or cleared image; never raises.
+
+    Only uploads/products/ files go; the shared img/scents/ photos must stay.
+    """
     if not image_path or not image_path.startswith(PRODUCT_IMAGE_SUBDIR + "/") or ".." in image_path:
         return
     full_path = os.path.join(current_app.static_folder, image_path)
@@ -166,13 +141,9 @@ def products():
             if not item_name or variant not in ("Male", "Female") or unit not in BOTTLE_UNITS:
                 raise ValidationError(
                     "Please fill in every field with a valid value.")
-            # The base code is reusable across sizes (e.g. base 'A1' + unit
-            # '85ML' and base 'A1' + unit '15ML' both come from the same
-            # admin-entered code) — build_sku() is what actually makes each
-            # one a distinct SKU/row, with its own price and stock.
+            # The base code is reused across sizes; build_sku() makes each a distinct SKU row.
             sku = build_sku(base_code, unit)
-            # Optional — validated and saved to disk here so a bad file
-            # type is caught before we touch the database at all.
+            # Optional image; validated before touching the database.
             uploaded_image = _save_product_image(request.files.get("image"))
             image_path = uploaded_image or default_scent_image(base_code)
         except ValidationError as err:
@@ -187,10 +158,7 @@ def products():
                     "VALUES (%s, %s, %s, %s, %s, %s, %s)",
                     (sku, item_name, variant, category, unit, price, image_path),
                 )
-                # Give every existing branch (and HQ) a zero-stock row so
-                # it shows up everywhere. Both writes happen in one
-                # transaction so a crash partway through can't leave the
-                # product created with no inventory rows.
+                # Give every branch (and HQ) a zero-stock row, in one transaction with the insert.
                 cur.execute("SELECT branch_id FROM branches")
                 branch_ids = [row[0] for row in cur.fetchall()]
                 for branch_id in branch_ids:
@@ -203,18 +171,19 @@ def products():
             log_action("add_product", target=sku,
                        details=f"{item_name} ({variant}, {unit}) — ₱{price:,.2f}")
             flash(f"{item_name} — {unit} ({sku}) added to the catalog.", "success")
-        except Exception:
-            # Almost always a duplicate base code + unit, but log it
-            # properly regardless — a real DB failure here would
-            # otherwise look identical to a duplicate SKU, with no
-            # trace to tell the two apart.
+        except Exception as exc:
+            # Only a real duplicate (MySQL 1062) is reported as one; any other
+            # failure gets a generic message. The log has the real cause.
             current_app.logger.exception(
                 "add product failed for sku=%s base_code=%s unit=%s", sku, base_code, unit)
-            # Don't leave an orphaned image file behind for a product
-            # row that was never created.
+            # Don't leave an orphaned image for a product that was never created.
             if uploaded_image:
                 _delete_product_image(uploaded_image)
-            flash(f"'{base_code}' already has a {unit} entry (SKU {sku}).", "error")
+            if is_duplicate_error(exc):
+                flash(f"'{base_code}' already has a {unit} entry (SKU {sku}).", "error")
+            else:
+                flash("Couldn't add that product - please try again. If it keeps happening, "
+                      "check the server log.", "error")
         return redirect(url_for("admin.products"))
 
     catalog = query(
@@ -223,8 +192,7 @@ def products():
            LEFT JOIN branch_inventory bi ON p.sku = bi.sku
            GROUP BY p.sku ORDER BY p.item_name"""
     )
-    # SKU counts on this page are by base code (A1-85ML and A1-50ML
-    # are one product, "A1"), not one per size row.
+    # SKU counts are by base code (A1-85ML and A1-50ML are one product).
     for row in catalog:
         row["base_code"] = base_code_from_sku(row["sku"], row["unit"])
     return render_template(
@@ -232,14 +200,14 @@ def products():
     )
 
 
+# POST: edit a product's name, variant, price and image (not its unit).
 @bp.route("/products/edit", methods=["POST"])
 @admin_required
 def edit_product():
     sku = request.form.get("sku")
     item_name = request.form.get("item_name", "").strip()
     variant = request.form.get("variant")
-    # Checkbox only rendered (and only meaningful) when the product
-    # already has an image — see products.html.
+    # Checkbox only exists when the product already has an image.
     remove_image = request.form.get("remove_image") == "1"
 
     product = query(
@@ -254,9 +222,7 @@ def edit_product():
         if not item_name or variant not in ("Male", "Female"):
             raise ValidationError(
                 "Please fill in every field with a valid value.")
-        # Optional — a new file replaces the existing image. Validated
-        # and saved here so a bad file type is caught before the row
-        # is touched at all.
+        # Optional new image replaces the old; validated before the row is touched.
         new_image_path = _save_product_image(request.files.get("image"))
     except ValidationError as err:
         flash(str(err), "error")
@@ -271,11 +237,8 @@ def edit_product():
     else:
         image_path = old_image_path
 
-    # unit is intentionally not editable here — it's baked into the SKU
-    # itself (see build_sku() above), so changing it on an existing row
-    # would leave the SKU claiming a size the row no longer has. To
-    # change a product's size, add it again under the same base code
-    # with the new unit — that gets its own SKU, same as any other size.
+    # unit is not editable: it is baked into the SKU. To change size, add the base code
+    # again with the new unit.
     try:
         execute(
             "UPDATE products SET item_name = %s, variant = %s, price = %s, image_path = %s WHERE sku = %s",
@@ -287,9 +250,7 @@ def edit_product():
             _delete_product_image(new_image_path)
         flash("Couldn't save that product - check the name length and that the price isn't too large.", "error")
         return redirect(url_for("admin.products"))
-    # Only delete the old file once the row has been updated to point
-    # elsewhere (or nowhere) — never delete first, so a crash mid-request
-    # can't leave the row referencing a file that's already gone.
+    # Delete the old file only after the row is updated, so a crash can't leave a dead reference.
     if old_image_path and old_image_path != image_path:
         _delete_product_image(old_image_path)
 
@@ -301,12 +262,8 @@ def edit_product():
 
 
 # ---------------------------------------------------------------- product bulk import/export (CSV)
-# Both routes below round-trip through the same shape the manual "Add a
-# product" form uses: base_code + unit (not the raw sku column) — so a
-# downloaded export, edited in a spreadsheet and re-uploaded, goes
-# through the exact same parse_base_code()/build_sku() validation as a
-# hand-typed product, rather than a separate, looser path for
-# CSV-sourced rows.
+# Both routes use the manual form's base_code + unit shape, so an edited export goes
+# through the same parse_base_code()/build_sku() validation.
 _PRODUCT_CSV_COLUMNS = ["base_code", "item_name", "variant", "unit", "price"]
 # Short headers used by the styled .xlsx export; import accepts both sets.
 _PRODUCT_XLSX_HEADERS = ["Code*", "Name*", "Variant*", "Unit*", "Price*"]  # all required
@@ -317,11 +274,7 @@ _PRODUCT_HEADER_ALIASES = dict(zip(
 @bp.route("/products/export")
 @admin_required
 def export_products():
-    """Download the full product catalog as CSV, in the same
-    base_code/item_name/variant/unit/price shape /products/import
-    expects — so a downloaded file can be edited (prices changed, new
-    rows appended) and re-uploaded there directly with no reshaping.
-    """
+    """Download the catalog as CSV (import shape), so it can be edited and re-uploaded."""
     catalog = query(
         "SELECT sku, item_name, variant, unit, price FROM products ORDER BY item_name, unit"
     )
@@ -341,9 +294,7 @@ def export_products():
     log_action("export_products", details=f"{len(catalog)} SKUs")
     stamp = business_now().strftime('%Y%m%d_%H%M%S')
 
-    # Default download is a branded .xlsx (a CSV can't carry colours);
-    # ?format=csv keeps the plain file for anything that needs it. Both
-    # have the same columns, and import_products() accepts either.
+    # Default is a branded .xlsx; ?format=csv gives plain CSV. Same columns; import takes either.
     if request.args.get("format") != "csv":
         return send_file(
             _build_products_workbook(catalog),
@@ -351,9 +302,7 @@ def export_products():
             as_attachment=True, download_name=f"products_{stamp}.xlsx",
         )
 
-    # utf-8-sig (BOM) so Excel opens ₱/accented text correctly instead
-    # of guessing cp1252 on a plain utf-8 file, same reasoning as any
-    # other CSV this app hands to a non-technical admin.
+    # utf-8-sig (BOM) so Excel reads peso signs and accents correctly.
     payload = buffer.getvalue().encode("utf-8-sig")
     return send_file(
         io.BytesIO(payload), mimetype="text/csv",
@@ -362,11 +311,11 @@ def export_products():
 
 
 def _build_products_workbook(catalog):
-    """The catalog as a plain workbook: bold heads over one dark rule, hairlines between rows, peso prices.
+    """The catalog as a styled workbook, in the shape import_products() reads.
 
-    Row 1 is the header with the column names import_products() reads, and the products start on row 2,
-    so the file can be edited (a price changed, new rows added underneath) and uploaded again as it is.
-    Nothing may go above the header row, and the import ignores any extra columns."""
+    Row 1 is the header and products start on row 2; nothing may go above the header,
+    and extra columns are ignored on import.
+    """
     from openpyxl import Workbook
     from openpyxl.styles import Alignment, Border, Font, Side
     from heaven_angel.services.reports.excel import XL_MONEY_FMT
@@ -421,28 +370,12 @@ def _build_products_workbook(catalog):
 @bp.route("/products/import", methods=["POST"])
 @admin_required
 def import_products():
-    """Bulk create/update products from an uploaded CSV — same
-    base_code,item_name,variant,unit,price shape export_products()
-    above produces.
+    """Bulk create/update products from an uploaded CSV/xlsx in export_products() shape.
 
-    Each row resolves to a SKU via build_sku(), exactly like the manual
-    "Add a product" form:
-      - SKU already exists -> update item_name/variant/price. unit and
-        image_path are left alone (same restriction as edit_product() —
-        change a size by adding a new base_code/unit row instead).
-      - SKU is new          -> insert it and give every existing branch
-        a zero-stock row, same as the manual add path. If this base_code
-        already has another size on file, that size's item_name/variant
-        win over whatever this row says (see the sibling_skus lookup
-        below) — same "reusing a code means the same product" autofill
-        the manual form does live, so one row's typo can't leave a scent
-        named differently across its own sizes.
-
-    One bad or duplicate-in-file row is skipped and reported by row
-    number rather than aborting the whole upload, so a single typo
-    doesn't block importing the rest of a large catalog. Each row's own
-    insert/update is still atomic on its own, so nothing partial is
-    ever left behind for the rows that do fail.
+    Each row resolves to a SKU via build_sku(): an existing SKU updates name/variant/price
+    (unit and image stay); a new SKU is inserted with a zero-stock row per branch, taking
+    the name/variant of a sibling size if the code exists. A bad or duplicate row is
+    skipped and reported by row number; each row is atomic on its own.
     """
     file_storage = request.files.get("csv_file")
     if not file_storage or not file_storage.filename:
@@ -450,8 +383,7 @@ def import_products():
         return redirect(url_for("admin.products"))
 
     if file_storage.filename.lower().endswith(".xlsx"):
-        # The styled export: read its first sheet back into the same
-        # header-keyed dict rows csv.DictReader would give.
+        # Styled export: read the first sheet into header-keyed dict rows like csv.DictReader.
         from openpyxl import load_workbook
         try:
             sheet = load_workbook(file_storage, read_only=True, data_only=True).active
@@ -520,15 +452,8 @@ def import_products():
         existing = query(
             "SELECT sku FROM products WHERE sku = %s", (sku,), fetchone=True)
 
-        # A brand-new size for a code that already has other sizes on
-        # file (e.g. this row is A1-1L and A1-85ML already exists) takes
-        # THAT product's name/variant instead of whatever this row says —
-        # same "reusing a code means the same product" behavior as the
-        # live autofill on the manual Add a Product form, just applied
-        # here so a typo in one CSV row can't quietly rename a scent
-        # differently across its own sizes. Only for a genuinely new SKU;
-        # editing an existing one's own name/variant already goes through
-        # this same row further down (or the Edit form) untouched.
+        # A new size of an existing code takes that product's name/variant (so a typo can't
+        # rename a scent across sizes). Only for new SKUs.
         if not existing:
             sibling_skus = [build_sku(base_code, u)
                             for u in PRODUCT_UNITS if u != unit]

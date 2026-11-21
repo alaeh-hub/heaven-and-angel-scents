@@ -1,8 +1,5 @@
-/* Hallmark · shape: app screen · genre: modern-minimal · theme: brand (black and gold) · redesign: full
- * paper: oklch(97.4% 0.006 88) · accent: oklch(77% 0.135 87) · display: Geist · body: Geist
- * nav: kept (the sidebar rail: 25 destinations earn it) · signature: the stock ledger, tables set as ledgers with a mono SKU column · states: loading, empty, error, full
- * axes: light/grotesk-sans/warm · posture: Restrained · contrast: pass · v2.0.0 */
-/* Hallmark · pre-emit critique: P4 H4 E4 S4 R4 V3 · weakest: V, the shell and its stock kept on purpose; the system under it (flat hairlines, 8 and 12 radii, one gold signal) is what changed */
+/* App stylesheet: modern-minimal, black and gold, Geist; tables set as stock ledgers (mono SKU column). */
+/* Shell and system kept on purpose: flat hairlines, 8 and 12 radii, one gold signal. */
 @import url("./tokens.css");
 @import url('https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap');
 @import url("./base.css");
@@ -33,9 +30,8 @@
   navigation: auto;
 }
 
-/* Theme switch (main.js initThemeToggle): the new theme's snapshot is
-   revealed by a growing circle from the toggle, so the page-load
-   cross-fade below must not run for it. */
+/* Theme switch (initThemeToggle): the new theme reveals as a growing circle from the toggle,
+   so the page-load cross-fade below must not run for it. */
 html.vt-theme::view-transition-old(root),
 html.vt-theme::view-transition-new(root) {
   animation: none;
@@ -90,22 +86,9 @@ html.vt-theme::view-transition-new(root) {
   --topbar-h: 4.5rem;
 }
 
-/* Fluid root scale — everything below (sidebar width, spacing,
-   headings, icons, badges, form fields, ...) was converted from a flat
-   desktop design to rem, all relative to *this* element's font-size
-   rather than body's. Left alone, that just means every wide screen
-   gets the exact same fixed sizes regardless of whether "wide" is a
-   13" laptop panel or a 27" monitor — the whole design was tuned at
-   one resolution and stamped onto all of them. Scoped to 761px+ so the
-   already-tuned mobile layout below that is untouched; from there it
-   eases down smoothly toward the mobile handoff width and back up to
-   its original full size on a big display, with no breakpoint "jump"
-   in between — same idea as fluid type on a marketing site, just
-   applied to the one value everything else scales off of. rem+vw (not
-   plain vw) so a visitor's own browser zoom/font-size preference still
-   nudges the result instead of being overridden by it.
-   761px (14px) -> 1600px+ (16px, the original design size, unchanged
-   above this point). */
+/* Fluid root scale (761px+): rem sizes follow this font-size, easing from 14px at 761px to
+   the original 16px at 1600px+, with no breakpoint jump. rem+vw (not plain vw) so the
+   browser's own zoom/font-size preference still applies. Mobile (below 761px) is untouched. */
 @media (min-width: 761px) {
   html {
     font-size: clamp(0.9375rem, 0.8466rem + 0.1923vw, 1rem);
@@ -129,15 +112,13 @@ body {
   width: 2.5rem;
   height: 2.5rem;
   object-fit: cover;
-  /* Follows the interface style's corner radius (square in Pixel/Terminal/
-     Bauhaus, soft in Clay/Neumorphism) so thumbs match the cards around
-     them. overflow clips real photos to the same shape. */
+  /* Follows the style's corner radius (square in Pixel/Terminal/Bauhaus, soft in Clay/Neumorphism);
+     overflow clips real photos to the same shape. */
   border-radius: var(--thumb-radius, 0.75rem);
   overflow: hidden;
   border: 0;
-  /* A fixed ink-tinted ring rather than --border: some styles make
-     --border transparent (Neumorphism/Claymorphism), which left light
-     photos and chips with no visible edge on a same-color page. */
+  /* Fixed ink-tinted ring, not --border: some styles make --border transparent, leaving
+     light photos and chips with no visible edge. */
   box-shadow: 0 0 0 1px var(--thumb-ring);
   background: var(--surface-2);
   display: block;
@@ -152,13 +133,9 @@ body {
   flex-shrink: 0;
 }
 
-/* Generated initials avatar shown in place of a photo — one flat,
-   on-brand accent tone for every product (not a color hashed per product
-   name), the same treatment .pi-avatar uses on the partner inquiries
-   page. The ring replaces the photo frame so the chip keeps a crisp edge
-   in every style/mode. Sized inline by the macro (font-size = 40% of the
-   box); line-height 1 + no wrapping + overflow clip keep the two letters
-   centred and uncut even in the wide fonts (Pixel, Paper, Clay). */
+/* Initials avatar shown instead of a photo: one flat accent tone for every product (same as
+   .pi-avatar). The ring replaces the photo frame; line-height 1, no wrap and overflow clip
+   keep the two letters centred even in wide fonts (Pixel, Paper, Clay). */
 .product-thumb-avatar {
   border: none;
   background: var(--avatar-bg);
@@ -174,11 +151,8 @@ body {
   user-select: none;
 }
 
-/* Wraps a product thumbnail and its name/SKU/badge stack in the same
-   "Item" cell — a single piece of content, not the thumbnail sitting
-   in its own column/div beside it. flex-shrink: 0 above keeps the
-   thumbnail from being squeezed by the name text next to it, which
-   is free to wrap/truncate as usual. */
+/* Wraps a product thumbnail and its name/SKU/badge stack as one "Item" cell. The thumbnail's
+   flex-shrink: 0 keeps it from being squeezed by the wrapping name text. */
 .item-thumb-row {
   display: flex;
   align-items: center;
@@ -221,10 +195,8 @@ textarea {
   caret-color: var(--color-accent);
 }
 
-/* Off-screen until focused, then dropped into view at the top-left —
-   lets a keyboard/screen-reader user jump straight past the sidebar's
-   nav links (repeated on every single page) to the actual page
-   content. See base.html for the link and #main-content it targets. */
+/* Skip link: off-screen until focused, then dropped into view so keyboard and screen-reader
+   users can jump past the sidebar to #main-content (see base.html). */
 .skip-link {
   position: absolute;
   top: -3rem;
@@ -264,10 +236,8 @@ code,
   font-variant-numeric: tabular-nums;
 }
 
-/* Quantities, prices and percentages use the UI font's tabular figures
-   (digits line up in columns without switching to a code font); .mono
-   stays for codes like SKUs and batch numbers. Declared after .mono so
-   a cell carrying both (e.g. "num mono" prices) reads as a number. */
+/* Quantities, prices and percentages use the UI font's tabular figures; .mono stays for SKUs
+   and batch numbers. Declared after .mono so "num mono" cells read as numbers. */
 .num,
 td.num,
 th.num {
@@ -275,15 +245,9 @@ th.num {
   font-variant-numeric: tabular-nums;
 }
 
-/* .num is only ever a quantity, price, or percentage — a value that
-   should never wrap, since a broken number ("₱850.0" / "0") is
-   actively misleading, not just untidy. It shares the inherited
-   overflow-wrap: anywhere problem from .table-fixed td (see .badge
-   and .btn below): with no white-space of its own, a number in a
-   narrow fixed column gets split mid-digit. Scoped to .num rather
-   than added to .mono/code above, since .mono alone is also used for
-   things that legitimately need to wrap (e.g. the long partner-portal
-   URL, which sets its own word-break: break-all deliberately). */
+/* .num (quantity, price, percentage) must never wrap: a split number ("PHP850.0" / "0")
+   misleads. It would otherwise inherit overflow-wrap: anywhere from .table-fixed td and
+   break mid-digit. Scoped to .num, not .mono, which legitimately wraps (e.g. long URLs). */
 .num,
 td.num,
 th.num {
@@ -312,27 +276,15 @@ th.num {
   overflow-x: hidden;
   scrollbar-width: thin;
   scrollbar-color: var(--border-strong) transparent;
-  /* Without this, the scrollbar (whenever the nav list is tall enough
-     to need one) only ever eats space from the right edge, so every
-     "centered" element inside — logo, nav icons, avatar, footer icons —
-     is actually centered in a slightly-narrower-on-the-right box than
-     the padding math below assumes, reading as off-center toward the
-     left. `stable` reserves that gutter consistently whether or not
-     scrolling is currently possible (so nothing shifts the moment a
-     nav item is added and the list starts overflowing); `both-edges`
-     reserves the matching space on the left too, so the sidebar's
-     actual content box stays symmetric either way and every fixed
-     padding value elsewhere keeps centering correctly regardless of
-     the real scrollbar width on whatever browser renders it. */
+  /* Reserve the scrollbar gutter on both edges so the sidebar's content box stays symmetric
+     whether or not the nav list scrolls (centred icons stay centred, nothing shifts when an
+     item is added). */
   scrollbar-gutter: stable both-edges;
   transition: clip-path var(--sidebar-dur) var(--sidebar-ease);
 }
 
-/* Before main.js's initNavAccordion() has run, each group is still a bare
-   label followed by its links. Giving that markup the same box the upgraded
-   one gets (flex label with its chevron, plus the 0.5rem spacer that
-   .nav-items-inner::before adds) means nothing moves when the script
-   upgrades it a moment after first paint. */
+/* Before initNavAccordion() runs, give the bare label + links the same box as the upgraded
+   markup (flex label with chevron, 0.5rem spacer) so nothing moves when it upgrades. */
 .nav-group:not(:has(> .nav-items))>.nav-label {
   display: flex;
   align-items: center;
@@ -353,8 +305,7 @@ th.num {
   transform: translateY(-1px) rotate(45deg);
 }
 
-/* Pinned open, groups are about to be folded to the saved/active state by
-   main.js; hide the list until then rather than show it unfolding. The
+/* Pinned open: hide the list until main.js folds groups to the saved/active state. The
    animation is a failsafe that reveals it if the script never runs. */
 html.sidebar-booting.sidebar-pinned .sidebar .nav-group {
   opacity: 0;
@@ -367,8 +318,8 @@ html.sidebar-booting.sidebar-pinned .sidebar .nav-group {
   }
 }
 
-/* First paint only: main.js removes html.sidebar-booting once the rail's
-   gutter has been measured, so the width correction never animates. */
+/* First paint only: html.sidebar-booting is removed once the gutter is measured, so the
+   width correction never animates. */
 html.sidebar-booting .sidebar,
 html.sidebar-booting .sidebar * {
   transition: none !important;
@@ -432,43 +383,22 @@ html.sidebar-booting .sidebar * {
   }
 }
 
-/* Icon-only rail at rest, expanding to full width on hover-intent
-   (.is-peeking, set by main.js's initSidebarHoverIntent() after a short
-   dwell so a cursor merely crossing the rail doesn't fling it open) or
-   keyboard focus (:focus-visible, so a mouse click on a link doesn't
-   leave the rail stuck open after the pointer leaves).
-   `.sidebar:not(.is-peeking):not(.is-kbd)` is this "at rest, collapsed"
-   condition — used below wherever the collapsed rail needs to look
-   different from the full sidebar. Every rule using it is scoped to
-   min-width: 761px: below that, .sidebar is the off-canvas drawer (see
-   the max-width: 760px block far below), opened by a tap rather than a
-   hover, and it should always show its full content once open — none of
-   this collapse behavior is meant to reach it.
-
-   The width transition above runs at one duration in both directions,
-   but the text/label reveal below is deliberately asymmetric: it hides
-   fast with no delay on the way in (so the sidebar doesn't shrink around
-   still-visible text) and reveals with a short delay on the way out (so
-   labels only fade in once the rail has mostly finished widening,
-   instead of stretching out mid-transition). See the collapsed-rail
-   rules further down for the actual delay/duration values.
-
-   Gated by html:not(.sidebar-pinned), same as every descendant rule
-   below (labels, brand text, user-chip, footer actions) — without this
-   guard here too, pinning would only keep those inner bits visible
-   while the sidebar's own box still shrank to the collapsed width
-   around them, cramming a full-width brand/nav/footer into an 84px
-   rail. See main.js's initSidebarPinToggle() for how .sidebar-pinned
-   actually gets set (the footer's pin toggle, or default-on for
-   touch/coarse-pointer devices that can't trigger hover reliably). */
+/* Icon-only rail at rest, expanding on hover-intent (.is-peeking, set by
+   initSidebarHoverIntent()) or keyboard focus (.is-kbd / :focus-visible; a mouse click must
+   not leave it stuck open).
+   `.sidebar:not(.is-peeking):not(.is-kbd)` means "at rest, collapsed"; its rules are scoped
+   to min-width: 761px (below that .sidebar is the off-canvas drawer and always shows full content).
+   The text reveal is asymmetric: hides fast with no delay on the way in, reveals with a short
+   delay on the way out, so labels fade in once the rail has mostly widened.
+   Gated by html:not(.sidebar-pinned) like the descendant rules, or pinning would keep the inner
+   bits visible while the box shrank to the collapsed width. See initSidebarPinToggle(). */
 @media (min-width: 761px) {
   html:not(.sidebar-pinned) .sidebar:not(.is-peeking):not(.is-kbd) {
     clip-path: inset(0 calc(var(--sidebar-w) - var(--sidebar-w-collapsed)) 0 0);
   }
 
-  /* Collapsed, the rail lays its rows out at the narrow width (dividers and
-     rows end inside it with their own padding) and the clip only animates the
-     reveal; on peek the margin drops and the full width is shown. */
+  /* Collapsed, rows lay out at the narrow width and the clip only animates the reveal;
+     on peek the margin drops and the full width shows. */
   html:not(.sidebar-pinned) .sidebar:not(.is-peeking):not(.is-kbd) > :not(.nav-indicator) {
     margin-right: calc(var(--sidebar-w) - var(--sidebar-w-collapsed));
   }
@@ -481,11 +411,8 @@ html.sidebar-booting .sidebar * {
     background-repeat: no-repeat;
   }
 
-  /* Unpinned, the rail only ever takes up its collapsed width in the
-     layout and expands *over* the page instead of pushing it. Letting
-     it push meant every frame of the width animation re-laid out the
-     whole page (tables, charts, ...), which is what made hover-expand
-     stutter. Pinned keeps the in-flow sticky sidebar above. */
+  /* Unpinned, the rail takes only its collapsed width in layout and expands over the page;
+     pushing it re-laid out the whole page every frame and made hover-expand stutter. */
   html:not(.sidebar-pinned) .app-shell {
     padding-left: var(--sidebar-w-collapsed);
   }
@@ -536,13 +463,8 @@ html.sidebar-booting .sidebar * {
 .brand {
   padding: var(--space-lg) var(--space-lg) var(--space-lg);
   position: relative;
-  /* Same slow+delayed reveal choreography as .brand-wordmark/.brand-sub
-     below — without this, left/right padding snapped instantly the
-     moment a hover/focus started or ended, so the logo jumped sideways
-     a beat before the sidebar itself had even started (or long after
-     it had finished) widening. The collapsed-rail rule further down
-     overrides this with the fast+immediate hide version, same pattern
-     as every other reveal/hide pair on this rail. */
+  /* Same slow+delayed reveal as .brand-wordmark/.brand-sub; without it the padding snapped
+     and the logo jumped sideways. The collapsed-rail rule below overrides it with fast+immediate. */
   transition: padding 0.18s cubic-bezier(0.4, 0, 0.2, 1) 0.03s;
 }
 
@@ -573,42 +495,21 @@ html.sidebar-booting .sidebar * {
   align-items: center;
 }
 
-/* Centers .brand-wordmark within the sidebar's header — scoped to the
-   sidebar specifically (not the base rule above, which login.html's
-   own brand-top also uses) because login's hero panel is otherwise
-   entirely left-aligned (tagline, bullet points, .brand-sub); centering
-   would only look right here. Safe to leave on unconditionally (not
-   toggled alongside the collapse transitions below) because .brand-logo
-   and .brand-wordmark cross-fade rather than ever sitting side by side
-   at full size together — whichever one is actually visible at a given
-   moment is the only thing with real width for this to center, so it
-   re-centers correctly through every point of the collapse animation
-   too, no separate transition needed. (No gap between them above for
-   the same reason: with only one ever visible at a time, fixed spacing
-   between them would just misalign whichever one is showing off from
-   true center by half that gap.) */
+/* Centres .brand-wordmark in the sidebar header. Scoped to the sidebar because login's hero
+   panel is left-aligned. Safe unconditionally: .brand-logo and .brand-wordmark cross-fade, so
+   only one has real width at a time (hence no gap between them). */
 .sidebar .brand-top {
   justify-content: center;
   position: relative;
-  /* Holds the header at the wordmark's full rendered height (its
-     9.375rem max-width x logo-wordmark.svg's 8000x4493 aspect) in both
-     states, so the collapsed rail's much shorter 38px icon doesn't pull
-     every nav icon below it upward when the sidebar shrinks. */
+  /* Hold the header at the wordmark's full height (9.375rem max-width x 8000x4493 aspect) in
+     both states, so the shorter collapsed icon doesn't pull nav icons upward. */
   min-height: calc(9.375rem * 4493 / 8000);
 }
 
-/* Icon-only mark (icon.svg — the same gold "&" mark as the
-   browser-tab favicon) — only ever meant to be seen
-   on the sidebar's collapsed rail (see the collapsed-rail override
-   below): the expanded sidebar shows the full logo-wordmark.svg
-   lockup instead (see .brand-wordmark just below), which already has
-   this same mark baked into its own artwork alongside the wordmark
-   text, so showing both at once would just duplicate it. Hidden here
-   by default (max-width: 0, not display: none) so the two can
-   cross-fade instead of popping; the collapsed-rail rule reveals it.
-   Small enough (and with no text reflow to worry about, unlike
-   .brand-wordmark) that both directions transition at the same fast
-   speed — see the collapsed-rail rule's own comment. */
+/* Icon-only mark (icon.svg, the favicon's gold "&"), shown only on the collapsed rail; the
+   expanded sidebar shows the logo-wordmark.svg lockup, which already contains it. Hidden by
+   default with max-width: 0 (not display: none) so the two can cross-fade. Both directions
+   use the same fast speed (see the collapsed-rail rule). */
 .brand-logo {
   width: 2.375rem;
   height: 2.375rem;
@@ -618,21 +519,16 @@ html.sidebar-booting .sidebar * {
   display: flex;
   align-items: center;
   justify-content: center;
-  /* No box-shadow border/glow here (unlike this wrapper's old version)
-     — that was giving definition to the previous icon, a plain dark
-     square with no border of its own. icon.svg already draws its own
-     rounded-square background and gold border baked into the artwork,
-     so a wrapper shadow on top of it just doubled up as a second,
-     slightly-misaligned ring around the real one. */
+  /* No wrapper box-shadow: icon.svg already draws its own rounded square and gold border,
+     and a second ring would double up. */
   max-width: 0;
   opacity: 0;
   transition: opacity 0.1s ease;
 }
 
-/* In the sidebar the icon mark is taken out of flow and parked on the
-   rail's icon column (centre 2.25rem from the content edge = 1.375rem
-   .brand padding - 0.3125rem + half its 2.375rem width), so it neither
-   shifts the centred wordmark nor moves when the rail collapses. */
+/* In the sidebar the icon mark is out of flow, parked on the rail's icon column (centre
+   2.25rem from the content edge = 1.375rem padding - 0.3125rem + half its 2.375rem width), so it
+   neither shifts the wordmark nor moves when the rail collapses. */
 .sidebar .brand-logo {
   position: absolute;
   left: -0.3125rem;
@@ -648,25 +544,11 @@ html.sidebar-booting .sidebar * {
   object-fit: cover;
 }
 
-/* Full "Heaven & Angel Scents" lockup (logo-wordmark.svg) — the mark
-   and the wordmark text baked into one image, replacing the old
-   separate icon + .brand-mark text spans. 150px is a deliberate
-   fraction of .brand's ~220px content box (264px sidebar minus its
-   own 22px left/right padding), not the full width — filling it
-   edge-to-edge rendered the image at its full ~124px-tall aspect,
-   overwhelming the compact header. Centered by .sidebar .brand-top
-   above rather than sized to fill, so it reads as a header logo, not
-   a banner. Only width is ever explicitly constrained; height: auto
-   lets it follow from the image's own aspect ratio, so there's no
-   need for object-fit here — width is the one dimension driving the
-   size in both the resting and collapsed states, never fought over
-   by two independently-set dimensions. max-width doubles as the
-   collapse transition's "full" endpoint (same reasoning as the old
-   .brand-mark's own 200px cap).
-   Reveal direction (rail expanding back out): slower, and delayed
-   until the rail has mostly widened, so the mark doesn't stretch into
-   view mid-transition — see the collapsed-rail rule below for the
-   faster, undelayed hide direction. */
+/* Full "Heaven & Angel Scents" lockup (logo-wordmark.svg). 150px is a deliberate fraction of
+   .brand's ~220px content box; edge-to-edge overwhelmed the header. Only width is constrained
+   (height: auto), and max-width doubles as the collapse transition's "full" endpoint.
+   Reveal: slower and delayed until the rail has mostly widened; hide is faster (see the
+   collapsed-rail rule). */
 .brand-wordmark {
   display: block;
   width: auto;
@@ -676,19 +558,13 @@ html.sidebar-booting .sidebar * {
   transition: opacity 0.2s ease 0.1s;
 }
 
-/* The wordmark is metallic gold artwork made for dark surfaces. On a light
-   sidebar it measured about 1.3:1 against the background, so it all but
-   disappeared in every interface style. In light mode it is deepened to a
-   bronze (same artwork, same shape) that reads on any light surface. */
+/* The metallic gold wordmark is made for dark surfaces and measured about 1.3:1 on a light
+   sidebar. In light mode it is deepened to a bronze (same artwork) that reads on light. */
 html[data-theme="light"] .sidebar .brand-wordmark {
   filter: brightness(0.44) saturate(1.8) contrast(1.3) drop-shadow(0 0 0.6px var(--wordmark-halo));
 }
 
-/* Login hero panel's larger rendering — same reasoning as the old
-   .brand-logo-lg had for the icon: scaled up to match the bigger hero
-   panel instead of looking undersized next to its larger tagline
-   text. No collapse behavior to speak of there (the login page has no
-   sidebar rail), so this is just a plain size override. */
+/* Login hero panel's larger rendering: a plain size override (the login page has no rail). */
 .brand-wordmark-lg {
   height: 10rem;
   max-width: 22rem;
@@ -709,8 +585,7 @@ html[data-theme="light"] .sidebar .brand-wordmark {
   overflow: hidden;
   opacity: 1;
   max-height: 1.375rem;
-  /* Same reveal choreography as .brand-wordmark just above: slow + delayed
-     coming out, fast + immediate going in (collapsed-rail rule below). */
+  /* Same reveal choreography as .brand-wordmark: slow+delayed out, fast+immediate in. */
   transition: opacity 0.2s ease 0.1s;
 }
 
@@ -721,21 +596,13 @@ html[data-theme="light"] .sidebar .brand-wordmark {
   min-width: 0;
 }
 
-/* Collapsed rail (at rest, unhovered, unpinned — see .sidebar's own
-   comment above): just the mark icon, centered, wordmark/subtitle
-   faded/shrunk out of view (not display: none — that would make this an
-   instant pop instead of the eased collapse these transitions are for).
-   .sidebar-close is only ever shown on the mobile breakpoint (see the
-   max-width: 760px block below), which this never reaches. */
+/* Collapsed rail (at rest, unhovered, unpinned): just the mark icon, centred; wordmark and
+   subtitle fade/shrink out (not display: none, which would pop). .sidebar-close only shows on
+   the mobile breakpoint, which this never reaches. */
 @media (min-width: 761px) {
 
-  /* Reverses .brand-logo's own default-hidden state — see its comment
-     above. Same fast timing in both directions: unlike the wordmark/
-     text elements (asymmetric on purpose — see their own comments),
-     a small square icon has no text reflow to hide, so popping it in
-     as soon as the collapse starts (rather than waiting, which would
-     leave the rail looking briefly empty once .brand-wordmark below
-     has already faded out) reads better than matching their delay. */
+  /* Reverses .brand-logo's default-hidden state. Same fast timing both ways: a small icon has no
+     text reflow to hide, and waiting would leave the rail briefly empty after the wordmark fades. */
   html:not(.sidebar-pinned) .sidebar:not(.is-peeking):not(.is-kbd) .brand-logo {
     max-width: 2.375rem;
     opacity: 1;
@@ -747,8 +614,7 @@ html[data-theme="light"] .sidebar .brand-wordmark {
     transition: opacity 0.1s ease;
   }
 
-  /* Fades only — keeps its height and margin so the nav below stays
-     at the same vertical position as in the expanded sidebar. */
+  /* Fades only; keeps height and margin so the nav stays at the same vertical position. */
   html:not(.sidebar-pinned) .sidebar:not(.is-peeking):not(.is-kbd) .brand-sub {
     opacity: 0;
     transition: opacity 0.1s ease;
@@ -785,16 +651,14 @@ html[data-theme="light"] .sidebar .brand-wordmark {
   white-space: nowrap;
   opacity: 1;
   max-height: 1.75rem;
-  /* Same slow+delayed-out/fast+immediate-in choreography as the brand
-     wordmark above — see the collapsed-rail rule further down. */
+  /* Same slow+delayed-out / fast+immediate-in choreography as the brand wordmark. */
   transition: opacity 0.2s ease 0.1s;
 }
 
 /* ---- Collapsible nav groups ----
-   main.js's initNavAccordion() turns each .nav-label into a toggle and
-   wraps the group's links in .nav-items > .nav-items-inner so they can
-   ease open/closed (grid-template-rows 1fr <-> 0fr). The group holding
-   the current page is open on load; searching opens everything. */
+   initNavAccordion() turns each .nav-label into a toggle and wraps the links in
+   .nav-items > .nav-items-inner so they ease open/closed (grid-template-rows 1fr <-> 0fr).
+   The current page's group is open on load; searching opens everything. */
 .nav-label[role="button"] {
   display: flex;
   align-items: center;
@@ -890,9 +754,8 @@ html[data-theme="light"] .sidebar .brand-wordmark {
   overflow: hidden;
 }
 
-/* Breathing room between the group title and its first link. A spacer
-   inside the clipped box (not padding) so it collapses away with the
-   links when the group closes. */
+/* Space between the group title and its first link: a spacer inside the clipped box (not
+   padding) so it collapses away with the links. */
 .nav-items-inner::before {
   content: "";
   display: block;
@@ -921,10 +784,8 @@ html[data-theme="light"] .sidebar .brand-wordmark {
   display: none;
 }
 
-/* Drop-downs only apply while the sidebar is pinned open (and on the
-   phone drawer). On the icon-only rail — and while it's peeking open on
-   hover — every group stays fully shown, otherwise a closed group's
-   icons would vanish from the rail and the menu would reshuffle on hover. */
+/* Drop-downs apply only while pinned open (and on the phone drawer). On the icon rail, and
+   while peeking, every group stays shown so rail icons don't vanish or reshuffle on hover. */
 @media (min-width: 761px) {
   html:not(.sidebar-pinned) .nav-group.is-collapsed>.nav-items {
     grid-template-rows: 1fr;
@@ -965,37 +826,21 @@ html[data-theme="light"] .sidebar .brand-wordmark {
   font-weight: 500;
   margin-bottom: var(--space-3xs);
   position: relative;
-  /* Labels never wrap; main.js wraps each one in .nav-text (below),
-     which clips it as the rail narrows. The link itself must NOT clip
-     (no overflow: hidden here) or it cuts off the .nav-badge count
-     sitting on the icon's corner in the collapsed rail. */
+  /* Labels never wrap; initSidebarNavTooltips() wraps each in .nav-text, which clips it as the
+     rail narrows. The link must NOT clip (no overflow: hidden) or it cuts off the .nav-badge. */
   white-space: nowrap;
-  /* The label after the <svg> is a raw text node (see base.html), so it
-     can't be faded via opacity independently of the icon — font-size is
-     the only lever that reaches it, but transitioning it (instead of
-     snapping via font-size: 0) is what keeps the collapse from popping.
-     Padding eases in step so the icon doesn't jump as the label's
-     footprint shrinks. Reveal is slower + delayed, hide is fast +
-     immediate — see the collapsed-rail rule further down.
-
-     background/border-color/color/transform/box-shadow are repeated
-     here from the shared .btn/.theme-toggle/.tab/.nav-link/
-     .footer-action rule above rather than left to it alone: transition
-     is a single shorthand, not additive across rules of equal
-     specificity, so this rule (later in the file, same specificity)
-     would otherwise silently replace that one instead of adding to it —
-     losing the hover/active background fade entirely. */
+  /* The label after the <svg> is a raw text node, so only font-size can fade it; transitioning
+     it (not snapping to 0) avoids a pop. Padding eases in step. Reveal is slower + delayed.
+     background/border-color/color/transform/box-shadow are repeated from the shared
+     .btn/.theme-toggle/.tab/.nav-link/.footer-action rule: transition is one shorthand, not
+     additive across equal-specificity rules, so omitting them would drop the hover fade. */
   transition: background 0.15s ease, border-color 0.15s ease,
     color 0.15s ease, transform 0.1s ease;
 }
 
-/* .nav-badge is absolutely positioned (see its own rule) rather than a
-   normal flex child, so it no longer reserves its own room at the end
-   of the row — without this, a long enough label could run under it.
-   Reserves space for it up front instead. Collapsed rail doesn't need
-   the same guard: font-size: 0 there empties the label out regardless. */
-/* Shrinks with the rail and clips its own text, so collapsing wipes
-   the label away without reflowing anything or clipping the badge. */
+/* .nav-badge is absolutely positioned, so it reserves no room; pad the label up front so a long
+   one can't run under it. The collapsed rail doesn't need it (font-size: 0). */
+/* Shrinks with the rail and clips its own text, so collapsing wipes the label away. */
 .nav-text {
   min-width: 0;
   overflow: hidden;
@@ -1005,11 +850,8 @@ html[data-theme="light"] .sidebar .brand-wordmark {
   padding-right: var(--space-xl);
 }
 
-/* Icon grows a touch when the rail is collapsed (see the collapsed-rail
-   rule further down) — a bare icon reads better a little larger than it
-   does sitting next to a label — and eases back down just as smoothly
-   when the label returns, in step with .nav-link's own padding/gap
-   transition above. */
+/* The icon grows slightly when collapsed (a bare icon reads better larger) and eases back in
+   step with .nav-link's padding/gap transition. */
 .nav-link svg {
   width: 1rem;
   height: 1rem;
@@ -1044,8 +886,7 @@ html[data-theme="light"] .sidebar .brand-wordmark {
   font-weight: 600;
 }
 
-/* No edge bar on the active link: the tinted row and the filled icon
-   chip already mark it, the way a macOS sidebar selection does. */
+/* No edge bar on the active link: the tinted row and filled icon chip mark it (macOS style). */
 .nav-link.active::before {
   content: none;
   position: absolute;
@@ -1057,9 +898,7 @@ html[data-theme="light"] .sidebar .brand-wordmark {
   border-radius: 0 0.25rem 0.25rem 0;
   background: var(--accent);
   box-shadow: 0 0 8px 1px color-mix(in srgb, var(--accent) 65%, transparent);
-  /* Reveal-direction transition for the collapsed-rail override below
-     (hide direction there is fast + immediate) — same choreography as
-     everything else on the rail. */
+  /* Reveal-direction transition for the collapsed-rail override below (hide there is fast). */
   transition: opacity 0.15s ease 0.05s;
 }
 
@@ -1070,15 +909,9 @@ html[data-theme="light"] .sidebar .brand-wordmark {
   box-shadow: 0 4px 10px -3px color-mix(in srgb, var(--accent) 60%, transparent);
 }
 
-/* Always absolutely positioned (against .nav-link's own position:
-   relative) rather than an inline flex child pushed to the row's end
-   via margin-left: auto — CSS can't animate the position property, so
-   switching between static (expanded) and absolute (collapsed) always
-   snapped instantly no matter how many other properties transitioned.
-   Being absolute in both states lets top/right/transform ease between
-   them instead. top: 50% + translateY(-50%) here reproduces the same
-   vertical centering align-items: center gave it before; the
-   collapsed-rail rule below moves it to the icon's corner instead. */
+/* Always absolutely positioned (against .nav-link's position: relative): CSS can't animate the
+   position property, so switching static/absolute always snapped. top: 50% + translateY(-50%)
+   centres it; the collapsed-rail rule moves it to the icon's corner. */
 .nav-badge {
   position: absolute;
   top: 50%;
@@ -1108,51 +941,32 @@ html[data-theme="light"] .sidebar .brand-wordmark {
   color: var(--gold-contrast);
 }
 
-/* Collapsed rail (at rest — see .sidebar's own comment above): icon-only
-   nav. The label after each <svg> is a plain text node (not wrapped in
-   its own element — see base.html), so it can't be display:none'd
-   directly; font-size: 0 shrinks it to nothing without touching the svg
-   or badge, which both set their own explicit (non-relative) sizes and
-   so ignore the parent's font-size — both .nav-link and .nav-badge
-   transition that font-size (plus the padding/gap it collapses into)
-   instead of snapping straight to it, so the label eases away rather
-   than popping. main.js's initSidebarCollapse()
-   also copies each link's label into its title attribute, so the name
-   is still available as a native tooltip for anyone who mouses over the
-   rail without lingering long enough to trigger the hover-expand. */
+/* Collapsed rail (at rest): icon-only nav. The label is a plain text node, so font-size: 0
+   shrinks it without touching the svg or badge (which have explicit sizes); .nav-link and
+   .nav-badge transition that font-size plus padding/gap so the label eases away.
+   initSidebarCollapse() also copies each label into a title tooltip. */
 @media (min-width: 761px) {
 
-  /* Fades only, keeping its height — collapsing it too would shift
-     every icon below it up relative to the expanded sidebar. */
+  /* Fades only, keeping height: collapsing it would shift every icon below it up. */
   html:not(.sidebar-pinned) .sidebar:not(.is-peeking):not(.is-kbd) .nav-label {
     opacity: 0;
     transition: opacity 0.1s ease;
   }
 
-  /* The active link's row-wide accent-soft wash (and the left accent
-     bar glued to the row's edge) are sized for a full-width row with
-     the icon sitting at its start — collapsed down to icon-only width,
-     that wash reads as a second, softer box wrapping the icon's own
-     solid-accent square (see .nav-link.active svg), and the bar ends
-     up floating off to the left of the now-centered icon instead of
-     flush against it. Dropping the wash and fading the bar out leaves
-     just the icon's own accent fill as the "active" signal — same
-     fix as the collapsed .user-chip above, and consistent with every
-     other icon on the rail never getting an extra card around it. */
+  /* The active link's row-wide accent wash and left bar are sized for a full row; collapsed to
+     icon width they read as a second box around the icon's own accent square, and the bar floats
+     off-centre. Drop the wash, fade the bar; the icon fill is the signal (same as .user-chip). */
   html:not(.sidebar-pinned) .sidebar:not(.is-peeking):not(.is-kbd) .nav-link.active {
     background: transparent;
-    /* Interface styles (themes.css) give the active row its own border,
-       inset ring, hard shadow or glow; on the rail that would box in the
-       whole row around the icon. The icon chip below is the only marker. */
+    /* Interface styles (themes.css) give the active row a border, ring, shadow or glow; on the
+       rail that would box in the row. The icon chip below is the only marker. */
     border-color: transparent;
     box-shadow: none;
     transition: background 0.1s ease;
   }
 
-  /* Some styles make the active icon's chip transparent (their row
-     highlight carries the signal when expanded). With the row highlight
-     gone on the rail, restore the filled chip in every style so the
-     current page is always marked. */
+  /* Some styles make the active icon chip transparent (their row highlight carries it when
+     expanded). With the highlight gone on the rail, restore the filled chip in every style. */
   html:not(.sidebar-pinned) .sidebar:not(.is-peeking):not(.is-kbd) .nav-link.active svg {
     background: var(--accent);
     color: var(--gold-contrast);
@@ -1166,10 +980,8 @@ html[data-theme="light"] .sidebar .brand-wordmark {
   html:not(.sidebar-pinned) .sidebar:not(.is-peeking):not(.is-kbd) .nav-badge {
     top: 2px;
     right: 0.625rem;
-    /* Explicit translateY(0) rather than leaving transform to fall back
-       to its unset value — animating between two translateY() calls
-       interpolates smoothly; animating to/from "none" is the one case
-       that doesn't reliably ease the same way. */
+    /* Explicit translateY(0): animating between two translateY() calls interpolates smoothly,
+       to/from "none" doesn't reliably. */
     transform: translateY(0);
     font-size: 0.5625rem;
     min-width: 0.875rem;
@@ -1193,19 +1005,15 @@ html[data-theme="light"] .sidebar .brand-wordmark {
   align-items: center;
   gap: var(--space-sm);
   margin-bottom: var(--space-sm);
-  /* 0.25rem left (not 0.625rem) puts the avatar's centre on the rail's
-     icon column: 0.875rem footer padding + 1px border + 0.25rem +
-     half its 2.125rem width = 2.25rem. */
+  /* 0.25rem left puts the avatar's centre on the rail's icon column:
+     0.875rem footer padding + 1px border + 0.25rem + half its 2.125rem width = 2.25rem. */
   padding: var(--space-xs) var(--space-sm) var(--space-xs) var(--space-2xs);
   border-radius: 0.875rem;
-  /* Flat row: no box. The border stays (transparent) so the avatar keeps
-     its position on the rail's icon column (see padding comment above). */
+  /* Flat row, no box. The border stays (transparent) to keep the avatar on the icon column. */
   border: 1px solid transparent;
   background: transparent;
-  /* padding's reveal-direction transition for the collapsed-rail
-     override further down — slow + delayed, same choreography as
-     .brand/.nav-link/.footer-action; that rule overrides it with the
-     fast + immediate hide-direction version. */
+  /* Reveal-direction padding transition for the collapsed-rail override (slow + delayed, like
+     .brand/.nav-link/.footer-action); that rule uses the fast + immediate hide version. */
   transition: background 0.15s ease, border-color 0.15s ease,
     padding 0.18s cubic-bezier(0.4, 0, 0.2, 1) 0.03s;
 }
@@ -1274,10 +1082,8 @@ html[data-theme="light"] .sidebar .brand-wordmark {
   text-overflow: ellipsis;
 }
 
-/* The name/role column next to the avatar — collapses smoothly rather
-   than popping via display: none. Same slow+delayed-out/fast+immediate
-   -in choreography as the brand wordmark and nav labels above; see the
-   collapsed-rail rule further down for the hide direction. */
+/* Name/role column next to the avatar: collapses smoothly (not display: none), same
+   slow+delayed-out / fast+immediate-in choreography as the brand wordmark and nav labels. */
 .user-chip>div:not(.avatar) {
   overflow: hidden;
   white-space: nowrap;
@@ -1312,8 +1118,7 @@ html[data-theme="light"] .sidebar .brand-wordmark {
   align-items: center;
   gap: var(--space-xs);
   /* 0.75rem left puts the icon's centre on the rail's icon column:
-     0.875rem footer padding - 2px margin + 0.75rem + half its 1.5rem
-     box = 2.25rem. */
+     0.875rem footer padding - 2px margin + 0.75rem + half its 1.5rem box = 2.25rem. */
   min-height: 2.5rem;
   padding: var(--space-xs) var(--space-xs) var(--space-xs) var(--space-sm);
   margin: 0 calc(var(--space-3xs) * -1);
@@ -1321,31 +1126,17 @@ html[data-theme="light"] .sidebar .brand-wordmark {
   font-size: 0.8125rem;
   font-weight: 500;
   color: var(--ink-soft);
-  /* Reveal direction for the collapsed-rail padding override further
-     down (hide direction there is fast + immediate; this is slow +
-     delayed, same choreography as everything else on the rail).
-
-     background/border-color/color/transform/box-shadow are repeated
-     here from the shared .btn/.theme-toggle/.tab/.nav-link/
-     .footer-action rule above rather than left to it alone: transition
-     is a single shorthand, not additive across rules of equal
-     specificity, so this rule (later in the file, same specificity)
-     would otherwise silently replace that one instead of adding to it —
-     losing the hover background fade entirely. */
+  /* Reveal direction for the collapsed-rail padding override (slow + delayed; hide is fast).
+     background/border-color/color/transform/box-shadow are repeated from the shared
+     .btn/.theme-toggle/.tab/.nav-link/.footer-action rule: transition is one shorthand, not
+     additive across equal-specificity rules, so omitting them would drop the hover fade. */
   transition: background 0.15s ease, border-color 0.15s ease,
     color 0.15s ease, transform 0.1s ease;
 }
 
-/* Resets browser button chrome for the Sign out <button> (see
-   base.html) so it looks identical to the .footer-action <a> next to
-   it, WITHOUT resetting font. The inline style this replaced used the
-   `font` shorthand set to `inherit`, which — because it's inline —
-   beat .footer-action's own font-size: 12.5px below, so the button
-   inherited the page's default (much larger) body font-size instead.
-   That's why "Sign out" rendered noticeably bigger than "Change
-   password" right above it. Omitting font here lets the button pick
-   up font-size/font-weight from .footer-action normally, same as the
-   <a>. */
+/* Resets browser button chrome on the Sign out <button> so it matches the .footer-action <a>,
+   WITHOUT resetting font: an inline `font: inherit` beat .footer-action's font-size and made
+   "Sign out" larger than "Change password". */
 .footer-action-btn {
   width: 100%;
   border: none;
@@ -1397,32 +1188,19 @@ html[data-theme="light"] .sidebar .brand-wordmark {
   background: color-mix(in srgb, var(--danger) 18%, transparent);
 }
 
-/* Collapsed rail (at rest — see .sidebar's own comment above):
-   user-chip shrinks to just the avatar, and the footer actions (whose
-   labels ARE their own <span>, unlike .nav-link above) fade/shrink that
-   span out (see the base .footer-action span and .user-chip>div rules
-   above for the transition) and center the icon instead. */
+/* Collapsed rail (at rest): user-chip shrinks to the avatar; footer-action labels (their own
+   <span>, unlike .nav-link) fade/shrink out via the base transitions and the icon centres. */
 @media (min-width: 761px) {
 
-  /* Avatar stays put (see .user-chip's padding comment); only the
-     right padding goes so the card fits the rail. */
+  /* Avatar stays put (see .user-chip's padding); only the right padding goes. */
   html:not(.sidebar-pinned) .sidebar:not(.is-peeking):not(.is-kbd) .user-chip {
     padding-right: 0;
-    /* The chip's own card look (background + border) only makes sense
-       around the name/role text next to the avatar — with that text
-       gone, a bordered box this narrow just reads as an ill-fitting
-       rounded rectangle squeezed tight around a circle, doubling up
-       with the avatar's own ring (box-shadow below). Dropping both
-       here leaves just the avatar, same as every other icon on the
-       rail (nav links, footer actions) with no extra card around it. */
+    /* The chip's card look only makes sense around the name/role text; with it gone a narrow
+       bordered box doubles up with the avatar's own ring. Drop both so only the avatar shows. */
     background: transparent;
     border-color: transparent;
-    /* Fast + immediate (hide direction) — see the base .user-chip rule
-       for the slower, delayed reveal-direction transition this
-       overrides. transition is a shorthand, not additive across rules
-       of equal specificity, so background/border-color need repeating
-       here rather than left to the base rule alone (same reasoning as
-       .nav-link/.footer-action's own comment on this). */
+    /* Fast + immediate (hide direction); the base .user-chip rule has the slower reveal. Because
+       transition is a shorthand, background/border-color are repeated here. */
     transition: padding 0.1s cubic-bezier(0.4, 0, 0.2, 1),
       background 0.1s ease, border-color 0.1s ease;
   }
@@ -1440,14 +1218,10 @@ html[data-theme="light"] .sidebar .brand-wordmark {
 }
 
 
-/* Expand/collapse motion for the rail's text and logo — transform and
-   opacity only, so none of it triggers layout. Expanding, each piece of
-   text slides in from the left and fades up, staggered top to bottom by
-   --i (set per nav label/link by main.js's initSidebarNavTooltips(),
-   capped so long menus don't lag). Collapsing, everything leaves at
-   once, fast, so nothing is still visible while the rail narrows. The
-   icon mark and full wordmark cross-fade with a small scale, the mark
-   with a slight spring. Declared after every per-element rule above so
+/* Expand/collapse motion for the rail's text and logo: transform and opacity only (no layout).
+   Expanding, text slides in from the left, staggered top to bottom by --i (set per label by
+   initSidebarNavTooltips(), capped). Collapsing, everything leaves at once, fast. The icon
+   mark and wordmark cross-fade with a small scale. Declared after the per-element rules so
    these transitions win at equal specificity. */
 .sidebar .nav-text,
 .sidebar .nav-label,
@@ -1464,9 +1238,8 @@ html[data-theme="light"] .sidebar .brand-wordmark {
 }
 
 .sidebar .brand-wordmark {
-  /* Pinned to where the expanded sidebar centres it. In flow, the rail's
-     margin-right (collapsed state) shrinks .brand-top at once, so the
-     centred wordmark jumped left for a beat before fading. */
+  /* Pinned to where the expanded sidebar centres it; in flow, the collapsed margin-right
+     shrinks .brand-top at once and the wordmark jumped left before fading. */
   position: absolute;
   top: 0;
   left: calc((var(--sidebar-w) - 2 * var(--space-lg) - 9.375rem) / 2);
@@ -1475,9 +1248,8 @@ html[data-theme="light"] .sidebar .brand-wordmark {
     transform 0.4s var(--sidebar-ease) 0.1s;
 }
 
-/* Sidebar only (login reuses .brand-sub): fixed at the expanded content
-   width so the centred label stays put while the rail collapses (see
-   .sidebar-pin), instead of sliding left as .brand shrinks. */
+/* Sidebar only (login reuses .brand-sub): fixed at the expanded content width so the label
+   stays put while the rail collapses (see .sidebar-pin). */
 .sidebar .brand-sub {
   width: calc(var(--sidebar-w) - 2 * var(--space-lg));
   flex-shrink: 0;
@@ -1525,11 +1297,9 @@ html[data-theme="light"] .sidebar .brand-wordmark {
 }
 
 /* ---- Sliding active indicator ----
-   One element shared by every link (main.js's syncSidebarIndicator()
-   sets --y/--h from the active link), so moving between pages glides
-   the highlight to the new row instead of blinking it. The pill is the
-   expanded row's wash; the ::before bar is the only part kept on the
-   collapsed rail, where the icon's own gold fill already does the job. */
+   One element shared by every link (syncSidebarIndicator() sets --y/--h), so the highlight
+   glides between rows. The pill is the expanded wash; the ::before bar is the only part kept
+   on the collapsed rail, where the icon's gold fill already marks it. */
 .nav-indicator {
   position: absolute;
   top: 0;
@@ -1589,10 +1359,9 @@ html[data-theme="light"] .sidebar .brand-wordmark {
 }
 
 /* ---- Menu search ----
-   The input is the field itself; the icon sits on the rail's icon
-   column (0.75rem group padding + 0.625rem + half its 1.75rem box =
-   2.25rem), so on the collapsed rail it reads as one more nav icon and
-   clicking it focuses the input, which expands the rail. */
+   The icon sits on the rail's icon column (0.75rem group padding + 0.625rem + half its
+   1.75rem box = 2.25rem), so on the collapsed rail it reads as a nav icon; clicking it
+   focuses the input, which expands the rail. */
 .nav-search {
   padding: var(--space-sm) var(--space-sm) var(--space-3xs);
 }
@@ -1612,8 +1381,7 @@ html[data-theme="light"] .sidebar .brand-wordmark {
   font-size: 0.8125rem;
   -webkit-appearance: none;
   appearance: none;
-  /* Eases the style-specific borders/shadows in and out as the rail
-     expands and collapses instead of snapping. */
+  /* Eases style-specific borders/shadows as the rail expands and collapses. */
   transition: background-color 0.2s ease, border-color 0.2s ease;
 }
 
@@ -1689,10 +1457,8 @@ html[data-theme="light"] .sidebar .brand-wordmark {
     background: transparent;
     border-color: transparent;
     cursor: pointer;
-    /* Interface styles (themes.css) add their own inset/hard shadows,
-       gradients and glows to every search input; on the narrow rail they
-       would draw a box around just the icon. Strip them so the rail shows
-       only the icon, whatever the style. */
+    /* Interface styles add inset/hard shadows, gradients and glows to search inputs; on the
+       narrow rail they would box in just the icon, so strip them. */
     background-image: none;
     box-shadow: none;
     outline: none;
@@ -1762,11 +1528,9 @@ html[data-theme="light"] .sidebar .brand-wordmark {
   opacity: 0.7;
 }
 
-/* Grouped pages: the menu shows one parent link (.has-subs) per group,
-   and the pages inside it are reached through the tab strip at the top
-   of each page (.subnav). The individual pages stay in the DOM as
-   .nav-sub links so search can still surface them by name; while
-   searching, those replace their parent. */
+/* Grouped pages: the menu shows one parent link (.has-subs) per group; its pages are reached
+   via the page tab strip (.subnav). The pages stay in the DOM as .nav-sub links so search can
+   surface them by name; while searching they replace their parent. */
 .nav-link.nav-sub {
   display: none;
 }
@@ -1860,16 +1624,13 @@ html[data-theme="light"] .sidebar .brand-wordmark {
 }
 
 /* ---- Pin toggle (brand header, top-right) ----
-   Only meaningful when expanded, so it fades out with the rest of the
-   text on the collapsed rail. The chevron points the way the sidebar
-   will go: right (keep open) while it's a peek, left (collapse) while
-   pinned. */
+   Only meaningful when expanded, so it fades with the text on the collapsed rail. The chevron
+   points the way the sidebar will go: right (keep open) on a peek, left (collapse) when pinned. */
 .sidebar-pin {
   position: absolute;
   top: 0.75rem;
-  /* Anchored from the left edge at the expanded sidebar's width: the
-     collapsed rail's margin-right shrinks .brand at once, which dragged
-     a right-anchored button sideways before it faded. */
+  /* Anchored from the left at the expanded width: the collapsed margin-right shrinks .brand at
+     once and dragged a right-anchored button sideways before it faded. */
   left: calc(var(--sidebar-w) - 0.75rem - 1.875rem);
   z-index: 3;
   width: 1.875rem;
@@ -1935,8 +1696,8 @@ html[data-theme="light"] .sidebar .brand-wordmark {
   }
 }
 
-/* Footer lifts off the nav with a soft shadow only while there's more
-   menu scrolled beneath it (main.js toggles .can-scroll-down). */
+/* Footer lifts off the nav with a soft shadow only while menu content scrolls beneath it
+   (.can-scroll-down is toggled in JS). */
 .sidebar-footer {
   transition: none;
 }
@@ -1970,8 +1731,8 @@ html[data-theme="light"] .sidebar .brand-wordmark {
 .main {
   flex: 1;
   min-width: 0;
-  /* Own stacking context so the watermark below (z-index: -1) paints
-     above the page background but under every piece of content. */
+  /* Own stacking context so the watermark below (z-index: -1) paints above the page
+     background but under all content. */
   isolation: isolate;
 }
 
@@ -2087,8 +1848,7 @@ html.js[data-theme="dark"] .theme-toggle .icon-moon {
   transform: rotate(0deg) scale(1);
 }
 
-/* Speaker button: shares the theme toggle's shape; its two icons swap
-   on mute instead of on theme. */
+/* Speaker button: shares the theme toggle's shape; its two icons swap on mute. */
 .sfx-toggle svg {
   transform: none;
 }
@@ -2147,9 +1907,8 @@ html.js[data-theme="dark"] .theme-toggle .icon-moon {
   letter-spacing: -0.03em;
 }
 
-/* The top bar carries no page title at any width (the sidebar highlight
-   and section tabs say where you are); it stays in the DOM for screen
-   readers only. */
+/* The top bar has no page title at any width (sidebar highlight and tabs say where you are);
+   it stays in the DOM for screen readers only. */
 .topbar-title {
   position: absolute;
   width: 1px;
@@ -2265,14 +2024,11 @@ html.js[data-theme="dark"] .theme-toggle .icon-moon {
 }
 
 /* ---- Top bar motion ----
-   Every effect here is transform/opacity (plus two tiny SVG strokes),
-   each tied to something happening: a page loading, a sale landing, a
-   notification arriving, the clock ticking. The global
-   prefers-reduced-motion rule near the top of this file flattens all
-   of it; main.js also skips triggering it in that case. */
+   Transform/opacity only (plus two tiny SVG strokes), each tied to an event: page load, a sale,
+   a notification, the clock. The global prefers-reduced-motion rule flattens it, and JS
+   skips triggering it in that case. */
 
-/* Odometer digits (main.js setOdometer): each digit is a 0-9 column
-   clipped to one row and slid to its value. */
+/* Odometer digits (setOdometer): each digit is a 0-9 column clipped to one row, slid to its value. */
 .odo-cell,
 .odo-sym {
   display: inline-block;
@@ -2295,8 +2051,7 @@ html.js[data-theme="dark"] .theme-toggle .icon-moon {
   line-height: 1.2em;
 }
 
-/* Centre the odometer rows against neighbouring text (inline-block
-   columns would otherwise sit on their bottom edge, above the line). */
+/* Centre odometer rows against neighbouring text (inline-block would sit on the bottom edge). */
 .today-chip-amount,
 .today-chip-count {
   display: inline-flex;
@@ -2312,11 +2067,10 @@ html.js[data-theme="dark"] .theme-toggle .icon-moon {
   transition-delay: calc(var(--odo-i, 0) * 32ms);
 }
 
-/* The chip clips a light band that sweeps across it when a new sale
-   updates the figure (replaces a box-shadow pulse, which repainted). */
-/* line-height matches the odometer rows (1.2em) so the rolling digits
-   and the words beside them ("sales", "TODAY") share one text box and
-   sit on the same line instead of the digits riding 2px high. */
+/* The chip clips a light band that sweeps across when a sale updates the figure (a box-shadow
+   pulse repainted). */
+/* line-height matches the odometer rows (1.2em) so digits and nearby words share one text box
+   instead of the digits riding 2px high. */
 .today-chip {
   position: relative;
   overflow: hidden;
@@ -2401,8 +2155,7 @@ html.js[data-theme="dark"] .theme-toggle .icon-moon {
   }
 }
 
-/* Loading bar: crawls while a soft navigation is in flight, then
-   sweeps to full width and fades (main.js navProgress). */
+/* Loading bar: crawls during a soft navigation, then sweeps to full width and fades (navProgress). */
 .topbar-progress {
   position: absolute;
   left: 0;
@@ -2572,10 +2325,9 @@ html.js[data-theme="dark"] .theme-toggle .icon-moon {
   }
 }
 
-/* Phones: menu button, the chip, then the bell/theme buttons — no title,
-   so the chip gets the room. It sheds detail as the screen narrows:
-   trend first, then the "Today" label, then the sale count, and on the
-   smallest phones the full amount becomes the compact one (₱12.4k). */
+/* Phones: menu button, chip, then bell/theme buttons (no title, so the chip gets the room).
+   It sheds detail as the screen narrows: trend, then "Today", then the sale count, and on the
+   smallest phones the compact amount (PHP12.4k). */
 @media (max-width: 760px) {
   .topbar {
     gap: var(--space-sm);
@@ -2634,9 +2386,8 @@ html.js[data-theme="dark"] .theme-toggle .icon-moon {
   }
 }
 
-/* On a phone the full amount plus "48 sales" is wider than the top bar leaves the chip, and the
-   count was cut to "48 sal". The compact amount (₱4.03K) frees the room; the full figure stays in
-   the chip's tooltip and screen-reader label. */
+/* On a phone the full amount plus "48 sales" overflowed ("48 sal"). The compact amount
+   (PHP4.03K) frees room; the full figure stays in the chip's tooltip and screen-reader label. */
 @media (max-width: 440px) {
   .today-chip-full {
     display: none;
@@ -2652,20 +2403,10 @@ html.js[data-theme="dark"] .theme-toggle .icon-moon {
   max-width: 73.75rem;
 }
 
-/* .main fills the rest of the flex row next to .sidebar, and .content's
-   own max-width just clips how wide it grows within that — nothing
-   centers it there on its own. The collapsed icon rail is .sidebar's
-   resting state (see its own comment above), which frees up enough
-   extra width that hugging the left edge looks lopsided, so .content is
-   centered here, always — deliberately NOT re-hugging the edge just
-   because the sidebar happens to be hover- or focus-expanded at the
-   moment: that used to shift .content sideways every time the mouse
-   passed over the rail (or a link inside it got keyboard focus), which
-   reads as the page itself reacting to a peek at the nav rather than a
-   deliberate layout change. Only html.sidebar-pinned (an explicit,
-   sticky "keep it open" state — see the sidebar-pinned rules elsewhere
-   in this file) re-hugs the edge, matching how this looked before the
-   sidebar could collapse. */
+/* .main fills the flex row beside .sidebar, and .content's max-width only clips its growth, so
+   .content is always centred (the collapsed rail frees enough width that hugging the left looks
+   lopsided). It deliberately does NOT re-hug the edge when the sidebar is hover/focus-expanded,
+   which shifted .content sideways on every pass over the rail. Only html.sidebar-pinned does. */
 @media (min-width: 761px) {
 
   .content {
@@ -2795,20 +2536,12 @@ html.js[data-theme="dark"] .theme-toggle .icon-moon {
   gap: var(--space-md);
 }
 
-/* Every dashboard chart card sits in a grid cell, and every chart card
-   contains a <canvas>. Canvas is a "replaced element" — browsers give
-   grid/flex items an automatic minimum size (min-width: auto) based on
-   their content's intrinsic size unless told otherwise, and for a
-   canvas that intrinsic size comes from its width/height ATTRIBUTES,
-   which Chart.js sets to the container size multiplied by
-   devicePixelRatio (2x-3x on most phones) for crisp rendering. Without
-   this reset, that inflated intrinsic size can hold a grid column open
-   wider than its track, or (once the column can't grow further) can
-   quietly clamp the chart card to a stale, previously-measured width
-   instead of shrinking to fit the real one-column mobile layout —
-   exactly what was happening to the Ledger movement chart and its
-   siblings under Edge/Brave's mobile emulation. This mirrors the same
-   min-width fix already applied below to the inline-styled grid. */
+/* Dashboard chart cards sit in grid cells and hold a <canvas>. A canvas is a replaced element:
+   its automatic minimum size comes from its width/height ATTRIBUTES, which Chart.js sets to the
+   container size x devicePixelRatio (2-3x on phones). That inflated size can hold a column open
+   wider than its track or clamp the card to a stale width on the one-column mobile layout
+   (seen on the Ledger movement chart in Edge/Brave emulation). Same min-width fix as the
+   inline-styled grid below. */
 .grid>* {
   min-width: 0;
 }
@@ -2825,12 +2558,8 @@ html.js[data-theme="dark"] .theme-toggle .icon-moon {
   grid-template-columns: repeat(4, 1fr);
 }
 
-/* Prevents a wide table (real data = wide min-content, especially with
-   white-space:nowrap cells) from forcing the whole two-column grid to
-   overflow and squish/clip its sibling card (e.g. an "Add X" form next
-   to a data table). Classic grid/flex min-width:auto gotcha — grid
-   items default to a content-based automatic minimum size unless told
-   otherwise. */
+/* A wide table (white-space: nowrap cells) would force the two-column grid to overflow and
+   squish its sibling card (e.g. an "Add X" form). The grid min-width: auto gotcha. */
 .grid[style*="grid-template-columns"]>* {
   min-width: 0;
 }
@@ -2880,10 +2609,8 @@ html.js[data-theme="dark"] .theme-toggle .icon-moon {
   justify-content: space-between;
 }
 
-/* Pins the hero to the right half, spanning both rows, so the span-2
-   tiles before it stack on top of each other in the left half (used
-   on the branch dashboard). Only on the 4-column layout — the
-   breakpoints below reset grid-column/grid-row to plain spans. */
+/* Pins the hero to the right half across both rows so the span-2 tiles stack in the left half
+   (branch dashboard). 4-column layout only; the breakpoints below reset to plain spans. */
 .bento-hero-end {
   grid-column: 3 / span 2;
   grid-row: 1 / span 2;
@@ -2944,8 +2671,8 @@ html.js[data-theme="dark"] .theme-toggle .icon-moon {
 .bento-grid .stat-tile,
 .card.stat-tile,
 .stat-tile {
-  /* A figure and its label on a hairline, not a card: sibling stats part
-     with a top rule, so a wrapping row never breaks a vertical rule. */
+  /* A figure and its label on a hairline, not a card: siblings part with a top rule, so a
+     wrapping row never breaks a vertical rule. */
   background: none;
   border: 0;
   border-top: 1px solid var(--border-strong);
@@ -2953,10 +2680,9 @@ html.js[data-theme="dark"] .theme-toggle .icon-moon {
   padding: var(--space-md) 0 0;
 }
 
-/* Highlighted stat tiles — opt-in per grid (admin and branch
-   dashboards), since .stat-tile is used on many other pages. Each tile
-   gets a tinted outline in --tile-tone (no bar along the top edge): gold by default, red/green when the tile's value is
-   flagged .danger/.success (low stock, loss, profit). */
+/* Highlighted stat tiles: opt-in per grid (admin and branch dashboards), since .stat-tile is
+   used on many pages. Each gets a tinted outline in --tile-tone (no top bar): gold by default,
+   red/green when flagged .danger/.success (low stock, loss, profit). */
 .stat-grid-highlight .stat-tile {
   --tile-tone: var(--accent);
   position: relative;
@@ -2989,13 +2715,9 @@ html.js[data-theme="dark"] .theme-toggle .icon-moon {
   height: 1.125rem;
 }
 
-/* stat-icon-blue/-violet keep their old names (many templates already
-   reference them) but no longer mean "blue"/"violet" — they're the
-   two decorative icon-chip variants for tiles that carry no status
-   meaning, alternating gold-filled and ink-filled for rhythm across a
-   dashboard's stat grid. stat-icon-red stays literally red — it's only
-   ever applied conditionally, when a tile really is flagging something
-   (pending requests, low stock). */
+/* stat-icon-blue/-violet keep their old names (many templates use them) but are now two
+   decorative chip variants for tiles with no status meaning, alternating gold and ink fill.
+   stat-icon-red stays red: applied only when a tile really flags something. */
 .stat-icon-blue {
   background: var(--accent-soft);
   color: var(--accent-ink);
@@ -3082,8 +2804,7 @@ html.js[data-theme="dark"] .theme-toggle .icon-moon {
   margin-top: var(--space-xs);
 }
 
-/* Up/down percentage on a stat tile — see the trend() macro in
-   _macros.html. Green up, red down, neutral when flat. */
+/* Up/down percentage on a stat tile (trend() macro in _macros.html): green up, red down, neutral flat. */
 .stat-trend {
   display: flex;
   flex-wrap: wrap;
@@ -3161,11 +2882,8 @@ html.js[data-theme="dark"] .theme-toggle .icon-moon {
   background: var(--brand-gold);
 }
 
-/* Animates the bar filling in to its data-pct width (see main.js's
-   initFillBars()) instead of snapping straight to it — a state
-   transition worth showing since the width is the actual stock level.
-   Scoped out of prefers-reduced-motion so a reduced-motion visitor's
-   width still lands correctly, just without the animated fill. */
+/* Animates the bar filling to its data-pct width (initFillBars()) since the width is the real
+   stock level. Excluded from prefers-reduced-motion so the width still lands, unanimated. */
 @media (prefers-reduced-motion: no-preference) {
   .fill-bar {
     transition: transform 0.6s var(--ease-out);
@@ -3194,13 +2912,9 @@ html.js[data-theme="dark"] .theme-toggle .icon-moon {
   text-align: right;
 }
 
-/* No border of its own — .table-wrap always sits flush inside a .card,
-   and .card now carries the same thick border-strong outline every
-   other rounded element does. Giving table-wrap its own copy on top of
-   that produced a doubled line along the shared left/right/bottom
-   edges once both were upgraded to the same color and weight. The
-   .card-header / .table-toolbar bottom border above it still does the
-   real job of separating the header/toolbar from the grid. */
+/* No border: .table-wrap sits flush inside a .card, which already has the thick border-strong
+   outline; a second one doubled the shared edges. The .card-header / .table-toolbar bottom
+   border separates the header from the grid. */
 .table-wrap {
   overflow: auto;
   max-height: 32.5rem;
@@ -3222,13 +2936,9 @@ html.js[data-theme="dark"] .theme-toggle .icon-moon {
   background: transparent;
 }
 
-/* Stable column widths regardless of cell content length. Pair with a
-   <colgroup> on the table (see branches.html, packages.html,
-   request_stock.html) giving each column a fixed percentage — plain
-   table layout lets one long value in a single cell stretch its whole
-   column (and therefore every other column, and the table itself)
-   wider; table-layout:fixed ignores content width and wraps text
-   inside the column's own fixed width instead. */
+/* Stable column widths regardless of cell content. Pair with a <colgroup> of fixed percentages
+   (see branches.html, packages.html, request_stock.html); table-layout: fixed wraps text inside
+   the column instead of one long value stretching the table. */
 .table-fixed {
   table-layout: fixed;
 }
@@ -3237,41 +2947,20 @@ html.js[data-theme="dark"] .theme-toggle .icon-moon {
   overflow-wrap: anywhere;
 }
 
-/* `td.mono.text-soft` below (used for "When"/date-time columns) forces
-   white-space: nowrap so a short standalone date never wraps oddly in a
-   normal, un-fixed table. But white-space: nowrap also cancels out
-   overflow-wrap: anywhere above — nowrap wins, so the date can no
-   longer break at all. Inside a .table-fixed column that's often
-   narrower than the full date-time string, and since table-fixed cells
-   have no overflow clipping, the un-wrapped text spills visibly out of
-   its cell and over the next column instead of wrapping in place
-   (this is the "Admin" column overlap bug on Admin Log). This
-   re-enables wrapping specifically inside .table-fixed tables, giving
-   these date columns the same fixed-width + wrap-in-place behavior
-   every other column already gets. Plain (non-fixed) tables keep the
-   original nowrap. See also: .badge below, the identical nowrap-vs-
-   anywhere conflict from the opposite direction. */
+/* `td.mono.text-soft` (date-time columns) uses white-space: nowrap, which cancels the
+   overflow-wrap: anywhere above, so inside a narrower .table-fixed column the date spills over
+   the next column (the Admin Log "Admin" overlap bug). This re-enables wrapping inside
+   .table-fixed only; plain tables keep nowrap. See .badge below for the opposite conflict. */
 .table-fixed td.mono.text-soft {
   white-space: normal;
 }
 
-/* One line per value, desktop only (the <=680px mobile card layout
-   keeps wrapping). Long text in a .table-fixed table is truncated with
-   an ellipsis instead of wrapping, so a long name/address/email never
-   makes its row taller than the rest (or, in an auto-layout table,
-   stretches the table wider). The full value shows as a tooltip on
-   hover — see main.js's initTruncatedCellTitles().
-
-   Stacked cells (e.g. .item-name over .item-sub) keep their lines, each
-   truncated on its own: nested divs/ps and flex children get the same
-   clip + ellipsis, with min-width: 0 so flex items can actually shrink
-   below their text width.
-
-   Cells holding controls (buttons, inputs, selects, forms) are left
-   alone, since clipping them would hide the control or any dropdown it
-   opens. Date/time cells (td.mono.text-soft) keep wrapping at spaces:
-   they're short and bounded, and cutting off the time would hide data
-   rather than tidy it. */
+/* One line per value, desktop only (the <=680px card layout keeps wrapping). Long text in a
+   .table-fixed table is ellipsised so a long name/address/email never makes its row taller;
+   the full value shows as a hover tooltip (initTruncatedCellTitles()).
+   Stacked cells (.item-name over .item-sub) truncate per line; min-width: 0 lets flex items shrink.
+   Cells with controls (buttons, inputs, selects, forms) are left alone so a dropdown isn't clipped.
+   Date/time cells (td.mono.text-soft) keep wrapping at spaces so the time isn't cut off. */
 @media (min-width: 681px) {
 
   table.table-fixed>tbody>tr>td:not(:has(button, input, select, textarea, form, .btn, > .badge, > .pk-discount-chip)),
@@ -3282,9 +2971,8 @@ html.js[data-theme="dark"] .theme-toggle .icon-moon {
     overflow-wrap: normal;
   }
 
-  /* Badge/pill cells are never clipped or ellipsised: a badge is a short
-     bounded label, so a cut-off "Distribu…" hides data rather than tidying
-     it. Tighter side padding lets the pill fit narrow % columns. */
+  /* Badge/pill cells are never clipped or ellipsised: a cut-off "Distribu..." hides data.
+     Tighter side padding lets the pill fit narrow % columns. */
   table.table-fixed>tbody>tr>td:has(> .badge, > .pk-discount-chip) {
     white-space: nowrap;
     overflow: visible;
@@ -3305,9 +2993,8 @@ html.js[data-theme="dark"] .theme-toggle .icon-moon {
     overflow-wrap: normal;
   }
 
-  /* Thumbnail cells: the clip above would slice off the thumb's hover
-     zoom (scale + shadow) at the cell/row edge. The cell and its flex row
-     stay unclipped; the name/SKU text inside still truncates on its own. */
+  /* Thumbnail cells: the clip would slice off the thumb's hover zoom. The cell and flex row
+     stay unclipped; the name/SKU text still truncates. */
   table.table-fixed>tbody>tr>td:has(.item-thumb-row),
   table.table-fixed>tbody>tr>td:has(.item-thumb-row) div.item-thumb-row {
     overflow: visible;
@@ -3350,8 +3037,7 @@ tbody tr:last-child td {
   border-bottom: none;
 }
 
-/* No zebra striping: hairline dividers keep rows readable and the
-   hover tint does the tracking, like an Apple list. */
+/* No zebra striping: hairline dividers keep rows readable and the hover tint tracks (Apple list). */
 tbody tr {
   transition: background 0.2s ease;
 }
@@ -3360,10 +3046,8 @@ tbody tr:hover {
   background: var(--surface-2);
 }
 
-/* Airier row rhythm for tables whose cells carry two lines of content
-   (e.g. "140 g for ₱490.00") — the default 14px/22px padding is tuned
-   for single-line rows, so stacked content reads as cramped without
-   the extra breathing room and line-height here. */
+/* Airier rhythm for cells with two lines (e.g. "140 g for PHP490.00"); the default padding
+   suits single-line rows. */
 .table-airy th {
   padding: var(--space-sm) var(--space-lg);
 }
@@ -3398,26 +3082,16 @@ th.num {
   color: var(--ink-faint);
 }
 
-/* A compressed copy of a badge/status/type column (paired, where one
-   also exists, with a date/when column) folded into the name cell —
-   see .mobile-fold on the "real" column(s) this duplicates, and the
-   max-width: 680px block further down for why. Hidden here by
-   default: on a table wide enough to show its own columns, this
-   would just repeat what's already there. Give it .item-sub too (in
-   addition to this class, not instead of it) so it picks up the
-   existing "stack under .item-name, no space-between" treatment
-   .table-wrap td:has(.item-sub) already gives that class further
-   down, instead of duplicating those rules for a second selector. */
+/* A compressed badge/status/type column (with a date column where present) folded into the name
+   cell; see .mobile-fold and the max-width: 680px block. Hidden by default since wide tables show
+   their own columns. Add .item-sub too so it gets the "stack under .item-name" treatment. */
 .item-sub-badge {
   display: none;
 }
 
-/* Same idea as .item-sub-badge just above, but for a Unit column: a
-   mobile-only duplicate tacked onto the end of the SKU/code line
-   ("HA1-85ML · 85ml") instead of getting a stacked row of its own.
-   Hidden here (desktop keeps the real Unit column, unduplicated);
-   unhidden in the max-width: 680px block further down, where the
-   real column picks up .mobile-fold to disappear in its place. */
+/* Like .item-sub-badge, but for a Unit column: a mobile-only duplicate appended to the SKU line
+   ("HA1-85ML . 85ml"). Hidden on desktop; shown in the max-width: 680px block, where the real
+   column picks up .mobile-fold. */
 .item-sub-unit {
   display: none;
 }
@@ -3442,17 +3116,10 @@ th.num {
   border-radius: var(--radius-sm);
   font-size: var(--text-xs);
   font-weight: 600;
-  /* overflow-wrap: anywhere is inherited from .table-fixed td (and from
-     the mobile stacked-row layout) down into whatever text sits inside
-     a cell — including a badge's own single-word label. With no
-     white-space of its own, a badge is free game for that inherited
-     rule to break mid-word the moment its column is narrower than the
-     label, which is what produced "PENDIN"/"G" split across two lines
-     on the dashboard. white-space: nowrap keeps a badge's label
-     unbreakable regardless of what its container asks of surrounding
-     text. .badge-credit already carried this fix on its own — it's
-     just promoted to the base class so every badge gets it, not only
-     the one variant someone happened to hit this bug on before. */
+  /* overflow-wrap: anywhere is inherited from .table-fixed td and the mobile stacked layout, and
+     could break a badge's single-word label mid-word ("PENDIN"/"G" on the dashboard).
+     white-space: nowrap keeps it unbreakable. .badge-credit already had this; it is now on the
+     base class. */
   white-space: nowrap;
   flex-shrink: 0;
 }
@@ -3481,8 +3148,8 @@ th.num {
   color: var(--ink-soft);
 }
 
-/* Name + trailing badge in one cell (e.g. "Main Branch [HQ]"): the name
-   ellipsises, the badge never shrinks or clips. */
+/* Name + trailing badge in one cell (e.g. "Main Branch [HQ]"): the name ellipsises, the badge
+   never shrinks or clips. */
 .loc-cell {
   display: inline-flex;
   align-items: center;
@@ -3549,8 +3216,8 @@ th.num {
   max-width: 8.125rem;
 }
 
-/* Product variants are a category, not a state, so neither takes gold:
-   Male is a filled neutral chip, Female the same chip as an outline. */
+/* Product variants are a category, not a state, so neither takes gold: Male is a filled
+   neutral chip, Female the same chip as an outline. */
 .badge-male {
   background: var(--surface-2);
   color: var(--ink);
@@ -3613,8 +3280,8 @@ th.num {
   border: 1px solid transparent;
   cursor: pointer;
   font-family: inherit;
-  /* A label never breaks mid-word in a narrow action column; the column
-     gives the button room or the row grows. */
+  /* A label never breaks mid-word in a narrow action column; the column gives the button
+     room or the row grows. */
   white-space: nowrap;
   flex-shrink: 0;
   transition: background-color var(--dur-micro) var(--ease-out), color var(--dur-micro) var(--ease-out),
@@ -3631,8 +3298,7 @@ th.num {
   transform: translateY(1px);
 }
 
-/* The one primary: gold fill, dark ink. .btn-primary and .btn-accent are
-   the same control (older templates use either name). */
+/* The one primary: gold fill, dark ink. .btn-primary and .btn-accent are the same control. */
 .btn-primary,
 .btn-accent {
   background: var(--accent);
@@ -3673,8 +3339,7 @@ th.num {
   }
 }
 
-/* Upload / Download CSV pair: side by side, wrapping to two full-width
-   rows (with a gap) on narrow screens. */
+/* Upload / Download CSV pair: side by side, wrapping to two full-width rows on narrow screens. */
 .csv-actions {
   display: flex;
   flex-wrap: wrap;
@@ -3693,15 +3358,13 @@ th.num {
   }
 }
 
-/* Primary "submit" button of an add-form card (Add to catalog, Add
-   partner, Add package…): full width up to a cap on desktop. */
+/* Primary submit button of an add-form card (Add to catalog, Add partner, ...): full width up to a cap on desktop. */
 .btn-cta {
   width: 100%;
   max-width: 280px;
 }
 
-/* Phones: a capped or lone button must sit centred, not hug the left
-   edge of its card. */
+/* Phones: a capped or lone button sits centred, not hugging the card's left edge. */
 @media (max-width: 680px) {
 
   .btn-cta,
@@ -3719,8 +3382,7 @@ th.num {
     flex: 1 1 100% !important;
   }
 
-  /* A lone export/download link-button or submit directly inside a form
-     or card body. */
+  /* A lone export/download link-button or submit directly inside a form or card body. */
   form>.btn:not(.btn-sm):not([style*="width"]):not([style*="flex"]),
   .card-pad>.btn:not(.btn-sm):not([style*="width"]) {
     display: flex;
@@ -3741,28 +3403,19 @@ th.num {
   cursor: not-allowed;
 }
 
-/* A plain button has no fill of its own, so dimming the whole thing to 55% left
-   its label at about 1.4:1 against the page: effectively invisible in every theme
-   and interface style. It keeps full opacity and uses the muted text colour
-   instead, which still reads as "off" next to normal ink but can be read. The
-   filled variants (accent, danger, ...) keep the dimmed look; they stay readable. */
+/* A plain button has no fill, so dimming it to 55% left its label near 1.4:1 (invisible in
+   every theme). It keeps full opacity and uses the muted text colour, which still reads as "off".
+   Filled variants (accent, danger, ...) keep the dimmed look. */
 .btn:not(.btn-ghost, .btn-accent, .btn-primary, .btn-cta, .btn-danger)[disabled],
 .btn:not(.btn-ghost, .btn-accent, .btn-primary, .btn-cta, .btn-danger)[aria-disabled="true"] {
   opacity: 1;
   color: var(--ink-faint);
 }
 
-/* Shown the instant a form is actually submitted (see main.js's
-   initSubmitLoadingState()/showLoadingOverlay()) so a request that
-   takes a moment — a write to the DB, a receipt PDF, an email, a CSV
-   import — reads as "in progress" immediately, instead of the page
-   just sitting inert with no feedback until it eventually changes.
-   Built once by JS and appended straight to <body> (not .content),
-   so it survives a soft-nav content swap and works identically on
-   every page that loads main.js, including standalone ones like
-   login.html. z-index above every modal overlay in the app (9999) so
-   it always sits on top even if a modal was already open when the
-   form inside it was submitted. */
+/* Shown as soon as a form is submitted (initSubmitLoadingState()/showLoadingOverlay()), so a
+   slow request (DB write, receipt PDF, email, CSV import) reads as in progress. Built by JS on
+   <body> (not .content), so it survives soft-nav swaps and works on standalone pages like
+   login.html. z-index above every modal overlay (9999). */
 .loading-overlay {
   position: fixed;
   inset: 0;
@@ -3780,24 +3433,11 @@ th.num {
   display: none;
 }
 
-/* Plain CSS animations rather than Motion (window.Motion — see
-   revealContent()/the theme-toggle bounce in main.js for where Motion
-   is used instead) — this dialog's own lifecycle can be cut short at
-   any moment by a real page navigation (a plain, non-soft-nav form
-   submit unloads the page almost immediately), and unlike those two,
-   which always run to completion on a page that's staying put,
-   Motion's animate() rejects its (thenable) controls with an
-   AbortError when an animation gets cancelled that way — and despite
-   always attaching a rejection handler, that intermittently still
-   surfaced as an unhandled rejection in the console (the controls
-   object doesn't reliably settle it when cut short like that). A CSS
-   animation has no promise to reject in the first place: the browser
-   just silently stops it when the document unloads, exactly like the
-   .flash toast system below already relies on for the same reason —
-   a flash can be dismissed/removed at any moment too. See main.js's
-   showLoadingOverlay()/hideLoadingOverlay() for how .loading-overlay-
-   exit gets toggled; prefers-reduced-motion is already handled
-   globally (the animation-duration override further up this file). */
+/* Plain CSS animations, not Motion: a page navigation can cut this dialog short, and Motion's
+   animate() then rejects with an AbortError that intermittently surfaced as an unhandled
+   rejection. A CSS animation has no promise to reject (same reason as the .flash toast system).
+   See show/hideLoadingOverlay() for how .loading-overlay-exit toggles; prefers-reduced-motion
+   is handled globally. */
 .loading-overlay {
   animation: loading-overlay-in 0.18s ease-out;
 }
@@ -3870,14 +3510,10 @@ th.num {
   }
 }
 
-/* Full-screen branded splash shown once, right after a successful sign-in
-   (see #loginSplash in base.html and initLoginSplash() in main.js, which
-   holds it briefly, fades it out and removes it). The wordmark is revealed
-   left to right while it settles up a few pixels: one movement, on
-   transform, opacity and clip-path only. The animation runs by itself in
-   CSS, so the logo is on screen even if the script never starts. Under
-   reduced motion the global override ends it at once, and the script
-   shortens the hold. Sits above .loading-overlay (10000). */
+/* Full-screen splash shown once after sign-in (#loginSplash in base.html, initLoginSplash()
+   holds it, fades it out and removes it). The wordmark reveals left to right while settling up
+   a few pixels (transform, opacity, clip-path only). Runs in CSS alone, so the logo shows even
+   if the script never starts. Reduced motion ends it at once. Above .loading-overlay (10000). */
 .login-splash {
   position: fixed;
   inset: 0;
@@ -3918,14 +3554,9 @@ th.num {
   }
 }
 
-/* Centered dialog shown while a receipt/report/CSV export is being
-   built server-side (see main.js's initGenerateFileFeedback() and
-   runFileGeneration()) — reuses .loading-overlay/.loading-dialog for
-   the backdrop and card, just with a progress bar in place of the
-   plain spinner, since these downloads (unlike a normal form submit)
-   never navigate the current tab on their own, so without this
-   there's nothing on screen between the click and the browser's own
-   download indicator a moment later. */
+/* Dialog shown while a receipt/report/CSV is built server-side (initGenerateFileFeedback(),
+   runFileGeneration()). Reuses .loading-overlay/.loading-dialog with a progress bar, since
+   these downloads never navigate the current tab. */
 .gen-progress-track {
   width: 220px;
   max-width: 60vw;
@@ -3944,12 +3575,8 @@ th.num {
   transition: transform var(--dur-short) var(--ease-out);
 }
 
-/* Server-side PDF/Excel generation itself reports no measurable
-   progress (send_file only hands back a Content-Length once the file
-   is already fully built) — this sliding-bar state stands in for that
-   "still working, no percentage available" phase, and setGenerateProgress()
-   in main.js switches to a real, determinate width the moment response
-   bytes actually start arriving. */
+/* Generation reports no measurable progress until the file is built, so this sliding bar stands
+   in for "working, no percentage"; setGenerateProgress() switches to a real width once bytes arrive. */
 .gen-progress-track.indeterminate .gen-progress-fill {
   width: 40%;
   transition: none;
@@ -3978,10 +3605,8 @@ th.num {
   margin-bottom: var(--space-xs);
 }
 
-/* Unscoped (not just .field .help) so a help note sitting outside a
-   .field — e.g. products.html's CSV column note under a .form-row,
-   scan/index.html's manual-entry hint — still gets the same small,
-   muted treatment instead of falling back to full-size body text. */
+/* Unscoped (not just .field .help) so help notes outside a .field (products.html's CSV note,
+   scan/index.html's manual-entry hint) get the same small muted treatment. */
 .help {
   font-size: 0.7188rem;
   color: var(--ink-faint);
@@ -4051,9 +3676,8 @@ textarea:disabled {
   cursor: not-allowed;
 }
 
-/* Checkboxes: themed to match the custom selects and date pickers instead of
-   the browser's own box. Still the real <input>, so name, value, label clicks,
-   keyboard and form posts work exactly as before. */
+/* Checkboxes themed to match the custom selects and date pickers. Still the real <input>, so
+   name, value, label clicks, keyboard and form posts work as before. */
 input[type="checkbox"] {
   -webkit-appearance: none;
   appearance: none;
@@ -4062,8 +3686,7 @@ input[type="checkbox"] {
   flex: none;
   width: 1.125rem;
   height: 1.125rem;
-  /* The minimums stop a page rule like "width: auto" from shrinking the box to the
-     size of the tick drawn inside it (a thin sliver). */
+  /* The minimums stop a page rule like "width: auto" from shrinking the box to the tick's size. */
   min-width: 1.125rem;
   min-height: 1.125rem;
   margin: 0;
@@ -4122,22 +3745,11 @@ textarea[aria-invalid="true"] {
   border-color: var(--red);
 }
 
-/* ============================================================
-   Custom select — progressive enhancement over every <select>
-   (see main.js's initCustomSelects()). On a phone, a native
-   <select>'s open dropdown is a full-screen OS-drawn control
-   (iOS's spinning wheel, Android's oversized list) that CSS can
-   never reach or resize — this replaces it with a compact, anchored
-   panel styled to match every other input in the app, on both
-   mobile and desktop.
-
-   .cs-trigger mirrors the plain <select> rule above almost exactly
-   so nothing shifts size/position where it replaces one — the real
-   <select> is repositioned invisibly on top of it rather than
-   removed, so it stays the actual form control (name/value/
-   required/disabled all still work exactly as before; see main.js
-   for why and how that stays in sync).
-   ============================================================ */
+/* ============ Custom select: progressive enhancement over every <select> ============
+   (initCustomSelects()). A native dropdown on a phone is an OS-drawn full-screen control CSS
+   can't reach; this replaces it with a compact anchored panel on mobile and desktop.
+   .cs-trigger mirrors the plain <select> rule above so nothing shifts; the real <select> is
+   repositioned invisibly on top (not removed) and stays the actual form control. */
 .cs-select {
   position: relative;
   width: 100%;
@@ -4151,15 +3763,12 @@ textarea[aria-invalid="true"] {
   margin: 0;
   padding: 0;
   border: 0;
-  /* !important on purpose: themes.css dims every disabled select to .55 with a
-     far more specific selector, which showed this real (hidden) select's own
-     text through the trigger, so a disabled dropdown read its label twice,
-     slightly offset. The trigger dims itself via .cs-disabled instead. */
+  /* !important on purpose: themes.css dims disabled selects to .55 with a more specific selector,
+     which showed this hidden select's text through the trigger (label read twice). The trigger
+     dims itself via .cs-disabled. */
   opacity: 0 !important;
-  /* Clicks land on .cs-trigger underneath instead of popping the
-     native OS picker — the whole point of this component. The
-     select still receives focus (Tab) and keyboard input; it's
-     only pointer interaction that's redirected. */
+  /* Clicks land on .cs-trigger instead of popping the native picker. The select still gets
+     focus (Tab) and keyboard input; only pointer interaction is redirected. */
   pointer-events: none;
 }
 
@@ -4206,8 +3815,8 @@ textarea[aria-invalid="true"] {
   color: var(--ink-faint);
 }
 
-/* A dependent dropdown (Production's Unit, Record Sale's size, ...) gets
-   its label rewritten by script. Fade it in rather than snapping. */
+/* A dependent dropdown (Production's Unit, Record Sale's size) has its label rewritten by
+   script; fade it in rather than snapping. */
 .cs-trigger-label.cs-label-in {
   animation: cs-label-in 0.22s var(--ease-out);
 }
@@ -4250,41 +3859,28 @@ textarea[aria-invalid="true"] {
   z-index: 500;
   max-height: min(17.5rem, 55vh);
   overflow-y: auto;
-  /* Scrollable, just not visibly so — the panel is compact and the
-     option list itself already implies there's more to scroll to, so
-     a scrollbar track/thumb here is just visual clutter. */
+  /* Scrollable but not visibly so: a scrollbar here is clutter in a compact panel. */
   scrollbar-width: none;
   -ms-overflow-style: none;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 0.875rem;
   box-shadow: var(--shadow-lg);
-  /* Extra bottom padding (vs. the 0.25rem on every other side) so a
-     scrolled-to-the-end list's last option has breathing room before
-     the panel's own edge — without it, that last row sits flush
-     against the clip boundary and the option after it (still just
-     inside max-height) shows as a thin sliced-off sliver instead of
-     either being fully visible or fully hidden. */
+  /* Extra bottom padding so a scrolled-to-the-end list's last option isn't flush against the
+     clip edge, which left the next option as a thin sliced sliver. */
   padding: var(--space-2xs) var(--space-2xs) var(--space-xs);
   transform-origin: top center;
-  /* No opacity transition here on purpose — a fading-in panel is
-     briefly semi-transparent, and this panel routinely opens right on
-     top of other opaque fields in the same form (e.g. Production's
-     Unit select sits directly above Qty produced/Batch code), so a
-     fade let those show through for a moment and read as "the dropdown
-     is rendering behind the page" even though z-index was always
-     correct. Sliding/scaling in while staying fully opaque the whole
-     time avoids that entirely. */
+  /* No opacity transition on purpose: a fading panel lets the opaque fields beneath (e.g.
+     Production's Qty produced/Batch code) show through and read as a z-index bug. Slide/scale
+     in while fully opaque instead. */
   visibility: hidden;
   transform: translateY(-4px) scale(0.98);
   pointer-events: none;
   transition: transform 0.2s var(--ease-out), visibility 0s linear 0.2s;
 }
 
-/* Flips the panel above the trigger instead of below, when there
-   isn't room underneath (a select low in a long form, or near the
-   bottom of a modal) — set by main.js based on actual available
-   space, same reasoning as every other floating panel in the app. */
+/* Flips the panel above the trigger when there's no room below (set by JS from the actual
+   available space). */
 .cs-select.cs-open-up .cs-panel {
   top: auto;
   bottom: calc(100% + 0.375rem);
@@ -4298,16 +3894,9 @@ textarea[aria-invalid="true"] {
   transition: transform 0.2s var(--ease-out);
 }
 
-/* A select that opens with a long option list (many branches, many
-   products/units, etc.) can overhang past the bottom of whatever card
-   it lives in — .cs-panel's z-index alone isn't enough to guarantee it
-   paints above a *different* card/table sitting right below it, since
-   that only wins the stacking comparison for certain if .cs-select
-   itself is promoted to its own stacking context while it's open (a
-   plain z-index buried a couple of layers down doesn't reliably beat
-   a sibling section in every browser). Promoting the whole trigger +
-   panel unit only while open — never while closed — keeps this from
-   affecting normal layout/click-through anywhere else. */
+/* A long option list can overhang the card it lives in, and .cs-panel's z-index alone doesn't
+   reliably beat a different card/table below; promoting .cs-select to its own stacking context
+   only while open fixes it without affecting layout or click-through when closed. */
 .cs-select.cs-open {
   position: relative;
   z-index: 500;
@@ -4389,9 +3978,8 @@ textarea[aria-invalid="true"] {
   box-shadow: 0 0 0 3px color-mix(in srgb, currentColor 14%, transparent);
 }
 
-/* Status variant: the trigger is a compact, tinted pill that reads as
-   the row's primary action, and its panel is wide enough for the
-   descriptions. */
+/* Status variant: a compact tinted pill that reads as the row's primary action; its panel is
+   wide enough for the descriptions. */
 .cs-select.cs-variant-status {
   width: auto;
   display: inline-block;
@@ -4429,16 +4017,14 @@ textarea[aria-invalid="true"] {
 .cs-variant-status[data-tone="soft"] { --tone: var(--ink-soft); }
 .cs-variant-status[data-tone="faint"] { --tone: var(--ink-faint); }
 
-/* Fixed to the viewport (placed by main.js's positionFixed()) so the
-   table's own scrolling never clips it. */
+/* Fixed to the viewport (positionFixed()) so the table's own scrolling never clips it. */
 .cs-panel.cs-panel-floating {
   position: fixed;
   min-width: 0;
   z-index: 10001;
 }
 
-/* The panel lives in <body> while open, so it can't rely on the
-   `.cs-select.cs-open .cs-panel` rule to show itself. */
+/* The panel lives in <body> while open, so it can't use the `.cs-select.cs-open .cs-panel` rule. */
 .cs-panel.cs-panel-floating.cs-panel-open {
   visibility: visible;
   transform: translateY(0) scale(1);
@@ -4446,8 +4032,7 @@ textarea[aria-invalid="true"] {
   transition: transform 0.2s var(--ease-out);
 }
 
-/* Type-to-search row pinned to the top of a long dropdown (see
-   enhanceSelect's "Type-to-search" comment in form-controls.js). */
+/* Type-to-search row pinned to the top of a long dropdown (see form-controls.js). */
 .cs-option[hidden] {
   display: none;
 }
@@ -4494,30 +4079,19 @@ textarea[aria-invalid="true"] {
   text-align: center;
 }
 
-/* A couple of narrow contexts (e.g. .table-filter's unit dropdown)
-   size the plain <select> down a step via a tag-selector rule
-   elsewhere in this file (`.table-filter select { ... }`) — that
-   doesn't reach .cs-trigger (a <button>, not a <select>), so those
-   spots render at .cs-trigger's normal padding/font-size instead of
-   their slightly more compact one. Close enough to not look broken
-   (10px/14px vs. 9px/13.5px) and left alone rather than chasing
-   pixel parity in every narrow spot in the app.
-
-   On phones the panel is already compact by design (max-height above
-   caps it well under the screen, same width as the trigger) — this
-   is what actually fixes "the dropdown is too big on mobile": there
-   is no native OS picker involved anymore to be full-screen in the
-   first place. */
+/* A few narrow contexts (e.g. .table-filter's unit dropdown) size the plain <select> down via a
+   tag selector that doesn't reach .cs-trigger (a <button>), so they render at the trigger's
+   normal size (10px/14px vs 9px/13.5px); close enough, left alone.
+   On phones the panel is compact by design (max-height caps it, same width as the trigger),
+   which is what fixes "the dropdown is too big on mobile". */
 @media (max-width: 480px) {
   .cs-panel {
     max-height: min(15rem, 50vh);
   }
 }
 
-/* A select squeezed into a narrow spot (a table cell, a half-width
-   field) still gets a readable panel, never wider than the screen;
-   main.js's position() flips it to the trigger's right edge
-   (.cs-align-right) when that wider panel would run off-screen. */
+/* A select in a narrow spot (table cell, half-width field) still gets a readable panel, never
+   wider than the screen; position() flips it to the right edge (.cs-align-right) if it would spill. */
 .cs-panel {
   min-width: min(11rem, calc(100% - 2rem));
 }
@@ -4527,8 +4101,7 @@ textarea[aria-invalid="true"] {
   right: 0;
 }
 
-/* Finger-sized rows on touch screens (~40px) without making the panel
-   itself any taller than its max-height above. */
+/* Finger-sized rows (~40px) on touch without making the panel taller than its max-height. */
 @media (pointer: coarse) {
   .cs-option {
     padding: var(--space-sm) var(--space-sm);
@@ -4536,12 +4109,9 @@ textarea[aria-invalid="true"] {
   }
 }
 
-/* ============================================================
-   Custom date / month picker — see main.js's initDatePickers().
-   Same shape as the custom select above: .dp-trigger mirrors a
-   filled input field, and the real <input type="date|month"> is kept
-   invisibly on top of it as the actual form control.
-   ============================================================ */
+/* ============ Custom date / month picker (initDatePickers()) ============
+   Same shape as the custom select: .dp-trigger mirrors a filled input, and the real
+   <input type="date|month"> sits invisibly on top as the actual form control. */
 .dp {
   position: relative;
   width: 100%;
@@ -4555,9 +4125,8 @@ textarea[aria-invalid="true"] {
   margin: 0;
   padding: 0;
   border: 0;
-  /* !important: themes.css dims disabled inputs to .55, which would show
-     this hidden real input's text through the date trigger (same fix as
-     .cs-select select). */
+  /* !important: themes.css dims disabled inputs to .55, showing this hidden input's text
+     through the trigger (same fix as .cs-select select). */
   opacity: 0 !important;
   pointer-events: none;
 }
@@ -4616,8 +4185,7 @@ textarea[aria-invalid="true"] {
   color: var(--accent-ink);
 }
 
-/* Same no-fade open as .cs-panel (see its comment): it slides/scales in
-   while staying fully opaque, so fields underneath never show through. */
+/* Same no-fade open as .cs-panel: slides/scales in fully opaque so fields below don't show through. */
 .dp-panel {
   position: absolute;
   left: 0;
@@ -4794,10 +4362,8 @@ textarea[aria-invalid="true"] {
   cursor: not-allowed;
 }
 
-/* File inputs render very differently across browsers (a bare OS button
-   with no border), so they get their own treatment instead of being
-   lumped in with the text-like inputs above: a field-styled outer shell
-   plus a themed "Choose file" button via ::file-selector-button. */
+/* File inputs differ a lot across browsers (a bare OS button), so they get their own
+   treatment: a field-styled shell plus a themed "Choose file" ::file-selector-button. */
 input[type="file"] {
   width: 100%;
   padding: var(--space-xs);
@@ -4845,9 +4411,8 @@ input[type="file"]:hover::-webkit-file-upload-button {
   color: var(--gold-contrast);
 }
 
-/* No row-gap: every child is a .field, which already carries its own
-   margin-bottom — when the row wraps on a phone, a row-gap on top of
-   that doubled the space between stacked fields. */
+/* No row-gap: every child is a .field with its own margin-bottom; a row-gap doubled the space
+   between stacked fields when the row wraps on a phone. */
 .form-row {
   display: flex;
   flex-wrap: wrap;
@@ -4859,9 +4424,8 @@ input[type="file"]:hover::-webkit-file-upload-button {
   flex: 1 1 170px;
 }
 
-/* Two side-by-side columns inside a wide modal (Record Sale's New sale
-   dialog) so a long form fits on screen instead of scrolling — drops
-   back to one column on narrow screens. */
+/* Two columns inside a wide modal (Record Sale's New sale dialog) so a long form fits;
+   one column on narrow screens. */
 .dialog-cols {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -4875,13 +4439,10 @@ input[type="file"]:hover::-webkit-file-upload-button {
   }
 }
 
-/* The inline-styled modal overlays (Materials, Products, …) — a form
-   taller than a phone screen used to run off the top and bottom with
-   no way to reach its title or buttons. Scroll inside the panel.
-   Matched by id (every one ends in "Overlay"), not by the inline
-   style — the browser re-serializes that attribute once openOverlay()
-   sets display, so a [style*=...] match stops applying. Record Sale's
-   .rs-dialog sizes its own panel. */
+/* Inline-styled modal overlays (Materials, Products, ...): a form taller than a phone screen
+   ran off both ends. Scroll inside the panel. Matched by id (all end in "Overlay"), not the
+   inline style, which the browser re-serializes once openOverlay() sets display.
+   Record Sale's .rs-dialog sizes its own panel. */
 div[id$="Overlay"]:not(.rs-dialog)>.card {
   max-height: calc(100vh - 40px);
   max-height: calc(100dvh - 40px);
@@ -4893,13 +4454,9 @@ div[id$="Overlay"]:not(.rs-dialog)>.card {
   display: flex;
   gap: var(--space-xs);
   align-items: center;
-  /* Buttons here now refuse to shrink or break their own text (see
-     .btn's white-space: nowrap above) — a good thing for a single
-     button, but two of them side by side in a narrow .table-fixed
-     action column need somewhere to go once they no longer compress.
-     flex-wrap lets a button that doesn't fit drop to its own line,
-     whole and readable, instead of the row silently overflowing the
-     cell/table edge. */
+  /* Buttons refuse to shrink or break their text (.btn white-space: nowrap), so two side by side
+     in a narrow .table-fixed action column need flex-wrap to drop to their own line instead of
+     overflowing the cell. */
   flex-wrap: wrap;
 }
 
@@ -4938,11 +4495,9 @@ div[id$="Overlay"]:not(.rs-dialog)>.card {
   margin: var(--space-2xs) auto 0;
 }
 
-/* Structured empty states (templates/_empty.html): centred, the icon on top, what is
-   empty and why under it, the one action under that. In a card taller than its
-   content (a list stretched to match the form beside it) it fills the space under
-   the header and sits in the middle of it. The plain `.empty-state p` form above
-   stays for the few one-line spots not moved over. */
+/* Structured empty states (templates/_empty.html): centred, icon on top, what is empty and why
+   under it, then the one action. In a card taller than its content it fills the space under the
+   header and centres. The plain `.empty-state p` form above stays for one-line spots. */
 .card:has(> .empty-state) {
   display: flex;
   flex-direction: column;
@@ -5054,8 +4609,7 @@ div[id$="Overlay"]:not(.rs-dialog)>.card {
   margin-top: var(--space-lg);
 }
 
-/* A segmented control: a sunken pill track with the active tab as a
-   raised pill inside it. */
+/* Segmented control: a sunken pill track with the active tab as a raised pill. */
 .tabs {
   display: inline-flex;
   max-width: 100%;
@@ -5068,12 +4622,9 @@ div[id$="Overlay"]:not(.rs-dialog)>.card {
 
 @media (max-width: 680px) {
 
-  /* Flex items shrink by default, and .tab has no white-space rule of
-     its own — on a narrow screen that squeezed every tab down until
-     multi-word labels ("Follow-up", "On Hold") broke mid-word onto a
-     second line and the whole bar looked jumbled. Scrolling the bar
-     horizontally instead keeps every label intact on one line; the
-     active tab stays reachable with a swipe. */
+  /* Flex items shrink and .tab has no white-space rule, so on narrow screens multi-word labels
+     ("Follow-up", "On Hold") broke mid-word. Scroll the bar horizontally so labels stay on one
+     line; the active tab is reachable by swipe. */
   .tabs {
     flex-wrap: nowrap;
     overflow-x: auto;
@@ -5226,11 +4777,9 @@ div[id$="Overlay"]:not(.rs-dialog)>.card {
   font-size: var(--text-xs);
 }
 
-/* .mobile-toggle-row (the "Details" expand/collapse bar — see the
-   @media (max-width: 680px) block below) only exists to give a
-   .table-collapsible row a collapsed mobile-card state; on a real
-   desktop table it would render as a stray extra column with nothing
-   in its <colgroup>, so it stays hidden outside that breakpoint. */
+/* .mobile-toggle-row (the "Details" bar, see the max-width: 680px block) only gives a
+   .table-collapsible row a collapsed mobile-card state; on a desktop table it would be a stray
+   extra column, so it stays hidden outside that breakpoint. */
 .mobile-toggle-row {
   display: none;
 }
@@ -5324,24 +4873,12 @@ div[id$="Overlay"]:not(.rs-dialog)>.card {
     font-size: 0.7188rem;
   }
 
-  /* A td holding a main value plus a small .item-sub caption — a
-     product's SKU under its name, a partner's package-sales total with
-     an order count underneath, a supplier's phone with an email below
-     it, a username with "now: renamed-to" underneath — makes 3 flex
-     items once the generated data-label sits alongside the value and
-     its caption. justify-content: space-between spreads those across
-     the row (label left, value center, caption flung to the far
-     right) instead of stacking them, which reads as a value with a
-     line jammed through it. Stack top-to-bottom instead, the same as
-     desktop, in one shared rule rather than patching every table that
-     happens to have this shape one page at a time.
-
-     :has(.item-sub) — a plain descendant match, not :has(>.item-sub)
-     — because .item-sub isn't always a direct child of the td: a
-     product row wraps its thumbnail and its name/SKU/badge stack
-     together in .item-thumb-row (see its own comment), which puts
-     .item-sub one level deeper. Matching any depth covers both
-     shapes with one rule. */
+  /* A td with a main value plus a small .item-sub caption (SKU under a name, an order count under
+     a total, an email under a phone) becomes 3 flex items with the data-label, and
+     space-between flung the caption to the far right. Stack top to bottom like desktop, in one
+     shared rule instead of patching each table.
+     :has(.item-sub) is a descendant match, not :has(>.item-sub), because a product row wraps
+     thumbnail and name stack in .item-thumb-row, putting .item-sub one level deeper. */
   .table-wrap td:has(.item-sub) {
     display: block;
     text-align: left !important;
@@ -5357,10 +4894,8 @@ div[id$="Overlay"]:not(.rs-dialog)>.card {
     text-align: left !important;
   }
 
-  /* The mobile-only badge(+date) line — see .item-sub-badge's own
-     comment above. Flex row (not the plain block .item-sub otherwise
-     is) so a badge pill and a date sit side by side on one line
-     ("Production · Sep 9") rather than stacking under each other. */
+  /* The mobile-only badge(+date) line (see .item-sub-badge). A flex row so a badge pill and a
+     date sit side by side ("Production . Sep 9"). */
   .item-sub-badge {
     display: flex;
     align-items: center;
@@ -5368,36 +4903,23 @@ div[id$="Overlay"]:not(.rs-dialog)>.card {
     flex-wrap: wrap;
   }
 
-  /* The column(s) .item-sub-badge duplicates — a badge/status/type
-     column, and where one exists alongside it, a date/when column.
-     Each would otherwise be one more full-width row in the card;
-     folding their content under the name instead (see
-     .item-sub-badge) and hiding the "real" column here is what
-     actually shortens the card, since a hidden column still stacks
-     an empty labeled row if it's just visually emptied instead. */
+  /* The column(s) .item-sub-badge duplicates (badge/status/type, plus a date column if any).
+     Hiding the real column is what shortens the card; a visually emptied column would still
+     stack an empty labeled row. */
   .table-wrap td.mobile-fold {
     display: none;
   }
 
-  /* Unhides .item-sub-unit's duplicate of the Unit column (see its
-     own comment above) once the real Unit column below folds away. */
+  /* Shows .item-sub-unit's duplicate of the Unit column once the real column folds away. */
   .item-sub-unit {
     display: inline;
   }
 
-  /* Row action button(s) (Edit / Delete / Receipt / etc.) — normally
-     their own trailing column — sit beside the item name instead of
-     becoming one more stacked row under everything else. The row
-     only becomes a 2-column grid when it actually has one of these
-     cells. Both the name cell (.mobile-inline-anchor, given
-     explicitly — the item cell isn't always the tr's literal
-     :first-child, e.g. a mobile-fold'ed date column often comes
-     first) and the action cell are pinned to row 1, one per column,
-     so they render side by side; every other cell (given no
-     grid-row/grid-column of its own) is forced to span the full
-     width, which pushes it out of row 1 (already full) and down
-     into row 2 onward via normal auto-flow — same stacked look the
-     plain layout gives a table with no action column at all. */
+  /* Row actions (Edit / Delete / Receipt) normally trail as a column; here they sit beside the
+     item name. The row becomes a 2-column grid only when it has one of these cells. The name cell
+     (.mobile-inline-anchor, explicit since it isn't always :first-child) and the action cell are
+     pinned to row 1; every other cell spans the full width and flows to row 2+, matching the
+     plain stacked layout. */
   .table-wrap tr:has(> td.mobile-inline-action) {
     display: grid;
     grid-template-columns: 1fr auto;
@@ -5420,42 +4942,22 @@ div[id$="Overlay"]:not(.rs-dialog)>.card {
     border-bottom: none;
   }
 
-  /* Same classic grid-item min-width:auto gotcha .grid[style*=...] > *
-     already works around further up this file: every cell in one of
-     these rows is a grid item now, so a long unbreakable value (a
-     price, a badge row) would otherwise refuse to shrink below its own
-     content width and force the whole row — and the card around it —
-     to overflow sideways instead of wrapping/eliding like a normal
-     stacked row does. min-width: 0 lets each cell shrink to the
-     column it's actually been given. */
+  /* Grid-item min-width: auto gotcha (same as .grid[style*=...] > * above): a long unbreakable
+     value (price, badge row) would force the row and card to overflow sideways. min-width: 0
+     lets each cell shrink to its column. */
   .table-wrap tr:has(> td.mobile-inline-action)>td {
     min-width: 0;
   }
 
-  /* Opt-in (table-collapsible) on top of the responsive-card layout
-     above: a row's .mobile-detail cells start hidden, so the card
-     collapses to just its .mobile-inline-anchor (name/date/badge) and
-     .mobile-inline-action (e.g. Receipt) — see Record Sale's "Recent
-     sales" list, where a long day's worth of sales otherwise dumps
-     Qty/Price/Total/Payment as four extra stacked lines per row. The
-     row's own .row-toggle-btn (in .mobile-toggle-row, forced visible
-     — see the base display:none rule further up this file) reveals
-     them again on tap by toggling .row-expanded on the <tr>. */
-  /* Animated via max-height/opacity/padding rather than display:none,
-     since display can't be transitioned — kept in the flex flow at
-     all times (see .table-wrap td's own display:flex) so it can
-     smoothly grow/shrink instead of popping in and out. max-height is
-     a hand-picked cap, not a measured value, so it has to comfortably
-     clear the tallest real .mobile-detail cell across every table
-     that opts in — most (Record Sale's Qty/Price/Total/Payment) are a
-     single ~13px line, but Customers' "Branches shopped" can wrap to
-     a couple of lines plus a badge underneath, hence the generous
-     6rem rather than trimming it to the common case. Overshooting the
-     cap just means a short cell visually finishes growing a little
-     before the transition's full duration elapses — harmless — while
-     undershooting it would clip a tall cell's content outright, which
-     wouldn't be. border stays constant width and only fades its
-     color, so the border itself never contributes a layout jump. */
+  /* Opt-in (table-collapsible) on top of the card layout: .mobile-detail cells start hidden so
+     the card shows just .mobile-inline-anchor and .mobile-inline-action (e.g. Record Sale's
+     "Recent sales", instead of Qty/Price/Total/Payment as four extra lines). The row's
+     .row-toggle-btn (in .mobile-toggle-row) reveals them by toggling .row-expanded on the <tr>. */
+  /* Animated via max-height/opacity/padding, not display: none (can't be transitioned); kept in
+     the flex flow. max-height is a hand-picked cap that must clear the tallest .mobile-detail
+     cell (Customers' "Branches shopped" can wrap to a couple of lines plus a badge), hence 6rem;
+     overshooting is harmless, undershooting would clip. The border keeps its width and only fades
+     its colour, so it never causes a layout jump. */
   .table-collapsible .mobile-detail {
     max-height: 0;
     padding-top: 0;
@@ -5535,11 +5037,9 @@ div[id$="Overlay"]:not(.rs-dialog)>.card {
   margin: var(--space-lg) 0;
 }
 
-/* Login: "the arch". The form sits on the page; the brand lives inside a
-   tall arched window (the Heaven & Angel motif) that holds the video.
-   Only the arch is permanently dark, so everything outside it is read
-   against theme tokens and everything inside it is light on dark. The
-   arch is flat: a hairline outline, the video, a scrim for legibility. */
+/* Login "the arch": the form sits on the page; the brand lives in a tall arched window (the
+   Heaven & Angel motif) holding the video. Only the arch is permanently dark, so outside it
+   reads theme tokens and inside is light on dark. Flat: hairline outline, video, a scrim. */
 .auth-shell {
   position: relative;
   overflow: hidden;
@@ -5738,8 +5238,8 @@ div[id$="Overlay"]:not(.rs-dialog)>.card {
   line-height: 1.6;
 }
 
-/* Under 960px the arch shrinks to a wide arched banner above the form
-   (no video, to save mobile data; copy cut down to the tagline). */
+/* Under 960px the arch becomes a wide banner above the form (no video, to save mobile data;
+   tagline only). */
 @media (max-width: 960px) {
   .auth-shell {
     grid-template-columns: minmax(0, 28rem);
@@ -5748,8 +5248,7 @@ div[id$="Overlay"]:not(.rs-dialog)>.card {
     padding: max(var(--space-md), env(safe-area-inset-top)) var(--space-lg) calc(var(--space-xl) + env(safe-area-inset-bottom));
   }
 
-  /* 44px touch target for the theme toggle, tucked into the empty
-     corner beside the arched banner. */
+  /* 44px touch target for the theme toggle, in the corner beside the banner. */
   .sfx-toggle-fixed {
     right: calc(max(0.75rem, env(safe-area-inset-right)) + 3.5rem);
   }
@@ -5812,8 +5311,7 @@ div[id$="Overlay"]:not(.rs-dialog)>.card {
   }
 }
 
-/* Small phones: tighter gutters and type so the form stays above the
-   fold with the keyboard closed. */
+/* Small phones: tighter gutters and type so the form stays above the fold with the keyboard closed. */
 @media (max-width: 400px) {
   .auth-shell {
     padding-left: var(--space-md);
@@ -5830,8 +5328,7 @@ div[id$="Overlay"]:not(.rs-dialog)>.card {
   }
 }
 
-/* Landscape phones: a banner would eat the whole screen, so keep just
-   the logo and let the form lead. */
+/* Landscape phones: a banner would eat the screen, so keep just the logo and let the form lead. */
 @media (max-width: 960px) and (max-height: 520px) {
   .auth-visual-tagline {
     display: none;
@@ -5869,40 +5366,22 @@ div[id$="Overlay"]:not(.rs-dialog)>.card {
   padding: var(--space-lg) var(--space-lg);
 }
 
-/* The old rule here was `.chart-card canvas { max-height: 280px; }`
-   — a max-height on the canvas itself, with no fixed-height parent
-   and no maintainAspectRatio:false on the chart options. Chart.js
-   sizes a responsive canvas to match its parent container, but with
-   no real height set anywhere, the parent's rendered height was
-   just "whatever the canvas last drew at" — so parent height
-   depended on canvas height, which depended on parent height. A
-   burst of resize events (e.g. toggling a browser's device
-   emulation) fed that loop and let the canvas grow a little more on
-   each pass, worst on the Ledger movement chart since its wrapping
-   bottom legend (up to 7 movement types) made its height the most
-   sensitive to width changes. Giving the wrapper a real, fixed
-   height breaks the circular dependency: the container's height no
-   longer comes from the canvas at all, so there's nothing for a
-   resize burst to compound. Chart.js needs `maintainAspectRatio:
-   false` in each chart's options for this to take effect (see
-   reports.html) — otherwise it ignores the container height and
-   keeps deriving height from width itself. */
+/* Chart wrapper with a real fixed height. A max-height on the canvas alone (no fixed-height
+   parent, no maintainAspectRatio: false) made parent height depend on canvas height and vice
+   versa, so a burst of resize events (e.g. device emulation) let the canvas grow each pass,
+   worst on the Ledger movement chart whose wrapping legend made it width-sensitive. A fixed
+   wrapper height breaks the loop. Each chart needs `maintainAspectRatio: false` (see
+   reports.html) or Chart.js derives height from width again. */
 .chart-canvas-wrap {
   position: relative;
   height: 17.5rem;
   width: 100%;
 }
 
-/* Belt-and-braces alongside the min-width:0 fix above: pin the canvas's
-   own rendered box to its wrapper with CSS instead of relying solely on
-   Chart.js re-measuring and re-writing the canvas's inline style at the
-   right moment. Chart.js does this itself on load/resize, but on first
-   paint in a collapsing mobile grid there's a brief window where the
-   grid hasn't finished settling into its final one-column width yet —
-   these rules stop the canvas from ever visually exceeding (or getting
-   stuck below) the wrapper regardless of what Chart.js measured. */
-/* HTML legend under a chart (renderChartLegend() in main.js): wrapping
-   chips on desktop, an even 2-column grid on phones. */
+/* Belt-and-braces with the min-width: 0 fix above: pin the canvas box to its wrapper in CSS
+   rather than rely on Chart.js re-measuring in time, since on first paint in a collapsing mobile
+   grid there's a brief window before the final one-column width settles. */
+/* HTML legend under a chart (renderChartLegend()): wrapping chips on desktop, an even 2-column grid on phones. */
 .chart-legend {
   display: flex;
   flex-wrap: wrap;
@@ -5980,11 +5459,8 @@ div[id$="Overlay"]:not(.rs-dialog)>.card {
     flex-direction: column;
   }
 
-  /* The off-canvas drawer below always opens at a fixed width (not
-     var(--sidebar-w)) and always shows its full content — the icon-rail
-     concept doesn't apply here, so pinning it open is a no-op. Hide the
-     toggle rather than let it sit in the footer offering a choice that
-     has no visible effect at this width. */
+  /* The off-canvas drawer opens at a fixed width and always shows full content, so the icon-rail
+     pin is a no-op; hide the toggle rather than offer a choice with no visible effect. */
   #sidebarPinToggle {
     display: none;
   }
@@ -6079,11 +5555,8 @@ div[id$="Overlay"]:not(.rs-dialog)>.card {
     padding-right: var(--space-md);
   }
 
-  /* The eyebrow ("Catalog & Supply", "Admin Overview", etc.) and page
-     heading ("Good to see you, admin", "Products", etc.) come from
-     base.html's shared topbar markup, so this one place covers every
-     page's header at once. Desktop sizes (22px heading / 11px eyebrow)
-     read as oversized on a narrow phone screen — scaled both down here. */
+  /* The eyebrow and page heading come from base.html's shared topbar markup, so this covers every
+     page. Desktop sizes (22px heading / 11px eyebrow) are oversized on phones; scaled down. */
   .topbar h1 {
     font-size: 1.0625rem;
   }
@@ -6096,13 +5569,10 @@ div[id$="Overlay"]:not(.rs-dialog)>.card {
   }
 }
 
-/* ================================================================
-   Searchable product combobox (Production's "Log a production run",
-   a package's "Add a product"). Reuses the same field/input styling
-   as everything else: the input itself picks up the global
-   input[type="text"] rules automatically, this just adds the floating
-   suggestion menu underneath it. Each page's own script drives it.
-   ================================================================ */
+/* ============ Searchable product combobox (Production's "Log a production run", a
+   package's "Add a product") ============
+   Reuses the shared input styling (global input[type="text"] rules); this adds the floating
+   suggestion menu. Each page's script drives it. */
 .ac-combo {
   position: relative;
 }
@@ -6121,18 +5591,13 @@ div[id$="Overlay"]:not(.rs-dialog)>.card {
   /* Scrollable, just not visibly so (same as .cs-panel in style.css). */
   scrollbar-width: none;
   -ms-overflow-style: none;
-  /* Bottom padding so a scrolled-to-the-end list's last option has
-     breathing room before the menu's own edge, instead of sitting
-     flush against it with the next option sliced off mid-row (same
-     fix as .cs-panel in style.css). */
+  /* Bottom padding so the last option isn't flush against the edge with the next sliced off
+     (same fix as .cs-panel). */
   padding: var(--space-2xs) 0 var(--space-xs);
   z-index: 500;
   transform-origin: top center;
-  /* No opacity transition — this menu opens directly over Unit/Qty
-     produced/Batch code in the same card, and a fade briefly let
-     those show through mid-transition, reading as a z-index bug
-     even though it wasn't one (see .cs-panel's own comment in
-     style.css for the same fix). */
+  /* No opacity transition: this menu opens over Unit/Qty produced/Batch code, and a fade let
+     them show through like a z-index bug (same fix as .cs-panel). */
   visibility: hidden;
   transform: translateY(-4px) scale(0.98);
   pointer-events: none;
@@ -6146,27 +5611,19 @@ div[id$="Overlay"]:not(.rs-dialog)>.card {
   transition: transform 0.14s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-/* Flips above the input instead of below, and reversed slide
-   direction to match — set by production.html's own script, same
-   reasoning and mechanism as .cs-select.cs-open-up in style.css. */
+/* Flips above the input with reversed slide direction; set by production.html's script
+   (same mechanism as .cs-select.cs-open-up). */
 .ac-combo.ac-open-up .ac-combo-menu {
   top: auto;
   bottom: calc(100% + 6px);
   transform-origin: bottom center;
 }
 
-/* Same reasoning as .cs-select.cs-open in style.css: a long product
-   list can overhang past the bottom of this card, and .ac-combo-menu's
-   own z-index isn't enough on its own to guarantee it paints above a
-   *different* card/table sitting right below (e.g. the production
-   log table under this form) — promoting the whole combo to its own
-   stacking context while its menu is open makes that reliable.
-
-   Toggled by production.html's own script (.ac-open, alongside
-   .ac-combo-menu's own .open) rather than :has() — :has() support
-   isn't universal on older browsers/webviews, and silently failing
-   here is exactly what let the menu paint underneath the table
-   below it. */
+/* Same reason as .cs-select.cs-open: a long list can overhang the card, and .ac-combo-menu's
+   z-index alone doesn't reliably beat a different card/table below (e.g. the production log
+   table). Promote the combo to its own stacking context while open.
+   Toggled by production.html's script (.ac-open alongside .open), not :has(), which isn't
+   universal on older browsers/webviews and failed silently, painting the menu under the table. */
 .ac-combo.ac-open {
   z-index: 500;
 }
@@ -6187,10 +5644,8 @@ div[id$="Overlay"]:not(.rs-dialog)>.card {
   color: var(--accent-ink);
 }
 
-/* Every SKU/size a matched product has on file, shown under its name
-   so a search by SKU (e.g. "A1-85ML") — see scoreProduct()'s own
-   comment below — has something visible to point at, instead of
-   surfacing the right product with no sign of why it matched. */
+/* Every SKU/size a matched product has, shown under its name so a SKU search (e.g. "A1-85ML",
+   see scoreProduct()) has something visible to point at. */
 .ac-combo-option .ac-match-skus {
   font-family: var(--font-mono);
   font-size: 11px;
@@ -6209,24 +5664,18 @@ div[id$="Overlay"]:not(.rs-dialog)>.card {
   color: var(--ink-faint);
 }
 
-/* The card holding an open combobox, lifted above the cards after it
-   so its suggestion list isn't painted over by the next card down. */
+/* The card holding an open combobox, lifted above later cards so its list isn't painted over. */
 .card.ac-host-open {
   position: relative;
   z-index: 400;
 }
 
-/* ---- mascot --------------------------------------------------------
-   The sprite-sheet character (static/js/mascot.js). Two 3x3 sheets sit
-   stacked in the same box; `background-size: 300%` makes each cell a
-   clean 0/50/100% step, and the script moves `background-position` to
-   choose one. Only the opacity cross-fade between the two sheets is a
-   transition — turning the head is a position jump, which is what makes
-   it read as a drawing rather than a tween.
-
-   The host element sizes it: --mascot-size when the script was given
-   one, otherwise the mascot fills whatever box it was dropped into
-   (Halo's .halo-avatar). */
+/* ---- mascot ----
+   The sprite-sheet character (js/mascot.js). Two 3x3 sheets stack in one box;
+   `background-size: 300%` makes each cell a 0/50/100% step and the script moves
+   `background-position`. Only the opacity cross-fade between the sheets transitions; the head
+   turn is a position jump so it reads as a drawing, not a tween.
+   The host sizes it: --mascot-size if given, else it fills its box (Halo's .halo-avatar). */
 .mascot-host {
   position: relative;
   display: inline-flex;
@@ -6234,10 +5683,8 @@ div[id$="Overlay"]:not(.rs-dialog)>.card {
   line-height: 0;
 }
 
-/* Only a mascot given an explicit size sets its own box. An unsized one
-   (Halo's .halo-avatar) is dropped into a slot that is already sized,
-   and this rule is appended after that slot's own — so sizing every
-   host here would silently override the dimensions it set for itself. */
+/* Only a mascot with an explicit size sets its own box; an unsized one (Halo's .halo-avatar)
+   fills an already-sized slot, and this rule comes later, so sizing every host would override it. */
 .mascot-host-sized {
   width: var(--mascot-size);
   height: var(--mascot-size);
@@ -6262,8 +5709,7 @@ div[id$="Overlay"]:not(.rs-dialog)>.card {
   display: block;
   width: 100%;
   height: 100%;
-  /* Below centre: the bounce should plant on the shoulders rather than
-     scaling about the middle of the head. */
+  /* Below centre: the bounce plants on the shoulders rather than scaling about the head's middle. */
   transform-origin: 50% 78%;
 }
 
@@ -6330,9 +5776,8 @@ div[id$="Overlay"]:not(.rs-dialog)>.card {
   transform: translate(-50%, 0) scale(1);
 }
 
-/* The tail is the bubble's own bottom-left corner rotated under it, so
-   it inherits the border and background without a second element
-   needing to track theme changes. */
+/* The tail is the bubble's own bottom-left corner rotated under it, so it inherits the border
+   and background without a second element tracking theme changes. */
 .mascot-bubble::after {
   content: '';
   position: absolute;
@@ -6355,8 +5800,7 @@ div[id$="Overlay"]:not(.rs-dialog)>.card {
   }
 }
 
-/* Floating confirm dialog (initConfirmModal() in main.js). Same layer
-   and backdrop as .loading-overlay so it sits above every modal. */
+/* Floating confirm dialog (initConfirmModal()); same layer and backdrop as .loading-overlay so it sits above every modal. */
 .confirm-overlay {
   position: fixed;
   inset: 0;
@@ -6404,9 +5848,7 @@ div[id$="Overlay"]:not(.rs-dialog)>.card {
   margin-top: var(--space-lg);
 }
 
-/* ================================================================
-   Boss-Insights style stats: KPI tiles, chart cards, share lists
-   ================================================================ */
+/* ============ Stats: KPI tiles, chart cards, share lists ============ */
 .kpi-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -6512,9 +5954,8 @@ div[id$="Overlay"]:not(.rs-dialog)>.card {
   color: var(--ink-soft);
 }
 
-/* Tiles in one grid row stretch to the tallest, so the sparkline takes the
-   leftover space above it (margin-top:auto) and always sits flush on the
-   tile's bottom edge instead of floating mid-card. */
+/* Tiles in one grid row stretch to the tallest, so the sparkline takes the leftover space
+   (margin-top: auto) and sits flush on the tile's bottom edge. */
 .kpi-spark {
   flex: none;
   height: 2.5rem;
@@ -6625,20 +6066,13 @@ div[id$="Overlay"]:not(.rs-dialog)>.card {
   text-align: center;
 }
 
-/* ================================================================
-   Laptop & desktop sizing (14" / 15" / 16" and larger)
-   Layered on the fluid root scale near the top of this file (14px at
-   761px -> 16px at 1600px), which every rem-based size follows.
-   1. Above 1600px the root keeps growing (17px at 1920, 19px cap at
-      2560+) so a 16" QHD+ or external monitor isn't a tiny design on
-      a big canvas.
-   2. .content's 73.75rem cap used to leave wide screens mostly empty;
-      it now widens in steps (the root is bigger there too).
-   3. Short panels (1366x768, 1280x800, HiDPI 16" at 200%) get a
-      height-driven root so the sidebar and a full page of content fit
-      without constant scrolling.
-   Placed last so these win over the earlier equal-specificity rules.
-   ================================================================ */
+/* ============ Laptop & desktop sizing (14", 15", 16" and larger) ============
+   Layered on the fluid root scale near the top (14px at 761px to 16px at 1600px).
+   1. Above 1600px the root keeps growing (17px at 1920, 19px cap at 2560+).
+   2. .content's 73.75rem cap now widens in steps.
+   3. Short panels (1366x768, 1280x800, HiDPI 16" at 200%) get a height-driven root so the
+      sidebar and a full page of content fit.
+   Placed last so these win over earlier equal-specificity rules. */
 @media (min-width: 1600px) {
   html {
     font-size: clamp(1rem, calc(1rem + (100vw - 1600px) * 0.003), 1.1875rem);
@@ -6694,18 +6128,12 @@ div[id$="Overlay"]:not(.rs-dialog)>.card {
   }
 }
 
-/* ================================================================
-   Custom scrollbars — page + every scrollable area
-   One look everywhere (page, dialogs, panels, lists, tables), coloured
-   from theme variables so it follows light/dark and every interface
-   style (pixel/terminal square it off via --btn-radius). Elements that
-   hide their bar on purpose (.subnav, .tabs, .cs-panel, ...) set
-   scrollbar-width: none / their own ::-webkit-scrollbar and are
-   unaffected: those rules are more specific than the `*` here.
-   Chromium/Safari use the pseudo-elements; Firefox the standard
-   properties, kept in @supports so Chrome 121+ doesn't let them
-   override the pseudo-elements.
-   ================================================================ */
+/* ============ Custom scrollbars: page and every scrollable area ============
+   One look everywhere, coloured from theme variables (follows light/dark and every interface
+   style; pixel/terminal square it off via --btn-radius). Elements that hide their bar
+   (.subnav, .tabs, .cs-panel, ...) set their own rules, which are more specific than `*`.
+   Chromium/Safari use pseudo-elements; Firefox uses the standard properties, in @supports so
+   Chrome 121+ doesn't let them override the pseudo-elements. */
 *::-webkit-scrollbar {
   width: 12px;
   height: 12px;
@@ -6749,9 +6177,8 @@ html::-webkit-scrollbar-track {
   }
 }
 
-/* .sidebar and .table-wrap asked for a thin bar via the standard
-   properties above, which makes Chrome 121+ skip their ::-webkit-
-   scrollbar styling. Reset those so they get the same look as the rest. */
+/* .sidebar and .table-wrap ask for a thin bar via the standard properties, which makes Chrome
+   121+ skip their ::-webkit-scrollbar styling. Reset those so they match the rest. */
 @supports selector(::-webkit-scrollbar) {
 
   .sidebar,
@@ -6882,9 +6309,8 @@ th,
   }
 }
 
-/* Top-bar search (laptops and desktops): a full field before the Today chip.
-   Focusing or typing drops a panel of pages beneath it. Phones keep the
-   search in the sidebar menu. */
+/* Top-bar search (laptops and desktops): a full field before the Today chip; focusing or typing
+   drops a panel of pages. Phones keep search in the sidebar menu. */
 .topbar-search {
   position: relative;
   width: clamp(12rem, 20vw, 18rem);
@@ -7044,17 +6470,13 @@ th,
   }
 }
 
-/* ----------------------------------------------------------------------------
-   Tables: sortable column heads, the pagination bar, row focus.
-   Behaviour lives in static/js/app/tables.js (makeSortable, initSmartTables).
-   Colour only through tokens; transitions are opacity/transform/background.
-   ---------------------------------------------------------------------------- */
+/* ---------------- Tables: sortable heads, pagination bar, row focus ----------------
+   Behaviour lives in js/app/tables.js (makeSortable, initSmartTables). Colour only through
+   tokens; transitions are opacity/transform/background. */
 
-/* The column head stays put while a long table scrolls inside its card.
-   (Layouts that let the table grow to the page, e.g. Products and
-   Production's list card, set the heads back to static themselves.) */
-/* --table-head-top is where the head sticks inside its own scrolling card:
-   0 unless a page puts something fixed above the table. */
+/* The column head stays put while a long table scrolls inside its card. (Layouts that let the
+   table grow to the page, e.g. Products and Production's list card, set heads back to static.) */
+/* --table-head-top: where the head sticks in its scrolling card; 0 unless a page fixes something above the table. */
 .table-wrap {
   --table-head-top: 0px;
 }
@@ -7086,8 +6508,7 @@ th[aria-sort] .th-sort {
   color: var(--ink);
 }
 
-/* Two small triangles stacked: both faint when the column is unsorted, the
-   active direction solid in the accent once it is. */
+/* Two stacked triangles: both faint when unsorted, the active direction solid in the accent. */
 .th-caret {
   position: relative;
   flex: none;
@@ -7137,8 +6558,7 @@ tbody tr:focus-within {
   background: var(--surface-2);
 }
 
-/* Pagination bar: "Showing 1 to 8 of 31" on the left, the pager on the right.
-   The page count is a figure, so it uses the body face with tabular numerals. */
+/* Pagination bar: "Showing 1 to 8 of 31" left, the pager right; the count is a figure, so body face with tabular numerals. */
 .smart-pagination {
   flex-wrap: wrap;
   justify-content: flex-end;
@@ -7183,8 +6603,8 @@ tbody tr:focus-within {
   }
 }
 
-/* A chart with nothing to plot: the message takes the canvas's place (see
-   syncChartEmpties() in charts.js), laid out like the other empty states. */
+/* A chart with nothing to plot: the message takes the canvas's place (syncChartEmpties() in
+   charts.js), laid out like the other empty states. */
 .chart-empty {
   position: absolute;
   inset: 0;
@@ -7216,17 +6636,15 @@ tbody tr:focus-within {
 }
 
 
-/* ============================================================
-   Report builder (templates/_report_builder.html): choose a report
-   from grouped cards, narrow it with chips and date presets, see
-   what you will get, download. Shared by admin and branch Reports.
-   ============================================================ */
+/* ============ Report builder (templates/_report_builder.html) ============
+   Pick a report from grouped cards, narrow it with chips and date presets, see what you will
+   get, download. Shared by admin and branch Reports. */
 .rbx [hidden] {
   display: none !important;
 }
 
-/* Until the script has built the report picker, the unprepared form (every filter at once) stays invisible. It
-   keeps its space so the page doesn't jump when it appears. */
+/* Until the script builds the report picker, the unprepared form stays invisible but keeps its
+   space so the page doesn't jump. */
 .rbx:not(.rbx-ready) .rbx-step,
 .rbx:not(.rbx-ready) .rbx-bar,
 .rbx:not(.rbx-ready) .rbx-foot {
@@ -7292,7 +6710,7 @@ tbody tr:focus-within {
   padding-left: 2.25rem;
 }
 
-/* Report groups: the same sunken track and raised active pill as the other segmented controls. */
+/* Report groups: the same sunken track and raised active pill as other segmented controls. */
 .rbx-tabs {
   display: inline-flex;
   flex-wrap: wrap;
@@ -7485,7 +6903,7 @@ tbody tr:focus-within {
   color: var(--gold-contrast);
 }
 
-/* The real select stays in the form (it is what gets submitted) but the chips are what you use. */
+/* The real select stays in the form (it is what's submitted); the chips are what you use. */
 .rbx select.rbx-real,
 .rbx .cs-select:has(> select.rbx-real) {
   display: none;
@@ -7514,7 +6932,7 @@ tbody tr:focus-within {
   margin: 0;
 }
 
-/* The summary and the download buttons: what you will get, how many rows, then go. */
+/* The summary and download buttons: what you will get, how many rows, then go. */
 .rbx-bar {
   display: flex;
   flex-wrap: wrap;
@@ -7621,9 +7039,8 @@ tbody tr:focus-within {
 }
 
 
-/* A note that fills in as you type (a total, a stock count, a price per unit). Its space is reserved whether or not
-   it has text, so the form never jumps when the note appears, changes length or clears, and nothing sized to the
-   form (the Main Stock list beside Production, All Products beside Add a product) grows with it. */
+/* A note that fills in as you type (a total, stock count, price per unit). Its space is reserved
+   whether or not it has text, so the form never jumps and nothing sized to it grows. */
 .live-slot {
   min-height: 1.5em;
 }
@@ -7636,18 +7053,15 @@ tbody tr:focus-within {
   color: var(--danger);
 }
 
-/* Placeholder text had no colour of its own, so every field showed the browser's
-   default grey: about 3.3:1 on the page background in every theme and interface
-   style, under the 4.5:1 needed to read it comfortably. It now uses the theme's
-   own "faint text" colour (which clears 4.5:1 in all of them), still clearly
-   lighter than what a person types. */
+/* Placeholders had no colour, so the browser grey sat at about 3.3:1 in every theme, under
+   4.5:1. They use the theme's "faint text" colour (clears 4.5:1 in all), still lighter than typed text. */
 ::placeholder {
   color: var(--ink-faint);
   opacity: 1;
 }
 
-/* A receipt of several products is several rows in a sales list; only the first row has the
-   Receipt button, and the others show which receipt they are on. */
+/* A multi-product receipt is several rows in a sales list; only the first has the Receipt
+   button, the others show which receipt they belong to. */
 .receipt-same {
   display: inline-block;
   font-family: var(--font-mono);
@@ -7662,13 +7076,10 @@ tbody tr:focus-within {
 }
 
 
-/* Tablets, small laptops and narrow windows (761px and up).
-   The top bar was sized for a wide screen and never shed anything, so with less room than that
-   (the sidebar pinned open takes 256px, which is the default on touch devices) the clock, bell,
-   sound and theme buttons ran off the right edge of the screen: the theme toggle could not be
-   reached. Thresholds are on the room the bar actually has (screen width minus the sidebar), and
-   it now sheds in order: clock, shortcut hint, trend, "Today", full amount, sale count.
-   The search field flexes in the space that is left. */
+/* Tablets, small laptops and narrow windows (761px and up). With the sidebar pinned open (256px,
+   the touch default) the top bar's clock, bell, sound and theme buttons ran off the right edge.
+   Thresholds use the room the bar actually has (screen minus sidebar); it sheds in order: clock,
+   shortcut hint, trend, "Today", full amount, sale count. The search field flexes in what is left. */
 @media (min-width: 761px) {
   .topbar { gap: var(--space-sm); }
   .topbar-left { flex: 1 1 auto; min-width: 0; }
@@ -7745,9 +7156,8 @@ tbody tr:focus-within {
   }
 }
 
-/* Touch screens: report chips, tabs and mode switches were 28-32px tall, and the
-   names that are links in a list were as tall as their text. They now meet a
-   comfortable tap height without changing the layout on a mouse. */
+/* Touch screens: report chips, tabs and mode switches were 28-32px tall, and link names as tall
+   as their text. They now meet a comfortable tap height; mouse layout unchanged. */
 @media (pointer: coarse) {
   .rbx-chip,
   .rbx-tab,
@@ -7764,9 +7174,8 @@ tbody tr:focus-within {
   }
 }
 
-/* Phones: with the amount shortened to ₱4.03k there is still not always room for the word
-   "sales" beside the count, and it was cut to "48 sa". The count stays (the chip's tooltip
-   and screen-reader label carry the full wording). */
+/* Phones: even with the amount shortened to PHP4.03k, "sales" beside the count was cut to
+   "48 sa". The count stays; the tooltip and screen-reader label carry the full wording. */
 @media (max-width: 430px) {
   .today-chip-count [data-today-field="count_word"] {
     display: none;
@@ -7788,10 +7197,9 @@ tbody tr:focus-within {
   }
 }
 
-/* A card header with a count and an action button (Raw materials, Suppliers). It is a wrapping
-   flex row, and on a phone "title + count + button" is wider than the row, so the count and the
-   button dropped to a second line under the title. On phones it is a two-column grid instead:
-   the title with the count under it on the left, the button on the right, never wrapping. */
+/* A card header with a count and an action button (Raw materials, Suppliers): a wrapping flex
+   row, so on a phone the count and button dropped under the title. On phones it is a two-column
+   grid: title with the count under it on the left, the button on the right, never wrapping. */
 @media (max-width: 520px) {
   .card-header:has(> .pg-head-tools) {
     display: grid;
@@ -7827,10 +7235,9 @@ tbody tr:focus-within {
   }
 }
 
-/* Phones: a row's action normally sits beside the name (see .mobile-inline-action). With two wide
-   buttons (Reset password, Deactivate) that left the name about 50px wide, so "maria.admin" wrapped
-   onto six lines. Add .mobile-actions-below to the action cell and the buttons take their own full
-   row under the rest of the card, side by side. */
+/* Phones: a row's action sits beside the name (.mobile-inline-action), but two wide buttons
+   (Reset password, Deactivate) left the name ~50px wide ("maria.admin" wrapped onto six lines).
+   Add .mobile-actions-below to the action cell and the buttons take their own full row below. */
 @media (max-width: 680px) {
   .table-wrap tr:has(> td.mobile-actions-below) > td.mobile-inline-action.mobile-actions-below {
     grid-row: auto;

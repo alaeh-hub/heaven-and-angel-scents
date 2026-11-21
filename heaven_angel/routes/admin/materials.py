@@ -42,18 +42,14 @@ def materials():
             if not material_name or unit not in MATERIAL_UNITS:
                 raise ValidationError(
                     "Please fill in every field with a valid value.")
-            # Package vs Individual is purely descriptive now — both modes
-            # require a real quantity (e.g. 5 individually-purchased
-            # pieces is package_qty=5, purchase_mode='Individual').
+            # Package vs Individual is descriptive; both need a real quantity.
             package_qty = parse_positive_decimal(
                 request.form.get("package_qty"), "Quantity")
             package_cost = parse_non_negative_decimal(
                 request.form.get("package_cost"), "Cost")
             supplier_id = parse_optional_id(
                 request.form.get("supplier_id"), "Supplier")
-            # Lets a material bought a while ago be logged under the date it
-            # was actually purchased instead of today — blank defaults to
-            # today, same as the old always-"now" behavior.
+            # Optional purchase date; blank means today.
             purchased_at = parse_past_date(
                 request.form.get("purchased_at"), "Purchase date")
         except ValidationError as err:
@@ -102,12 +98,7 @@ def materials():
            ORDER BY rm.material_name"""
     )
 
-    # Suppliers directory — merged onto this same page (Materials and
-    # Suppliers used to be separate tabs, but there was nothing on
-    # either that the other didn't already need: the Materials form's
-    # supplier picker duplicated this exact list, and this table is
-    # purely rolled up from raw_materials rows entered above). `suppliers`
-    # doubles as the Add/Edit material modals' supplier <select> options.
+    # Suppliers directory merged onto this page; `suppliers` also feeds the material modals' picker.
     suppliers_list = query(
         f"""SELECT s.supplier_id, s.supplier_name, s.contact_person, s.phone, s.email,
                   s.address, s.notes, s.created_at,
@@ -194,21 +185,20 @@ def materials():
     )
 
 
+# JSON: price history of the materials for the trends chart.
 @bp.route("/api/material-price-trends")
 @admin_required
 def material_price_trends():
     return jsonify({"materials": load_material_price_history()})
 
 
+# POST: correct a material's own fields (never its stock).
 @bp.route("/materials/edit", methods=["POST"])
 @admin_required
 def edit_material():
     material_id = request.form.get("material_id")
 
-    # Checked up front, same convention as edit_product(): a stale or
-    # tampered material_id would otherwise let the UPDATE below silently
-    # match zero rows while this route still flashes a success message,
-    # as if the edit had actually landed somewhere.
+    # Check up front (like edit_product()): a stale id would match zero rows but flash success.
     existing = query(
         "SELECT unit FROM raw_materials WHERE material_id = %s", (material_id,), fetchone=True
     )
@@ -251,10 +241,7 @@ def edit_material():
             flash("Select a valid supplier.", "error")
             return redirect(url_for("admin.materials"))
 
-    # cost_per_unit is recomputed from the new package figures purely as
-    # a reference figure shown on the page — usage entries no longer
-    # carry any cost of their own (see production()), so this recompute
-    # has no effect on past usage history the way it used to.
+    # cost_per_unit is a reference figure recomputed from the new package figures.
     cost_per_unit = package_cost / package_qty
 
     try:
@@ -286,16 +273,10 @@ def edit_material():
 @bp.route("/materials/restock", methods=["POST"])
 @admin_required
 def restock_material():
-    """Record buying more of an existing material — adds to stock_qty and
-    rolls the new purchase into the running package_qty/package_cost
-    totals, so cost_per_unit becomes a weighted average. A separate dated
-    event preserves each restock for supplier and date-range history.
-    Kept
-    separate from edit_material(), which stays a plain correction tool
-    for the record's own fields and never touches stock_qty — Add
-    Material can't be resubmitted for the same name (material_name is
-    unique), so this is what "buying more of something already on file"
-    means now.
+    """Record buying more of a material: adds stock and re-weights cost_per_unit.
+
+    Each restock is kept as a dated event for supplier history. edit_material() is a plain
+    correction and never touches stock_qty.
     """
     material_id = request.form.get("material_id")
 
@@ -363,6 +344,7 @@ D = decimal.Decimal
 SCENT_OILS_URL = "admin.materials"
 
 
+# Load one scent's oil row, or None if it does not exist.
 def _scent_oil_or_none(code):
     return query("SELECT base_code, scent_name, cost_per_unit, stock_qty FROM scent_oils WHERE base_code = %s",
                  (code,), fetchone=True)
@@ -436,6 +418,7 @@ def restock_scent_oil():
     return redirect(url_for(SCENT_OILS_URL))
 
 
+# Download the CSV template for importing scent oil prices and stock.
 @bp.route("/materials/scent-oils/template.csv")
 @admin_required
 def scent_oil_template():
@@ -474,9 +457,8 @@ def import_scent_oils():
         with transaction() as conn:
             cur = conn.cursor()
             for code, price, stock in rows:
-                # Lock the row and write stock only when it really differs, so a
-                # price-only upload (or an unchanged template cell) can't put back
-                # oil that production used since the template was downloaded.
+                # Lock the row; write stock only if it differs, so a price-only upload
+                # cannot restore oil production already used.
                 cur.execute("SELECT stock_qty FROM scent_oils WHERE base_code = %s FOR UPDATE", (code,))
                 current = cur.fetchone()
                 if price is not None:
@@ -497,10 +479,7 @@ def import_scent_oils():
 
 
 # ---------------------------------------------------------------- suppliers
-# Suppliers no longer has its own tab/page — it's merged onto the
-# Materials page (see materials() above), which was the only place these
-# add/edit forms were ever posted from anyway once the two pages became
-# one. Both routes always redirect back to admin.materials now.
+# Suppliers live on the Materials page; both routes redirect back to admin.materials.
 @bp.route("/materials/suppliers/add", methods=["POST"])
 @admin_required
 def add_supplier():
@@ -519,8 +498,7 @@ def add_supplier():
         return redirect(url_for("admin.materials"))
 
     try:
-        # Lets a supplier that's been on hand for a while be logged as of
-        # when they were actually onboarded — blank defaults to today.
+        # Optional onboarding date; blank means today.
         added_on = parse_past_date(
             request.form.get("added_on"), "Date added")
     except ValidationError as err:
@@ -544,14 +522,13 @@ def add_supplier():
     return redirect(url_for("admin.materials"))
 
 
+# POST: edit a supplier.
 @bp.route("/materials/suppliers/edit", methods=["POST"])
 @admin_required
 def edit_supplier():
     supplier_id = request.form.get("supplier_id")
 
-    # Same reasoning as edit_material()'s existence check: without this,
-    # a stale/tampered supplier_id makes the UPDATE below match zero
-    # rows while still flashing success, as if it had actually landed.
+    # Existence check, like edit_material(): a stale id would flash success on zero rows.
     existing = query(
         "SELECT 1 FROM suppliers WHERE supplier_id = %s", (supplier_id,), fetchone=True
     )
@@ -595,16 +572,9 @@ def edit_supplier():
 @bp.route("/suppliers")
 @admin_required
 def suppliers():
-    """Old standalone Suppliers tab — now merged onto the Materials page
-    (see materials() above). Kept as a redirect so any old bookmark or
-    link still lands somewhere sensible instead of 404ing."""
+    """Old Suppliers tab: redirects to the Materials page for old bookmarks."""
     return redirect(url_for("admin.materials"))
 
 
 # ---------------------------------------------------------------- capital
-# The /capital route and admin/capital.html are removed — "Total Capital"
-# is no longer a manually-logged ledger. It's now derived as
-# SUM(package_cost) over raw_materials (see the dashboard() and
-# reports_data() routes above), i.e. it always equals what's been spent
-# on material packages. There's nothing left to log here; manage that
-# spend from the Materials page instead.
+# /capital is removed: Total Capital is derived (see dashboard()); manage spend on Materials.

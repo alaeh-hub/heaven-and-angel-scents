@@ -1,24 +1,17 @@
-/* Hallmark · shape: app screen · genre: modern-minimal · theme: brand (14 interface styles) · redesign: restyle
- * built: the project · every style rebuilt on one anchor hue, tokens only · v2.0.0 */
-/* Hallmark · pre-emit critique: P4 H4 E4 S4 R4 V4 · weakest: S, the pixel and terminal styles share a mono face; kept apart by corner geometry */
+/* Interface styles: 14 looks on one anchor hue each, tokens only. */
+/* Pixel and terminal styles share a mono face; kept apart by corner geometry. */
 /* ---------------------------------------------------------------------
    Interface styles: the per-person look chosen in Settings (sidebar footer).
-
-   Loaded after style.css. base.html's inline head script stamps
-   html[data-style] before first paint (from localStorage 'uiStyle'), and
-   main.js's initSettings() changes it live. It is independent of the
-   light/dark switch (html[data-theme]): every style ships a light and a
-   dark palette, so the two choices combine freely.
-
-   Rules of the house, per docs/design.md: every colour and font stack lives in
-   a token declaration inside its style's own block, rules below the
-   blocks read var(--...) only. One anchor hue per style, no gradient past
-   a single hue, no glow, no gradient text. Elevation is an offset or hard
-   shadow; blur belongs to overlays only.
-
-   Specificity: html[data-style="x"][data-theme="dark"] (0,2,1) beats
-   tokens.css's :root[data-theme="dark"] (0,2,0), so each dark block sets
-   every name tokens.css re-declares for dark.
+   Loaded after style.css. base.html's head script sets html[data-style] before first
+   paint (localStorage 'uiStyle'); initSettings() changes it live. Independent of
+   html[data-theme]: every style has a light and a dark palette.
+   House rules (docs/ARCHITECTURE.md, Visual system): colours and fonts live in each
+   style's own token block; rules below read var(--...) only; one anchor hue, no
+   gradient past one hue, no glow, no gradient text; elevation is an offset or hard
+   shadow, blur only on overlays.
+   Specificity: html[data-style="x"][data-theme="dark"] (0,2,1) beats tokens.css's
+   :root[data-theme="dark"] (0,2,0), so each dark block sets every name tokens.css
+   re-declares for dark.
    --------------------------------------------------------------------- */
 
 /* ---- Shared plumbing (classic declares none of the optional tokens) ---- */
@@ -707,9 +700,7 @@ html[data-style="bauhaus"] .badge { border: 2px solid var(--border-strong); font
 html[data-style="bauhaus"] th { font-weight: 700; color: var(--ink); border-bottom: 2px solid var(--border-strong); }
 html[data-style="bauhaus"] :is(.stat-tile, .chart-card):hover { transform: translate(-2px, -2px); }
 
-/* =====================================================================
-   Settings dialog (opened from the sidebar footer)
-   ===================================================================== */
+/* ===== Settings dialog (opened from the sidebar footer) ===== */
 .settings-overlay {
   position: fixed; inset: 0; z-index: 10000;
   display: flex; align-items: center; justify-content: center; padding: var(--space-lg);
@@ -749,9 +740,8 @@ html[data-style="bauhaus"] :is(.stat-tile, .chart-card):hover { transform: trans
 .settings-tab[aria-selected="true"] { background: var(--field); color: var(--accent-ink); }
 .settings-tab:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 1px; }
 .settings-body { flex: 1; min-width: 0; padding: var(--space-md) var(--space-lg) var(--space-lg); overflow-y: auto; overscroll-behavior: contain; }
-/* Custom scrollbars (follow the active style via theme variables).
-   Chromium/Safari use the pseudo-elements; Firefox the standard properties
-   (kept in @supports so Chrome 121+ doesn't let them override the pseudos). */
+/* Custom scrollbars (follow the active style). Chromium/Safari use pseudo-elements;
+   Firefox uses the standard properties, in @supports so Chrome 121+ doesn't override them. */
 .settings-body::-webkit-scrollbar, .settings-tabs::-webkit-scrollbar { width: 10px; height: 10px; }
 .settings-body::-webkit-scrollbar-track, .settings-tabs::-webkit-scrollbar-track { background: transparent; margin: var(--space-xs) 0; }
 .settings-body::-webkit-scrollbar-thumb, .settings-tabs::-webkit-scrollbar-thumb {
@@ -776,8 +766,7 @@ html[data-style="bauhaus"] :is(.stat-tile, .chart-card):hover { transform: trans
   .settings-tab { white-space: nowrap; }
 }
 
-/* Interface style / mode change (main.js initSettings): quick snapshot
-   cross-fade, so the swap reads as one smooth change, not a flash. */
+/* Style/mode change (initSettings): quick snapshot cross-fade. */
 html.vt-style::view-transition-old(root),
 html.vt-style::view-transition-new(root) { animation-duration: 0.28s; animation-timing-function: ease; mix-blend-mode: normal; }
 html.vt-style::view-transition-old(root) { animation-name: vt-style-out; }
@@ -880,8 +869,7 @@ html.vt-style::view-transition-new(root) { animation-name: vt-style-in; }
 .settings-chip-accent { background: var(--accent); color: var(--gold-contrast); }
 .settings-chip-accent:hover { color: var(--gold-contrast); filter: brightness(1.08); }
 .settings-chip[disabled] { opacity: 0.55; cursor: not-allowed; filter: none; }
-/* Status lines (backup / restore): a busy spinner, a tick or an alert mark
-   in front of the text, and a short slide-fade whenever the text changes. */
+/* Status lines (backup/restore): spinner, tick or alert mark, slide-fade on text change. */
 @keyframes settings-status-in {
   from { opacity: 0; transform: translateY(5px); }
   to { opacity: 1; transform: translateY(0); }
@@ -963,9 +951,7 @@ html.vt-style::view-transition-new(root) { animation-name: vt-style-in; }
 }
 .style-name { font-size: 0.84rem; font-weight: 700; padding: 0 var(--space-2xs); }
 .style-desc { font-size: 0.75rem; color: var(--ink-faint); padding: 0 var(--space-2xs); line-height: 1.35; margin-top: calc(var(--space-2xs) * -1); }
-/* Mini live-looking preview of each style. Each .sp-* declares its own
-   swatch tokens: the preview must show its own style whatever style is
-   active. */
+/* Mini preview of each style; each .sp-* declares its own swatch tokens. */
 .sp { height: 4.25rem; border-radius: var(--radius-sm); padding: var(--space-xs); display: flex; flex-direction: column; gap: var(--space-2xs); overflow: hidden; background: var(--sp-bg); }
 .sp i { display: block; }
 .sp .sp-card {
@@ -995,9 +981,7 @@ html.vt-style::view-transition-new(root) { animation-name: vt-style-in; }
 .settings-reset:hover { text-decoration: underline; }
 @media (max-width: 480px) { .settings-styles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 
-/* Pixel (light) sits on a saturated blue page, so mixing the accent into
-   --bg turned avatar chips muddy with weak initials; use its solid soft
-   accent instead. */
+/* Pixel (light) has a saturated blue page; use its solid soft accent for avatar chips. */
 html[data-style="pixel"]:not([data-theme="dark"]) { --avatar-bg: var(--accent-soft); }
 
 /* Motion: every transform transition and keyframe above gets a still fallback. */

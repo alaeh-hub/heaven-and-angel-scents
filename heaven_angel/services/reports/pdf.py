@@ -23,15 +23,7 @@ from heaven_angel.services.reports.constants import MAX_ROWS
 from heaven_angel.services.reports.formatting import ACCENT, BORDER, INK, INK_FAINT, badge_colors, fmt_cell, sentence_case
 
 
-# Built-in PDF fonts (Helvetica etc.) only cover Latin-1 and have no glyph
-# for the ₱ (Philippine peso) sign — it silently renders as a black "tofu"
-# box instead of erroring, which is easy to miss until someone opens the
-# PDF. IBM Plex Sans does have that glyph, and matches the IBM Plex Mono
-# already used for SKU/mono styling elsewhere in the app, so reports and
-# the web UI share a type family. See brand_assets.register_fonts() for
-# the shared vendored-font registration (also used by receipts.py and
-# this module's own NumberedCanvas), so the font files/names only need
-# to be right in one place.
+# Built-in PDF fonts lack the peso sign (it renders as a box); see brand_assets.register_fonts().
 register_fonts()
 
 
@@ -68,8 +60,7 @@ def _pdf_styles():
 
 
 def _p(text, style):
-    """A table cell. The PDF engine reads cell text as markup, so a name like B&B Works or D&G has to be
-    escaped or it comes out as "B&B; Works"."""
+    """A table cell; text is escaped because the PDF engine reads it as markup."""
     return Paragraph(escape(str(text)), style)
 
 
@@ -145,8 +136,7 @@ def render_report_pdf(report):
     story.append(Spacer(1, 8))
     story.append(HRFlowable(width="100%", thickness=1.2, color=ACCENT, spaceAfter=10))
 
-    # Columns are (key, label, ctype) from most builders, or (key, label, ctype, weight) from ones
-    # that set a width weight. Widths now come from the content, so the weight is no longer used.
+    # Columns may carry a 4th width weight; widths come from content, so it is ignored.
     columns = [tuple(c[:3]) for c in report["columns"]]
     rows = report["rows"]
 

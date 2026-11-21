@@ -1,12 +1,9 @@
-"""Branch Inventory's unit filter — same fix as admin/products.html's
-catalog filter (see test_admin_products.py): defaults to 85ML (the
-most commonly sold size) instead of "All units", without removing the
-"All units" option itself.
-"""
+"""Branch Inventory's unit filter defaults to 85ML but still offers "All units"."""
 from factories import login, make_branch, make_inventory, make_product, make_user
 
 
 def test_branch_inventory_unit_filter_defaults_to_85ml(client, sql):
+    """Branch inventory unit filter defaults to 85ml."""
     branch_id = make_branch(sql)
     user = make_user(sql, role="Branch", branch_id=branch_id)
     login(client, user["username"], user["password"], "Branch")

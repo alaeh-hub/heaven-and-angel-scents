@@ -1,10 +1,8 @@
 // Settings modal (appearance, backup, restore, etc.)
 // (Part of the app's main script; loaded in order by base.html.)
 
-// Settings dialog (sidebar footer → Settings): light/dark mode plus the
-// interface style (html[data-style], defined in static/css/themes.css).
-// Both are per-browser, stored in localStorage; base.html's head script
-// re-applies them before first paint.
+// Settings dialog: light/dark mode and interface style (html[data-style], css/themes.css).
+// Per-browser in localStorage; base.html's head script re-applies them before first paint.
 function initSettings() {
     const overlay = document.getElementById('settingsOverlay');
     const opener = document.getElementById('settingsOpen');
@@ -59,8 +57,7 @@ function initSettings() {
         });
     });
 
-    // Re-measure anything sized from the old style's fonts/padding (the
-    // sidebar's active-link indicator, charts) once the new style is live.
+    // Re-measure things sized from the old style (sidebar indicator, charts).
     function relayout() {
         requestAnimationFrame(() => window.dispatchEvent(new Event('resize')));
     }
@@ -73,9 +70,8 @@ function initSettings() {
             root.setAttribute('data-style', style);
             sync();
         };
-        // One snapshot cross-fade on the compositor instead of every
-        // element restyling in view at once (these styles swap fonts,
-        // borders, radii and shadows, which CSS transitions can't tween).
+        // One compositor cross-fade, since these styles swap fonts/borders/radii/shadows
+        // that CSS transitions can't tween.
         if (typeof document.startViewTransition === 'function' && !PREFERS_REDUCED_MOTION.matches) {
             root.classList.add('vt-style');
             const t = document.startViewTransition(apply);
@@ -120,8 +116,7 @@ function initSettings() {
     }
 
     opener.addEventListener('click', () => open());
-    // The account link may be handled by soft nav, which would leave the
-    // dialog open over the new page.
+    // Soft nav could handle the account link and leave the dialog open over the new page.
     overlay.querySelectorAll('a').forEach((a) => a.addEventListener('click', () => { overlay.hidden = true; }));
     overlay.querySelector('#settingsClose').addEventListener('click', close);
     overlay.addEventListener('mousedown', (e) => { if (e.target === overlay) close(); });
@@ -182,10 +177,9 @@ function initSettings() {
         syncExclusive();
         document.dispatchEvent(new Event('nav:exclusive'));
     });
-    // ---- Backup + restore (admins only) --------------------------------
-    // Shared status helper: text with a busy/ok/bad mark that slides in
-    // each time it changes, plus an optional progress bar (a number is a
-    // percentage, null is "working, unknown length", false hides it).
+    // ---- Backup + restore (admins only) ----
+    // Status helper: text with a busy/ok/bad mark, plus an optional progress bar
+    // (number = percent, null = working/unknown, false = hidden).
     const csrfToken = (document.querySelector('meta[name="csrf-token"]') || {}).content || '';
     const makeUi = (textEl, barEl, warnEl) => ({
         say(text, tone, busy) {
@@ -446,15 +440,13 @@ function initSettings() {
         refresh();
     }
 
-    // Restore: confirm with password + phrase, upload in 4 MB pieces, then
-    // follow the server's progress until it is finished.
+    // Restore: confirm with password + phrase, upload in 4 MB pieces, follow server progress.
     const restoreBtn = overlay.querySelector('#restoreNow');
     if (restoreBtn) {
         const ui = makeUi(overlay.querySelector('#restoreStatus'), overlay.querySelector('#restoreBar'));
         const fileEl = overlay.querySelector('#restoreFile');
         const pwEl = overlay.querySelector('#restorePassword');
-        // The password field sits in a form so browsers stop warning about it;
-        // the Restore button does the work, so Enter must not submit the form.
+        // Inside a form so browsers don't warn; Restore does the work, so Enter must not submit.
         const restoreForm = overlay.querySelector('#restoreForm');
         if (restoreForm) restoreForm.addEventListener('submit', (e) => e.preventDefault());
         const phraseEl = overlay.querySelector('#restorePhrase');
@@ -467,8 +459,7 @@ function initSettings() {
         const finished = (text) => {
             ui.bar(100);
             ui.say(text, 'ok');
-            // Restored accounts/passwords may be identical, which keeps this session
-            // valid, so sign out for real (POST /logout) instead of only redirecting.
+            // Restored accounts may match, keeping this session valid, so sign out (POST /logout).
             const signout = document.createElement('div');
             signout.className = 'signout-overlay';
             signout.setAttribute('role', 'alertdialog');

@@ -20,12 +20,8 @@ const STEPS = [
 ];
 
 /**
- * The heading on top, then the three steps as a timeline: side by side
- * on desktop, stacked on phones. A gold rail through the step markers
- * fills as the visitor reads through them (left to right, or top to
- * bottom on phones), so progress through the process is visible at a
- * glance. Sits right after the packages and the earnings estimate,
- * since it answers "what happens after I click Inquire?".
+ * Heading plus three steps as a timeline (stacked on phones); a gold rail
+ * fills as the visitor reads. Answers "what happens after I click Inquire?".
  */
 export default function Steps() {
   const listRef = useRef(null);

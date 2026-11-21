@@ -21,8 +21,7 @@ const GENDERS = [
   ['Female', 'Women'],
 ];
 
-// Each page of results arrives as a set: the grid fades in and the cards
-// follow one after another.
+// Each results page fades in, cards staggered.
 const grid = {
   enter: { opacity: 0 },
   show: { opacity: 1, transition: { duration: 0.25, staggerChildren: 0.045 } },
@@ -34,9 +33,8 @@ const cell = {
 };
 
 /**
- * The full catalog ("View all products" under the collection strip):
- * every scent, filterable by gender, 12 per page. Filter and page live
- * in the URL, so back/forward and shared links land on the same view.
+ * Full catalog: every scent, filterable by gender, 12 per page; filter and
+ * page live in the URL so links and back/forward work.
  */
 export default function ProductsPage() {
   const { slug } = useParams();
@@ -47,9 +45,7 @@ export default function ProductsPage() {
   const gridTopRef = useRef(null);
   const { openInquiry } = useSite();
 
-  // The catalog is the same list the home page's collection shows (see
-  // content/scents.js), not the inventory table: those renders are the
-  // real product. Women's and men's alternate so the labels trade places.
+  // Same list as the home collection (content/scents.js); genders alternate.
   const list = useMemo(() => {
     const her = SCENTS.filter((x) => x.variant === 'Female');
     const him = SCENTS.filter((x) => x.variant === 'Male');

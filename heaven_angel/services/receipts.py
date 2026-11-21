@@ -61,12 +61,7 @@ DANGER = colors.HexColor("#E23A48")
 DANGER_SOFT = colors.HexColor("#FCE7EA")
 GOOD = colors.HexColor("#17975E")
 
-# This receipt prints the peso sign (₱) inline in the items table, which
-# needs a font with real Unicode currency-symbol coverage (built-in
-# Helvetica only has WinAnsiEncoding and renders ₱ as a black box) — see
-# brand_assets.register_fonts() for the shared vendored-font logic
-# (also used by reports.py and this module's own NumberedCanvas), so
-# the font files/names only need to be right in one place.
+# Peso sign needs a Unicode font; brand_assets.register_fonts() holds the shared logic.
 FONT_REGULAR, FONT_BOLD = brand_assets.register_fonts()
 
 
@@ -115,10 +110,12 @@ def _fmt_dt(dt):
 
 
 def _fmt_qty(value):
+    """Format a quantity, or a dash if missing."""
     return str(value) if value is not None else "—"
 
 
 def _styles():
+    """Paragraph styles for the receipts."""
     base = getSampleStyleSheet()
     return {
         "brand": ParagraphStyle("brand", parent=base["Normal"], fontName=FONT_BOLD,
@@ -210,9 +207,7 @@ def build_receipt_pdf(request_id, branch_id=None):
     items = _fetch_items(request_id)
     movements = _fetch_movements(request_id)
 
-    # A delivery can now have several shipment dispatch/receipt events.
-    # Keep the aggregate line-item quantities below and show the first
-    # dispatch plus the latest receipt in the compact timeline.
+    # A delivery can have several dispatch/receipt events; show first dispatch and latest receipt.
     dispatch_mvs = [m for m in movements if m["movement_type"] == "DISPATCH"]
     receipt_mvs = [m for m in movements if m["movement_type"] == "RECEIPT"]
     damage_mvs = [m for m in movements if m["movement_type"] == "DAMAGE"]
@@ -415,9 +410,7 @@ def build_receipt_pdf(request_id, branch_id=None):
             story.append(Spacer(1, 2))
             story.append(Paragraph(f"Ledger note ({esc(label)}): {esc(mv['notes'])}", s["footer"]))
 
-    # ---- Signatures + footer ----
-    # Kept together as one block: on a delivery that only just fills
-    # page one, the footer used to spill onto a page of its own.
+    # Signatures and footer stay together so the footer does not spill to its own page.
     sig_table = Table(
         [[
             Table([[HRFlowable(width=70 * mm, thickness=0.75, color=INK_FAINT)],
@@ -443,39 +436,7 @@ def build_receipt_pdf(request_id, branch_id=None):
     return buf, req
 
 
-# ---------------------------------------------------------------------------
-# Sales receipt — a single Sale or Refill, printable right after Record
-# Sale saves it. Unlike the goods-received receipt above, a sale has no
-# multi-step lifecycle to wait on (dispatch -> receive): it's complete
-# the instant it's inserted, so this can be generated immediately, same
-# request-response cycle as the redirect back to Record Sale.
-#
-# This is deliberately shaped like a small thermal-printer slip (80mm
-# roll width) instead of a full letter-size page — one item per sale
-# means there's rarely more than a dozen lines to show, and a receipt
-# this size is what a customer actually expects to be handed. Height
-# isn't fixed up front and can't just be trimmed after the fact either
-# (shrinking a PDF's page size after drawing on it would clip content
-# near the old top right off the new, shorter page instead of moving it
-# down). Instead this renders in two passes: a "dry" pass runs the exact
-# same layout with a no-op canvas purely to measure how much vertical
-# space the content needs, then a real pass draws it for real onto a
-# canvas already sized to fit — so a Refill note or a long customer
-# address grows the receipt instead of leaving blank space or clipping.
-#
-# Every receipt carries a QR code encoding a short signed verification
-# code (see utils.make_receipt_code()) — not the sale's data itself,
-# just a code that /scan/verify (routes/scan.py) can turn back into
-# this exact sale. That's what lets Scan Receipt confirm a printed
-# receipt is genuinely on file and pull up what was recorded, without
-# ever trusting raw QR content on its own.
-#
-# Access control is the caller's job, same convention as
-# build_receipt_pdf(): pass branch_id from the branch side so a branch
-# can only ever pull a receipt for a sale recorded at its own branch;
-# admin callers omit it since HQ can see every branch (including its
-# own HQ/Main Branch sales, and — if ever needed — any branch's).
-# ---------------------------------------------------------------------------
+# Sales receipt: an 80mm slip, sized by a dry measuring pass; QR holds a signed code; callers enforce branch access.
 RECEIPT_WIDTH = 80 * mm
 RECEIPT_MARGIN = 4.5 * mm
 RECEIPT_CONTENT_WIDTH = RECEIPT_WIDTH - (2 * RECEIPT_MARGIN)
@@ -510,11 +471,7 @@ def _render_sale_receipt(c, sale, receipt_code, top_y, dry=False, slip=None):
     hairline rules separate the sections instead of rows of "* * *"
     characters, which read as noise on a small slip.
     """
-    # One receipt can carry several products: sale["lines"] is a list of
-    # {item_name, variant, unit, sku, qty_sold, unit_price}. A normal single-product
-    # sale has no "lines" and is its own only line.
-    # `slip` is set when the order is printed over several slips (see
-    # build_sale_receipt_pdf): {n, of, first, last, items, units, order_total}.
+    # sale["lines"] holds the products on one receipt; `slip` is set when an order spans several slips.
     lines = sale.get("lines") or [sale]
     line_total = sum((ln["qty_sold"] * ln["unit_price"] for ln in lines), decimal.Decimal("0"))
     slip = slip or {"n": 1, "of": 1, "first": 1, "last": True, "items": len(lines),
@@ -561,9 +518,7 @@ def _render_sale_receipt(c, sale, receipt_code, top_y, dry=False, slip=None):
                 c.drawRightString(x_right, state["y"], value)
             advance(gap if gap is not None else size + 6)
             return
-        # Too long for the same line (a long customer name, say): the label gets
-        # its own line and the value wraps under it, so nothing runs off the slip
-        # or over the label, and the slip simply gets taller.
+        # A value too long for the line wraps under its label and the slip grows.
         if not dry:
             c.setFont(FONT_REGULAR, size)
             c.setFillColor(INK_FAINT)
@@ -636,9 +591,7 @@ def _render_sale_receipt(c, sale, receipt_code, top_y, dry=False, slip=None):
         small_left(sale["customer_address"], gap=6)
     rule()
 
-    # ---- Line items ----
-    # Each name wraps in the space its price leaves, so a long scent name (or a
-    # price in the thousands) grows the slip instead of running into the price.
+    # Line items: names wrap beside their price so the slip grows instead of overlapping.
     if slip["items"] > 1:
         if slip["of"] > 1:
             first = slip["first"]
@@ -684,9 +637,7 @@ def _render_sale_receipt(c, sale, receipt_code, top_y, dry=False, slip=None):
             advance(13)
     rule(color=INK, width=0.8, gap=15)
 
-    # ---- Total ----
-    # Over several slips each one shows its own subtotal; the last also shows
-    # the whole order's total.
+    # Total: each slip shows its subtotal; the last also shows the order total.
     if slip["of"] > 1 and is_last:
         sub_text = f"₱{line_total:,.2f}"
         if not dry:
@@ -773,9 +724,7 @@ def build_sale_receipt_pdf(sale_id, branch_id=None):
         part = {**sale, "lines": chunk if len(all_lines) > 1 else None}
         slip = {"n": n, "of": len(chunks), "first": (n - 1) * SLIP_MAX_LINES + 1, "last": n == len(chunks),
                 "items": len(all_lines), "units": units, "order_total": order_total}
-        # Pass 1 (dry): run the identical layout with no canvas, purely to find
-        # out how tall this slip needs to be. Pass 2 draws it for real onto a page
-        # already sized to fit: nothing clipped, nothing left blank underneath.
+        # Pass 1 (dry) measures the slip height; pass 2 draws onto a page sized to fit.
         content_height = _render_sale_receipt(None, part, receipt_code, top_y=0, dry=True, slip=slip)
         page_height = content_height + RECEIPT_TOP_MARGIN + RECEIPT_BOTTOM_MARGIN
         c.setPageSize((RECEIPT_WIDTH, page_height))

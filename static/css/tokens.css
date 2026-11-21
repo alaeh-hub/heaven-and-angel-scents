@@ -1,15 +1,8 @@
-/* Design tokens for the Heaven & Angel back office (admin and branch).
-   One source of truth: the --color-* and --font-* roles below. The older
-   names every template and style.css already read (--bg, --surface, --ink,
-   --accent, --border ...) are aliases of these roles, so a value changes in
-   one place and the whole app follows.
-
-   Light is declared on :root, dark on :root[data-theme="dark"]. Both are
-   derived, not inverted. Gold is the brand and the only accent: it marks
-   the primary action, the current selection and state, nothing else.
-
-   --color-accent-ink is the text that sits ON a gold fill.
-   --accent-ink (legacy name) is gold used AS text on the page. */
+/* Design tokens for the back office (admin and branch): the --color-* and --font-* roles.
+   Older names (--bg, --surface, --ink, --accent, --border ...) alias these roles, so a
+   value changes in one place. Light is on :root, dark on :root[data-theme="dark"]
+   (derived, not inverted). Gold is the brand and only accent: primary action, selection
+   and state. --color-accent-ink is text ON a gold fill; --accent-ink (legacy) is gold AS text. */
 
 :root {
   --space-3xs: 0.125rem; --space-2xs: 0.25rem; --space-xs: 0.5rem; --space-sm: 0.75rem; --space-md: 1rem; --space-lg: 1.5rem; --space-xl: 2.5rem; --space-2xl: 4rem; --space-3xl: 6rem; --space-4xl: 9rem;
@@ -19,7 +12,7 @@
   --dur-micro: 120ms; --dur-short: 220ms; --dur-long: 420ms;
   --z-base: 1; --z-raised: 10; --z-dropdown: 100; --z-sticky: 200; --z-sticky-nav: 300; --z-modal: 400; --z-toast: 500; --z-tooltip: 600;
 
-  /* Faces: one family for the interface, its mono only for SKUs, codes and receipt numbers. */
+  /* Faces: one for the interface, mono only for SKUs, codes and receipt numbers. */
   --font-display: "Geist", ui-sans-serif, system-ui, "Segoe UI", sans-serif;
   --font-body: "Geist", ui-sans-serif, system-ui, "Segoe UI", sans-serif;
   --font-mono: "Geist Mono", ui-monospace, "SF Mono", "Cascadia Mono", monospace;
@@ -28,7 +21,7 @@
   --tracking-display: -0.015em;
   --display-weight: 600;
 
-  /* Brand constants: identical in both themes, for marks on a permanently dark surface. */
+  /* Brand constants, same in both themes, for marks on a permanently dark surface. */
   --brand-black: oklch(17% 0.012 85);
   --brand-gold: oklch(77% 0.125 88);
   --gold-contrast: oklch(19% 0.025 85);
@@ -114,7 +107,7 @@
   --avatar-ring: color-mix(in oklab, var(--accent) 55%, transparent);
   --thumb-ring: color-mix(in oklab, var(--ink) 16%, transparent);
 
-  /* One shadow recipe. Cards are flat (a hairline carries them); only overlays lift. */
+  /* One shadow recipe: cards are flat (hairline); only overlays lift. */
   --shadow-sm: none;
   --shadow: none;
   --wordmark-halo: rgb(60 35 0 / 0.55); /* hairline edge on the light-theme sidebar wordmark */

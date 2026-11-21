@@ -1,10 +1,8 @@
-"""Two branch/admin rules added together:
+"""Two rules:
 
-- Branches can only request bottled products from HQ, never BULK
-  (routes/branch.py's request_stock()), enforced server-side.
-- The development-only Clear Data page (routes/admin/'s clear_data())
-  is a 404 unless ALLOW_DATA_RESET is on, needs the exact confirmation
-  phrase, and keeps accounts/branches while emptying everything else.
+- Branches can only request bottled products from HQ, never BULK (server-side).
+- Clear Data (development only) is a 404 unless ALLOW_DATA_RESET is on, needs the
+  exact confirmation phrase, and keeps accounts/branches while emptying the rest.
 """
 from factories import (get_form_token, login, make_branch, make_inventory, unique_suffix,
                        make_product, make_user)
@@ -35,6 +33,7 @@ def _count(sql, table, where="1=1", params=()):
 
 # ---------------------------------------------------------------- bottle-only requests
 def test_request_stock_page_lists_bottles_but_not_bulk(client, sql):
+    """Request stock page lists bottles but not bulk."""
     _signed_in_branch(client, sql)
     bottle = make_product(sql, unit="50ML")
     bulk = f"NOPE-{unique_suffix().upper()}-BULK"  # bulk is not a product
@@ -46,6 +45,7 @@ def test_request_stock_page_lists_bottles_but_not_bulk(client, sql):
 
 
 def test_request_stock_rejects_a_tampered_bulk_sku(client, sql):
+    """Request stock rejects a tampered bulk sku."""
     branch_id = _signed_in_branch(client, sql)
     bulk = f"NOPE-{unique_suffix().upper()}-BULK"  # bulk is not a product
     token = get_form_token(client, REQUEST_STOCK_URL)
@@ -58,6 +58,7 @@ def test_request_stock_rejects_a_tampered_bulk_sku(client, sql):
 
 
 def test_dashboard_hides_reorder_for_low_stock_bulk(client, sql):
+    """Dashboard hides reorder for low stock bulk."""
     _signed_in_branch(client, sql)
     bulk = f"NOPE-{unique_suffix().upper()}-BULK"  # bulk is not a product
 
@@ -69,6 +70,7 @@ def test_dashboard_hides_reorder_for_low_stock_bulk(client, sql):
 
 # ---------------------------------------------------------------- clear data
 def test_clear_data_is_404_when_not_enabled(app, client, sql, monkeypatch):
+    """Clear data is 404 when not enabled."""
     monkeypatch.setitem(app.config, "ALLOW_DATA_RESET", False)
     _signed_in_admin(client, sql)
 
@@ -77,6 +79,7 @@ def test_clear_data_is_404_when_not_enabled(app, client, sql, monkeypatch):
 
 
 def test_clear_data_is_admin_only(app, client, sql, monkeypatch):
+    """Clear data is admin only."""
     monkeypatch.setitem(app.config, "ALLOW_DATA_RESET", True)
     _signed_in_branch(client, sql)
 
@@ -84,6 +87,7 @@ def test_clear_data_is_admin_only(app, client, sql, monkeypatch):
 
 
 def test_clear_data_needs_the_exact_phrase(app, client, sql, monkeypatch):
+    """Clear data needs the exact phrase."""
     monkeypatch.setitem(app.config, "ALLOW_DATA_RESET", True)
     _signed_in_admin(client, sql)
     sku = make_product(sql)
@@ -94,6 +98,7 @@ def test_clear_data_needs_the_exact_phrase(app, client, sql, monkeypatch):
 
 
 def test_clear_data_empties_business_tables_but_keeps_accounts(app, client, sql, monkeypatch, tmp_path):
+    """Clear data empties business tables but keeps accounts."""
     monkeypatch.setitem(app.config, "ALLOW_DATA_RESET", True)
     # Never touch the real static/uploads during tests.
     monkeypatch.setattr(app, "static_folder", str(tmp_path))
@@ -122,6 +127,7 @@ def test_clear_data_empties_business_tables_but_keeps_accounts(app, client, sql,
 
 # ---------------------------------------------------------------- BULK hidden from branch filters / low stock
 def test_branch_inventory_unit_filter_has_no_bulk_option(client, sql):
+    """Branch inventory unit filter has no bulk option."""
     branch_id = _signed_in_branch(client, sql)
     # The filter only renders when the branch carries something.
     make_inventory(sql, branch_id, make_product(sql, unit="50ML"), stock_qty=1)
@@ -133,6 +139,7 @@ def test_branch_inventory_unit_filter_has_no_bulk_option(client, sql):
 
 
 def test_branch_inventory_lists_bottles_only(client, sql):
+    """Branch inventory lists bottles only."""
     branch_id = _signed_in_branch(client, sql)
     bulk = f"NOPE-{unique_suffix().upper()}-BULK"  # bulk is not a product
     bottle = make_product(sql, unit="50ML")
@@ -145,6 +152,7 @@ def test_branch_inventory_lists_bottles_only(client, sql):
 
 
 def test_branch_low_stock_ignores_bulk(client, sql):
+    """Branch low stock ignores bulk."""
     _signed_in_branch(client, sql)
     bulk = f"NOPE-{unique_suffix().upper()}-BULK"  # bulk is not a product
 
@@ -154,6 +162,7 @@ def test_branch_low_stock_ignores_bulk(client, sql):
 
 
 def test_admin_low_stock_page_and_dashboard_ignore_bulk(client, sql):
+    """Admin low stock page and dashboard ignore bulk."""
     branch_id = make_branch(sql)
     bulk = f"NOPE-{unique_suffix().upper()}-BULK"  # bulk is not a product
     bottle = make_product(sql, unit="50ML")
@@ -169,6 +178,7 @@ def test_admin_low_stock_page_and_dashboard_ignore_bulk(client, sql):
 def test_admin_low_stock_includes_hq_warehouse(client, sql):
     # HQ's warehouse is branch_id 1 (schema.sql). BULK has no reorder
     # level at HQ either, so only the bottle shows up.
+    """Admin low stock includes hq warehouse."""
     bottle = make_product(sql, unit="50ML")
     bulk = f"NOPE-{unique_suffix().upper()}-BULK"  # bulk is not a product
     make_inventory(sql, 1, bottle, stock_qty=0, reorder_level=5)
@@ -183,6 +193,7 @@ def test_admin_low_stock_includes_hq_warehouse(client, sql):
 
 
 def test_ai_low_stock_tool_includes_hq_warehouse(app, sql):
+    """Ai low stock tool includes hq warehouse."""
     from heaven_angel.routes.ai_tools.stock import get_low_stock as _get_low_stock
 
     bottle = make_product(sql, unit="50ML")
@@ -200,6 +211,7 @@ def test_ai_low_stock_tool_includes_hq_warehouse(app, sql):
 
 
 def test_branch_skus_carried_counts_base_codes(client, sql):
+    """Branch skus carried counts base codes."""
     import re
     import uuid
     branch_id = _signed_in_branch(client, sql)

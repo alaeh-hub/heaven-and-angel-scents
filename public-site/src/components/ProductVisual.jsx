@@ -3,10 +3,8 @@ import { motion } from 'motion/react';
 
 import { SCENTS } from '../content/scents.js';
 
-// A product's own uploaded photo wins. Without one, it shows the real bottle
-// render for its scent (matched by name, then by the code at the start of its
-// SKU, e.g. "A1-85ML" -> A1). Only when neither matches does it fall back to
-// the first real bottle of its gender, so the placeholder is never a stock image.
+// Photo wins; else the scent render (by name, then SKU code like "A1-85ML");
+// else the first real bottle of its gender (never a stock image).
 const byName = new Map(SCENTS.map((s) => [s.name.toLowerCase(), s]));
 const byCode = new Map(SCENTS.map((s) => [s.code.toUpperCase(), s]));
 const defaultFor = (variant) => SCENTS.find((s) => s.variant === (variant === 'Male' ? 'Male' : 'Female'));
@@ -20,17 +18,14 @@ export function productImage(item) {
   return scent.bottle;
 }
 
-// The scent renders are wide transparent layers with the bottle on the right
-// (see SCENT_BOTTLE_CENTRE), so they need centring wherever they are shown;
-// `.is-render` in detail.css does that. An uploaded photo needs nothing.
-// The square product thumbnails (-thumb.webp) already have the bottle centred.
+// Scent renders are wide layers with the bottle on the right, so `.is-render`
+// (detail.css) centres them; uploaded photos and -thumb.webp need nothing.
 const isRender = (item) => {
   const src = productImage(item);
   return src.includes('/static/img/scents/') && !src.includes('-thumb.');
 };
 
-/** A product's own photo, or its gender's placeholder bottle. Accepts
-    motion props, so callers can animate it (e.g. on hover). */
+/** A product photo or its gender placeholder; accepts motion props. */
 const ProductVisual = forwardRef(function ProductVisual({ item, className = '', ...motionProps }, ref) {
   return (
     <motion.img

@@ -26,11 +26,7 @@ BORDER = colors.HexColor("#E9E0C9")
 ROW_ALT = colors.HexColor("#F5F0E1")
 
 
-# Hex pairs (background, text) for each badge "style" — a direct port
-# of the badge-* classes in style.css (light-theme values), so a
-# Status/Type/Variant column in a generated report is colored exactly
-# like the matching badge the person already sees on screen. Product
-# variants use their own gold/ink scale rather than reusing status colors.
+# (background, text) hex pairs per badge style, matching the badge-* CSS classes.
 BADGE_STYLES = {
     "pending":   ("#FBF0D9", "#C9820B"),  # --warning-soft / --warning
     "transit":   ("#FBF1D6", "#8A6D1F"),  # --accent-soft / --accent-ink
@@ -44,12 +40,7 @@ BADGE_STYLES = {
 }
 
 
-# Maps a column's *semantic kind* (not its literal value) to the
-# badge-style key for each value it can hold. Mirrors the macro logic
-# in _macros.html (status_badge / movement_badge / sale_type_badge /
-# payment_method_badge / variant_badge) line for line, so report
-# coloring can never drift out of sync with what the web UI shows for
-# that same value.
+# Column kind to badge style per value; mirrors the _macros.html badge macros.
 BADGE_KIND_MAPS = {
     "status": {"Pending": "pending", "In Transit": "transit", "Partially Fulfilled": "transit", "Fulfilled": "fulfilled", "Rejected": "rejected"},
     "movement_type": {
@@ -86,6 +77,7 @@ def badge_colors(kind, value):
 
 
 def fmt_cell(value, ctype):
+    """Format a cell value by its column type for PDF and Excel."""
     if value is None:
         return "—"
     if ctype == "money":
@@ -96,12 +88,7 @@ def fmt_cell(value, ctype):
     if ctype == "int":
         return f"{int(value):,}"
     if ctype == "num":
-        # A fractional quantity (raw_materials.package_qty, cogs_logs.
-        # qty_produced, unit_formula_items.qty_per_unit — all DECIMAL
-        # columns, unlike the plain-INT qty columns "int" above covers)
-        # — shown to 3 decimal places (matches their schema precision)
-        # rather than forced through int(), which would silently
-        # truncate e.g. 2.5 grams down to 2.
+        # Fractional quantity shown to 3 decimals; int() would truncate 2.5 to 2.
         return f"{float(value):,.3f}"
     if ctype == "datetime":
         return fmt_datetime(value)
@@ -119,8 +106,7 @@ def fmt_datetime(value):
 
 
 def sentence_case(label):
-    """Column heads read in sentence case ("Stock on hand", not "Stock On Hand"). Words that are already
-    all capitals (SKU, HQ), contain a digit or a symbol, or are not a plain Capitalised word stay as they are."""
+    """Sentence-case a column head; all-caps, digit or symbol words stay as they are."""
     words = str(label).split(" ")
     out = []
     for i, w in enumerate(words):

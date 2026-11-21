@@ -27,10 +27,7 @@ XL_MONEY_FMT = '"₱"#,##0.00'
 XL_DATE_FMT = "mmm d, yyyy h:mm AM/PM"
 
 
-# Up to 3 decimals, trailing zeros trimmed by Excel's own "#" placeholders
-# (2.500 shows as "2.5", 10.000 shows as "10") — for fractional quantity
-# columns (see the "num" column type), which range from whole numbers up
-# to schema's DECIMAL(10,3)/DECIMAL(10,4) precision.
+# Up to 3 decimals, trailing zeros trimmed (2.500 shows as 2.5).
 XL_NUM_FMT = "#,##0.###"
 
 

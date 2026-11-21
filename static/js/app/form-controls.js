@@ -6,10 +6,8 @@ function initCustomSelects(root) {
     (root || document).querySelectorAll('input[list]').forEach(enhanceDatalistInput);
 }
 
-// Replaces the browser's own <datalist> suggestion popup (e.g. Record
-// Sale's customer name) with the same custom panel the selects use. The
-// input keeps its name/id/value; picking a suggestion fires the same
-// input + change events typing would.
+// Replaces the browser's <datalist> popup with the custom select panel; the input keeps
+// its name/id/value and fires the same input + change events.
 function enhanceDatalistInput(input) {
     if (input.dataset.dlEnhanced) return;
     const dl = document.getElementById(input.getAttribute('list'));
@@ -47,8 +45,7 @@ function enhanceDatalistInput(input) {
     };
     const render = () => {
         const q = input.value.trim().toLowerCase();
-        // An <option value="A1" label="Lacoste Red"> also searches (and shows)
-        // its label, so a code can be found by the name it belongs to.
+        // <option label="..."> text is also searched and shown, so a code is found by its name.
         const hints = {};
         const all = Array.from(dl.options).filter((o) => o.value && o.value.toLowerCase() !== q).map((o) => {
             hints[o.value] = o.getAttribute('label') || '';
@@ -107,8 +104,7 @@ function enhanceSelect(select) {
 
     const wrap = document.createElement('div');
     wrap.className = 'cs-select';
-    // Optional look (e.g. "status": a coloured pill with a dot per
-    // option and a one-line description under each choice).
+    // Optional look (e.g. "status": coloured pill with a dot and a description per option).
     if (select.dataset.csVariant) wrap.classList.add('cs-variant-' + select.dataset.csVariant);
     select.parentNode.insertBefore(wrap, select);
     wrap.appendChild(select);
@@ -116,11 +112,7 @@ function enhanceSelect(select) {
     const trigger = document.createElement('button');
     trigger.type = 'button';
     trigger.className = 'cs-trigger';
-    // Not a separate tab stop: the real (invisible) <select> above it
-    // stays the thing that receives focus and keyboard input, exactly
-    // as it did before this ran, so Tab order through the form is
-    // unchanged and native required-field validation still targets a
-    // real, focusable control.
+    // Not a tab stop: the invisible real <select> keeps focus, Tab order and native validation.
     trigger.tabIndex = -1;
     trigger.setAttribute('aria-hidden', 'true');
     trigger.innerHTML =
@@ -133,9 +125,8 @@ function enhanceSelect(select) {
     panel.className = 'cs-panel';
     panel.setAttribute('role', 'listbox');
     wrap.appendChild(panel);
-    // The status picker's panel is moved to <body> while open: a page
-    // reveal animation leaves a transform on the cards, and a transformed
-    // ancestor re-anchors position:fixed to itself instead of the viewport.
+    // The status picker's panel moves to <body> while open: a transformed ancestor would
+    // re-anchor position:fixed to itself.
     const floating = wrap.classList.contains('cs-variant-status');
     if (floating) panel.classList.add('cs-panel-floating');
 
@@ -143,12 +134,8 @@ function enhanceSelect(select) {
     let triggerDot = null;
     let activeIndex = -1;
 
-    // ---- Type-to-search. Lists of 7+ choices (or any select marked
-    // data-cs-search) get a search box at the top of the panel; short
-    // lists stay a plain pick-list (data-cs-nosearch opts a long one out).
-    // Matching is the shared SmartMatch scorer: any word order, SKU-style
-    // codes, small typos. An option can add extra searchable text with
-    // data-search="...". ----
+    // ---- Type-to-search: 7+ choices (or data-cs-search) get a search box; data-cs-nosearch
+    // opts out. Uses the shared SmartMatch scorer; data-search="..." adds searchable text. ----
     let searchRow = null;
     let searchInput = null;
     let emptyEl = null;
@@ -184,8 +171,7 @@ function enhanceSelect(select) {
             if (e.relatedTarget && wrap.contains(e.relatedTarget)) return;
             close();
         });
-        // Keep clicks on the panel from pulling focus off the search box
-        // (which would blur-close the panel before the click lands).
+        // Panel clicks must not pull focus off the search box (it would blur-close the panel).
         panel.addEventListener('mousedown', function (e) {
             if (e.target !== searchInput) e.preventDefault();
         });
@@ -206,8 +192,7 @@ function enhanceSelect(select) {
         return optionEls().filter(function (el) { return Number(el.dataset.index) === index; })[0] || null;
     }
 
-    // Shows only the options that match what was typed, best match first;
-    // an empty query restores the original order and plain text.
+    // Show only matching options, best first; an empty query restores the original order.
     function applyFilter() {
         const els = optionEls();
         const q = query.trim();
@@ -255,9 +240,8 @@ function enhanceSelect(select) {
         return wrap.classList.contains('cs-open');
     }
 
-    // The status picker lives in a scrolling table, whose overflow would
-    // clip or scroll a normally-positioned panel, so its panel is fixed to
-    // the viewport instead (and closed if the page scrolls under it).
+    // The status picker sits in a scrolling table, so its panel is fixed to the viewport
+    // (and closed if the page scrolls).
     function positionFixed() {
         const r = trigger.getBoundingClientRect();
         const w = Math.min(272, window.innerWidth - 16);
@@ -285,23 +269,9 @@ function enhanceSelect(select) {
             positionFixed();
             return;
         }
-        // Flip the panel above the trigger when there isn't room below
-        // — the same reasoning as every other floating panel in the
-        // app (e.g. the product-search combos), just generalized here
-        // since a <select> can live anywhere: low in a long form, near
-        // the bottom of a modal, etc.
-        //
-        // "Room" here is bounded by whichever is smaller: the viewport
-        // edge, or the bottom/top of the card (or modal) the select
-        // lives in. Viewport-only used to be the sole limit, so a long
-        // option list on a select positioned mid-card (plenty of
-        // *viewport* space below, since the page keeps scrolling) would
-        // still open a tall panel that overhung onto whatever section
-        // comes after — Products' "Bulk import / export" card right
-        // under "Add a product", Production's own history table below
-        // its two-column row, etc. A panel is capped to its own card's
-        // remaining space instead and scrolls internally for the rest,
-        // exactly like it already does against the viewport.
+        // Flip the panel above the trigger when there's no room below. "Room" is the smaller
+        // of the viewport edge and the bottom/top of the enclosing card or modal, so a long
+        // list never overhangs the next section; it scrolls internally for the rest.
         wrap.classList.remove('cs-open-up');
         panel.style.maxHeight = '';
         const rect = trigger.getBoundingClientRect();
@@ -329,9 +299,7 @@ function enhanceSelect(select) {
             panel.style.maxHeight = Math.max(120, Math.min(defaultMax, spaceBelow)) + 'px';
         }
 
-        // A narrow trigger's panel is allowed to be wider than it (see
-        // .cs-panel's min-width); keep that wider panel on screen by
-        // anchoring it to the trigger's right edge when it would spill.
+        // A narrow trigger's wider panel is anchored to its right edge when it would spill.
         wrap.classList.remove('cs-align-right');
         if (panel.getBoundingClientRect().right > document.documentElement.clientWidth - 8) {
             wrap.classList.add('cs-align-right');
@@ -359,8 +327,7 @@ function enhanceSelect(select) {
         if (activeEl && activeEl.scrollIntoView) activeEl.scrollIntoView({ block: 'nearest' });
         if (searchInput && isSearchable()) {
             searchInput.focus({ preventScroll: true });
-            // The panel only just became visible; retry once if the
-            // browser refused focus on the first frame.
+            // Panel just became visible; retry once if the browser refused focus.
             if (document.activeElement !== searchInput) {
                 requestAnimationFrame(function () {
                     if (isOpen()) searchInput.focus({ preventScroll: true });
@@ -371,19 +338,13 @@ function enhanceSelect(select) {
 
     function close() {
         if (!isOpen()) return;
-        // Hand focus back to the real <select> so Tab order carries on
-        // from it (the search box lives inside the panel).
+        // Return focus to the real <select> so Tab order continues.
         if (searchInput && document.activeElement === searchInput) select.focus({ preventScroll: true });
         wrap.classList.remove('cs-open');
         panel.classList.remove('cs-panel-open');
-        // Deliberately NOT clearing 'cs-open-up' (or the inline
-        // max-height position() set) here — the panel is still
-        // visible for the rest of its closing transform transition,
-        // and removing 'cs-open-up' immediately flips it from
-        // bottom-anchored back to its top-anchored default mid-flight,
-        // which reads as the panel jumping down to the bottom of the
-        // trigger for a split second before it fades out. position()
-        // already resets both fresh at the start of every open().
+        // Do NOT clear 'cs-open-up' or the inline max-height here: the panel is still visible
+        // during its closing transition and would jump to the top-anchored position.
+        // position() resets both on every open.
         trigger.setAttribute('aria-expanded', 'false');
         activeIndex = -1;
     }
@@ -394,8 +355,7 @@ function enhanceSelect(select) {
         });
     }
 
-    // Walks the options that are currently shown (all of them, or just the
-    // search matches) in on-screen order, skipping disabled ones.
+    // Walk the visible options (all, or search matches) in order, skipping disabled.
     function moveActive(delta) {
         const opts = visibleOptionEls();
         if (!opts.length) return;
@@ -414,8 +374,7 @@ function enhanceSelect(select) {
 
     function selectIndex(i) {
         if (i < 0 || i >= select.options.length || select.options[i].disabled) return;
-        // Re-picking the current value of an auto-submitting select (a
-        // status switch) must not post the form again.
+        // Re-picking the current value of an auto-submitting select must not post again.
         if (i === select.selectedIndex && select.hasAttribute('data-autosubmit')) return;
         select.selectedIndex = i;
         sync();
@@ -431,12 +390,8 @@ function enhanceSelect(select) {
         }
         const withSearch = isSearchable();
         if (withSearch) ensureSearch();
-        // Built as real DOM nodes with textContent (not an HTML string)
-        // so option text is never re-parsed as markup -- an option whose
-        // text came from user-entered data (a supplier/customer/material
-        // name, etc.) cannot inject HTML this way. Do not switch this
-        // back to panel.innerHTML = opts.map(...).join('') without
-        // escaping first.
+        // Built with textContent, not an HTML string, so user-entered option text can't inject
+        // HTML. Don't switch to innerHTML without escaping.
         panel.innerHTML = '';
         if (withSearch) panel.appendChild(searchRow);
         opts.forEach(function (opt, i) {
@@ -444,8 +399,7 @@ function enhanceSelect(select) {
             el.className = 'cs-option' + (opt.disabled ? ' cs-option-disabled' : '');
             el.setAttribute('role', 'option');
             el.dataset.index = i;
-            // Optional per-option extras: data-tone paints a leading dot,
-            // data-desc adds a muted second line.
+            // Per-option extras: data-tone paints a leading dot, data-desc a muted second line.
             if (opt.dataset.tone) {
                 const dot = document.createElement('span');
                 dot.className = 'cs-dot';
@@ -473,16 +427,12 @@ function enhanceSelect(select) {
                 selectIndex(i);
                 close();
             });
-            // Same defensive preventDefault as the product-search
-            // combo's own menu (production.html's .ac-combo-menu):
-            // without it, the mousedown's default focus handling can
-            // close the panel a beat before the click handler above
-            // gets to run, so the click never registers.
+            // preventDefault on mousedown (like the .ac-combo-menu): else focus handling can close
+            // the panel before the click registers.
             el.addEventListener('mousedown', function (e) { e.preventDefault(); });
         });
         syncSelectedMarker();
-        // The option list was rebuilt (opened, or the page changed it
-        // while open) — keep whatever is typed in the search box applied.
+        // Options were rebuilt; keep the typed search applied.
         if (withSearch && query.trim()) applyFilter();
     }
 
@@ -498,9 +448,7 @@ function enhanceSelect(select) {
         const nextText = text || ' ';
         const changed = labelEl.textContent !== nextText;
         if (changed) labelEl.textContent = nextText;
-        // A dependent dropdown filled in by script used to snap from the dim
-        // placeholder to the value in one frame, which read as a twitch.
-        // Fade the new text in instead (not on first fill, not on a no-op).
+        // Fade new text in when script fills a dependent dropdown (not on first fill or no-op).
         if (changed && labelEl.dataset.csReady === '1') {
             labelEl.classList.remove('cs-label-in');
             void labelEl.offsetWidth;
@@ -508,8 +456,7 @@ function enhanceSelect(select) {
         }
         labelEl.dataset.csReady = '1';
         labelEl.classList.toggle('cs-placeholder', !!opt && select.selectedIndex === 0 && opt.value === '');
-        // Tone dot on the trigger itself, and the tone on the wrapper so
-        // the variant's CSS can tint the whole pill.
+        // Tone dot on the trigger, and the tone on the wrapper so the variant can tint the pill.
         if (opt && opt.dataset.tone) {
             if (!triggerDot) {
                 triggerDot = document.createElement('span');
@@ -527,10 +474,7 @@ function enhanceSelect(select) {
         syncSelectedMarker();
     }
 
-    // ---- .value interceptor: catches every future `select.value = x`
-    // from anywhere (this app's existing edit-modal/autocombo code
-    // included), so the trigger label never drifts out of sync with
-    // the real control it's standing in for. ----
+    // ---- .value interceptor: catches `select.value = x` from any script so the label stays in sync ----
     const valueDescriptor = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value');
     if (valueDescriptor && valueDescriptor.configurable) {
         Object.defineProperty(select, 'value', {
@@ -544,17 +488,13 @@ function enhanceSelect(select) {
         });
     }
 
-    // ---- catches option-list rebuilds (innerHTML/appendChild) and
-    // disabled toggles from any existing or future script. ----
+    // ---- option-list rebuilds and disabled toggles from any script ----
     new MutationObserver(function () {
         rebuildPanel();
         syncTrigger();
     }).observe(select, { childList: true, subtree: true, attributes: true, attributeFilter: ['disabled'] });
 
-    // ---- native events: a real 'change' still fires when the select
-    // itself handles input directly (native type-ahead while hidden-
-    // but-focused) — keep the trigger in sync and close the panel
-    // either way. ----
+    // ---- native events: a real 'change' still fires on native type-ahead; keep trigger synced and close ----
     select.addEventListener('change', function () { sync(); close(); });
     select.addEventListener('focus', function () { wrap.classList.add('cs-focus'); });
     select.addEventListener('blur', function (e) {
@@ -581,8 +521,7 @@ function enhanceSelect(select) {
                 e.preventDefault();
                 open();
             } else if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey && isSearchable()) {
-                // Just start typing on a focused dropdown: open it with
-                // that first letter already in the search box.
+                // Typing on a focused dropdown opens it with that letter in the search box.
                 e.preventDefault();
                 open();
                 setQuery(e.key);
@@ -598,9 +537,7 @@ function enhanceSelect(select) {
         }
     });
 
-    // Page scripts rebuild rows that contain selects (e.g. Bulk Batches'
-    // material list), so drop these global listeners once this select
-    // has left the page instead of piling them up.
+    // Page scripts rebuild rows with selects; drop these global listeners once it leaves the page.
     function onDocumentClick(e) {
         if (!wrap.isConnected) { detachGlobalListeners(); return; }
         if (isOpen() && !wrap.contains(e.target) && !panel.contains(e.target)) close();
@@ -627,12 +564,8 @@ function enhanceSelect(select) {
     sync();
 }
 
-// Selects and date inputs that page scripts create after load (rows
-// added to a cart/ingredient list, a modal filled in on demand) would
-// otherwise stay native, and on a phone a native <select> opens the
-// OS's full-screen picker. Watching the whole page enhances them the
-// moment they're inserted, so every dropdown in the app looks and
-// behaves the same.
+// Enhance selects/date inputs that scripts insert after load (a native select opens the
+// OS full-screen picker on phones), so every dropdown looks the same.
 function watchForNewFormControls() {
     if (typeof MutationObserver !== 'function' || !document.body) return;
     const FIELD = 'select, input[list], input[type="date"], input[type="month"]';
@@ -661,24 +594,12 @@ function watchForNewFormControls() {
     }).observe(document.body, { childList: true, subtree: true });
 }
 
-// Custom date/month picker — the same progressive-enhancement idea as
-// initCustomSelects() above, applied to every <input type="date"> and
-// <input type="month">. The browser's own picker is drawn by the OS
-// (a different look on every browser/phone, none of it reachable from
-// CSS), so this puts a styled trigger + calendar panel in front of it.
-//
-// The real input is kept exactly where it was, just made invisible and
-// click-through (see .dp in style.css): it's still the form field that
-// gets submitted, still the tab stop, still what `required`/min/max
-// validation and every page script that reads or sets `.value` (the
-// report builder's date range, Record Sale's backdated sale) talks to.
-// Same two hooks as enhanceSelect() keep the trigger in sync with it:
-// a `.value` property override for scripted changes, and a
-// MutationObserver for min/max/disabled attribute changes.
-//
-// Opt out per field with `data-dp-skip`. Safe to re-run (softRefresh(),
-// soft nav): dataset.dpEnhanced makes it a no-op on an already-enhanced
-// input.
+// Custom date/month picker: a styled trigger + calendar panel in front of every
+// <input type="date"|"month">, since the OS picker can't be styled.
+// The real input stays in place (invisible, click-through; see .dp in style.css) as the
+// submitted field, tab stop and the thing page scripts read/set via `.value`.
+// Like enhanceSelect(): a `.value` override and a MutationObserver keep the trigger in sync.
+// Opt out with `data-dp-skip`. Safe to re-run (dataset.dpEnhanced).
 const DP_MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July',
     'August', 'September', 'October', 'November', 'December'];
 const DP_WEEKDAYS = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
@@ -694,9 +615,7 @@ function enhanceDateInput(input) {
 
     const pad = (n) => String(n).padStart(2, '0');
     const toIso = (y, m, d) => monthMode ? `${y}-${pad(m + 1)}` : `${y}-${pad(m + 1)}-${pad(d)}`;
-    // Parsed as plain numbers, never through `new Date(string)`, which
-    // treats "YYYY-MM-DD" as UTC midnight and can land on the previous
-    // day in any timezone west of UTC.
+    // Parse as plain numbers: new Date("YYYY-MM-DD") is UTC and can land on the previous day.
     function parse(value) {
         const m = monthMode ? /^(\d{4})-(\d{2})$/.exec(value || '') : /^(\d{4})-(\d{2})-(\d{2})$/.exec(value || '');
         return m ? { y: +m[1], m: +m[2] - 1, d: monthMode ? 1 : +m[3] } : null;
@@ -713,8 +632,7 @@ function enhanceDateInput(input) {
     const trigger = document.createElement('button');
     trigger.type = 'button';
     trigger.className = 'dp-trigger';
-    // Not its own tab stop, same as .cs-trigger: the real input stays
-    // the focusable control (see this function's header comment).
+    // Not a tab stop (like .cs-trigger); the real input stays focusable.
     trigger.tabIndex = -1;
     trigger.setAttribute('aria-hidden', 'true');
     trigger.innerHTML =
@@ -730,8 +648,7 @@ function enhanceDateInput(input) {
     panel.setAttribute('aria-label', monthMode ? 'Choose month' : 'Choose date');
     wrap.appendChild(panel);
 
-    // view: the month (or, in month mode, the year) the panel shows.
-    // cursor: the keyboard-highlighted cell, an ISO string like the value.
+    // view: month (or year) shown. cursor: keyboard-highlighted cell (ISO string).
     let view = { y: today.getFullYear(), m: today.getMonth() };
     let cursor = null;
 
@@ -800,9 +717,7 @@ function enhanceDateInput(input) {
                 w.textContent = d;
                 grid.appendChild(w);
             });
-            // Leading/trailing days from the neighbouring months keep
-            // every month a steady 6-row grid, so the panel never
-            // changes height (and jumps) while paging through months.
+            // Neighbour-month days keep a steady 6-row grid so the panel height never jumps.
             const first = new Date(view.y, view.m, 1);
             const start = new Date(view.y, view.m, 1 - first.getDay());
             for (let i = 0; i < 42; i += 1) {
@@ -837,8 +752,7 @@ function enhanceDateInput(input) {
         );
         panel.appendChild(foot);
 
-        // Keep every panel button from stealing focus off the real input
-        // (which would blur it and close the panel before the click lands).
+        // Panel buttons must not steal focus from the real input (it would close the panel).
         panel.querySelectorAll('button').forEach((b) => b.addEventListener('mousedown', (e) => e.preventDefault()));
     }
 
@@ -884,9 +798,7 @@ function enhanceDateInput(input) {
         close();
     }
 
-    // Arrow keys walk the cursor a day (or, in month mode, a month) at a
-    // time and a week (or a row of three months) vertically, paging the
-    // view along with it, Enter picks it.
+    // Arrows move the cursor by day (month mode: month) and week/row vertically; Enter picks.
     function moveCursor(step) {
         const p = parse(cursor || input.value) || parse(monthMode ? todayIso.slice(0, 7) : todayIso);
         const d = monthMode ? new Date(p.y, p.m + step, 1) : new Date(p.y, p.m, p.d + step);
@@ -913,8 +825,7 @@ function enhanceDateInput(input) {
     input.addEventListener('focus', () => wrap.classList.add('dp-focus'));
     input.addEventListener('blur', () => { wrap.classList.remove('dp-focus'); close(); });
     input.addEventListener('change', syncTrigger);
-    // Native typing into a hidden date field would edit it blind, so
-    // every key goes through the panel instead.
+    // Typing into a hidden date field would edit it blind, so keys go through the panel.
     input.addEventListener('keydown', (e) => {
         if (input.disabled || e.key === 'Tab') { close(); return; }
         e.preventDefault();

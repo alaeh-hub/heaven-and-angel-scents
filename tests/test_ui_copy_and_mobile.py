@@ -1,8 +1,7 @@
-"""Guards for the phone/tablet pass: helper text stays short, empty states stay centred, and the Halo
-assistant has a close button on phones and no floating button on its full page.
+"""Phone/tablet guards: helper text stays short, empty states stay centred, and Halo has a
+close button on phones and no floating button on its full page.
 
-The text check reads the templates (no database): any visible text block this long is a paragraph
-that should be one short sentence.
+The text check reads templates (no database): a visible text block this long should be one short sentence.
 """
 import re
 from html.parser import HTMLParser
@@ -44,6 +43,7 @@ def _visible_text_blocks(path):
 
 
 def test_no_template_carries_a_long_paragraph():
+    """No template carries a long paragraph."""
     long_blocks = []
     for path in sorted((ROOT / "templates").rglob("*.html")):
         for block in _visible_text_blocks(path):
@@ -53,6 +53,7 @@ def test_no_template_carries_a_long_paragraph():
 
 
 def test_empty_states_are_centred_at_every_width():
+    """Empty states are centred at every width."""
     css = (ROOT / "static" / "css" / "style.css").read_text(encoding="utf-8")
     start = css.index(".empty-state:has(.empty-icon) {")
     rule = css[start:css.index("}", start)]
@@ -62,6 +63,7 @@ def test_empty_states_are_centred_at_every_width():
 
 
 def test_halo_has_a_close_button_for_phones():
+    """Halo has a close button for phones."""
     base = (ROOT / "templates" / "base.html").read_text(encoding="utf-8")
     assert 'id="haloClose"' in base
     shell = (ROOT / "static" / "css" / "shell.css").read_text(encoding="utf-8")
@@ -72,6 +74,7 @@ def test_halo_has_a_close_button_for_phones():
 # ---- fixes from the second phone pass -------------------------------------------------------
 
 def test_empty_recent_sales_does_not_repeat_the_new_sale_button(client, sql):
+    """Empty recent sales does not repeat the new sale button."""
     from factories import login, make_branch, make_user
     branch_id = make_branch(sql)                       # a branch with no sales at all
     user = make_user(sql, role="Branch", branch_id=branch_id)
@@ -83,6 +86,7 @@ def test_empty_recent_sales_does_not_repeat_the_new_sale_button(client, sql):
 
 
 def test_empty_states_that_sit_under_their_own_button_have_no_action():
+    """Empty states that sit under their own button have no action."""
     for name in ("admin/record_sale.html", "branch/record_sale.html"):
         src = (ROOT / "templates" / name).read_text(encoding="utf-8")
         line = next(ln for ln in src.splitlines() if "empty.state('No sales recorded yet'" in ln)
@@ -90,6 +94,7 @@ def test_empty_states_that_sit_under_their_own_button_have_no_action():
 
 
 def test_login_accounts_actions_get_their_own_row_on_phones():
+    """Login accounts actions get their own row on phones."""
     users = (ROOT / "templates" / "admin" / "users.html").read_text(encoding="utf-8")
     assert "mobile-inline-action mobile-actions-below" in users
     css = (ROOT / "static" / "css" / "style.css").read_text(encoding="utf-8")

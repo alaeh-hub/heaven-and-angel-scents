@@ -1,8 +1,7 @@
 // Delegated actions, confirm dialogs/modals, overlays, submit loading state
 // (Part of the app's main script; loaded in order by base.html.)
 
-// Replacements for inline on*= attributes, which the CSP no longer allows.
-// Delegated on `document`, so they survive soft-nav content swaps:
+// Delegated actions (CSP forbids inline on*=), bound on `document` so soft-nav swaps survive:
 //   data-call="fnName"            click -> window.fnName(element)
 //   data-autosubmit (on <select>)  change -> submit its form
 //   data-reveal-target="id" data-reveal-value="v"
@@ -25,23 +24,10 @@ function initDelegatedActions() {
     });
 }
 
-// Unified confirm-dialog pattern for every "are you sure?" form in the
-// app: give the <form> a data-confirm="Message" attribute and this one
-// delegated (capture-phase) listener handles the rest — no per-page
-// onsubmit="return confirm(...)" or bespoke button-click JS needed. See
-// requests.html, request_detail.html, users.html, and package_detail.html
-// for the template side of this (package_detail.html's message still
-// varies per-row, built in Jinja, but lands in the same attribute).
-//
-// A toggle form (.../toggle) that doesn't set data-confirm explicitly
-// still gets a sensible default built from its submit button's label
-// ("Deactivate?" / "Reactivate?"), preserving the old behavior for any
-// toggle form that hasn't been given an explicit message.
-//
-// Delegated on `document` (rather than looping over forms and attaching
-// one listener each) so this keeps working after main.js's own
-// softRefresh() swaps in fresh .content HTML from the server — no
-// re-init call needed the way the old per-form version required.
+// Confirm pattern: <form data-confirm="Message"> is handled by one delegated
+// capture-phase listener. A toggle form (.../toggle) without data-confirm gets a
+// default from its button label ("Deactivate?" / "Reactivate?").
+// Delegated on `document`, so it survives softRefresh() content swaps.
 function initConfirmDialogs() {
     initDelegatedActions();
     document.addEventListener('submit', (e) => {
@@ -58,15 +44,12 @@ function initConfirmDialogs() {
         }
 
         if (!message) return;
-        // The styled dialog (initConfirmModal's appConfirm); the browser's own
-        // popup is only the fallback if it somehow isn't there.
+        // Styled appConfirm dialog; the browser confirm() is only a fallback.
         if (!window.appConfirm) {
             if (!confirm(message)) e.preventDefault();
             return;
         }
-        // Hold the submit, ask, then re-submit through requestSubmit() so
-        // validation, the loading overlay and soft-nav all still run, exactly
-        // once, after the person has said yes.
+        // Hold the submit, ask, then requestSubmit() so validation, loading overlay and soft-nav run.
         e.preventDefault();
         e.stopImmediatePropagation();
         const submitter = e.submitter || form.querySelector('button[type="submit"]');
@@ -86,11 +69,8 @@ function initConfirmDialogs() {
     }, true);
 }
 
-// Styled, floating variant of the confirm pattern above, for forms that
-// deserve more than the browser's confirm() popup (currently Sign out):
-// data-confirm-dialog="Title", optional data-confirm-detail="Body" and
-// data-confirm-ok="Button label". Built lazily and appended to <body> so
-// it survives soft-nav content swaps, like the loading overlay below.
+// Styled confirm variant (e.g. Sign out): data-confirm-dialog="Title",
+// optional data-confirm-detail and data-confirm-ok. Built lazily on <body>.
 function initConfirmModal() {
     let overlay = null;
     let pendingForm = null;
@@ -179,10 +159,8 @@ function initConfirmModal() {
         overlay.querySelector('[data-confirm-cancel]').focus();
     }, true);
 
-    // window.appConfirm({ title, detail, ok, tone }) -> Promise<boolean>.
-    // The styled replacement for the browser's confirm(): same dialog as
-    // Sign out, resolves true on the action button and false on Cancel,
-    // Escape or a click outside.
+    // window.appConfirm({ title, detail, ok, tone }) -> Promise<boolean>: styled confirm();
+    // true on the action button, false on Cancel, Escape or outside click.
     window.appConfirm = function (o) {
         if (!overlay) build();
         if (pendingResolve) { const r = pendingResolve; pendingResolve = null; r(false); }
@@ -201,15 +179,9 @@ function initConfirmModal() {
     };
 }
 
-// A full-screen, centered "Loading…" dialog (see .loading-overlay in
-// style.css) shown for the duration of a form submission. Built once,
-// lazily, and appended straight to <body> — not .content — so it
-// works identically on every page that loads this file (including
-// standalone ones like login.html that don't extend base.html) and,
-// more importantly, survives a soft-nav content swap: swapContent()
-// (see initSoftNav() above) only ever replaces .content, so an
-// overlay living outside it isn't torn down and rebuilt by that swap
-// the way anything inside .content would be.
+// Full-screen "Loading" dialog shown during a form submission (.loading-overlay).
+// Built lazily on <body>, not .content, so it works on standalone pages (login) and
+// survives soft-nav content swaps.
 let loadingOverlayEl = null;
 
 function getLoadingOverlay() {
@@ -229,41 +201,18 @@ function getLoadingOverlay() {
     return el;
 }
 
-// Local/fast requests can resolve in well under a frame, which made
-// the dialog flash on and immediately back off — too quick to
-// register as having happened at all. Enforcing a small minimum
-// visible time fixes that without slowing down anything: a request
-// that's genuinely slower than this just isn't affected (hide already
-// runs past the minimum by the time it's called), only a fast one
-// gets held open a beat longer than strictly necessary. Also long
-// enough to comfortably clear the CSS entrance animation's own 0.25s
-// duration (see .loading-dialog-in in style.css) before a hide() can
-// ever be applied.
+// Minimum visible time, so a fast request doesn't flash the dialog; also longer than
+// the 0.25s CSS entrance animation (.loading-dialog-in).
 const LOADING_OVERLAY_MIN_VISIBLE_MS = 400;
-// Must match .loading-overlay-exit's own animation-duration in
-// style.css — this is how long hide() waits, after starting that
-// class's exit animation, before actually setting hidden = true.
+// Must match .loading-overlay-exit's animation-duration in style.css.
 const LOADING_OVERLAY_EXIT_MS = 180;
 let loadingOverlayShownAt = 0;
-// Bumped on every show, checked before a delayed hide actually applies
-// — the overlay visually blocks clicks to everything under it, so two
-// overlapping submissions can't happen from a mouse click, but a
-// keyboard-triggered back/forward navigation still could while an
-// earlier hide is mid-delay. Without this, that stale timeout would
-// close the dialog a newer request just reopened.
+// Bumped on every show; a stale delayed hide (e.g. after back/forward) is ignored
+// so it can't close a dialog a newer request just reopened.
 let loadingOverlayToken = 0;
 
-// Plain CSS animations (see .loading-overlay/.loading-overlay-exit in
-// style.css) rather than Motion (window.Motion — still used above for
-// the sidebar theme-toggle bounce and revealContent(), where nothing
-// ever cuts the animation short) — this dialog's own lifecycle can
-// end at any moment via a real page navigation (a plain, non-soft-nav
-// form submit unloads the page almost immediately), and Motion's
-// animate() rejects its controls with an AbortError when that
-// happens, unreliably enough that even always attaching a rejection
-// handler didn't keep it from surfacing as an unhandled rejection.
-// Toggling a class and letting CSS run the animation sidesteps that
-// category of failure entirely — there's no promise to reject.
+// Plain CSS animations, not Motion: a page navigation can end this dialog at any
+// moment, and Motion's animate() then rejects with an unhandled AbortError.
 function showLoadingOverlay() {
     loadingOverlayShownAt = Date.now();
     loadingOverlayToken += 1;
@@ -277,8 +226,7 @@ function hideLoadingOverlay() {
     const myToken = loadingOverlayToken;
 
     const doHide = () => {
-        // Superseded by a newer show() while this was mid-delay —
-        // leave it alone, that newer call owns the overlay's state now.
+        // Superseded by a newer show(); that call owns the overlay now.
         if (myToken !== loadingOverlayToken) return;
         loadingOverlayEl.classList.add('loading-overlay-exit');
         setTimeout(() => {
@@ -289,9 +237,7 @@ function hideLoadingOverlay() {
         }, LOADING_OVERLAY_EXIT_MS);
     };
 
-    // LOADING_OVERLAY_MIN_VISIBLE_MS > LOADING_OVERLAY_ENTER_MS by
-    // construction, so doHide() never fires before the CSS entrance
-    // animation (see style.css) has already finished on its own.
+    // MIN_VISIBLE_MS > ENTER_MS, so the hide never beats the CSS entrance animation.
     const remaining = LOADING_OVERLAY_MIN_VISIBLE_MS - (Date.now() - loadingOverlayShownAt);
     if (remaining > 0) {
         setTimeout(doHide, remaining);
@@ -301,34 +247,11 @@ function hideLoadingOverlay() {
 }
 
 // ---------------------------------------------------------------
-// Modal overlays (Add material, Edit product, Log usage, Remarks,
-// etc.) — every one across the admin app shares the same shape: a
-// position:fixed backdrop toggled via inline style.display, wrapping
-// one .card panel, dismissed by a Cancel button, clicking the
-// backdrop, or Escape. These two functions are the one place that
-// actually shows/hides one, so every page gets the same animated
-// open/close instead of each hand-rolling its own — see
-// wireOverlay() below for the common "one open button, one cancel
-// button" case, and openOverlay()/closeOverlay() directly for pages
-// whose open trigger needs to run its own logic first (populating an
-// edit form from a clicked row, say).
-//
-// anime.js (window.anime — see static/js/anime.js) rather than
-// Motion here, same as the loading dialog's original version — but
-// unlike that dialog, an overlay is only ever opened/closed by a
-// stable, in-page interaction (a button click), never by something
-// that might unload the page mid-animation the way a form submission
-// could, so animate()'s own promise isn't a reliability concern here.
-// It's still never awaited below regardless — the close delay is a
-// plain setTimeout matching the exit duration, exactly like the
-// loading dialog, so there's nothing to go wrong even if that changes
-// later.
-// Attached to window (not just a local const) so a page needing to
-// sequence its own follow-up work after a close animation finishes —
-// see users.html's tempPasswordOverlay, which removes itself from the
-// DOM entirely once closed, not just hides — can time it against the
-// same duration closeOverlay() itself uses, rather than a second
-// independently-maintained number that could drift out of sync.
+// Modal overlays: a fixed backdrop (inline style.display) wrapping one .card panel,
+// closed by Cancel, backdrop click or Escape. openOverlay()/closeOverlay() are the
+// one place that shows/hides them; wireOverlay() covers the simple one-button case.
+// Uses anime.js; the close delay is a plain setTimeout matching the exit duration.
+// Exposed on window so pages (e.g. users.html) can time follow-up work against it.
 window.OVERLAY_EXIT_MS = 140;
 const OVERLAY_EXIT_MS = window.OVERLAY_EXIT_MS;
 
@@ -338,18 +261,11 @@ function openOverlay(overlay) {
     overlay.style.display = 'flex';
     if (!window.anime || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
     const panel = overlay.querySelector('.card, .pi-modal');
-    // anime.js's animate(targets, params) takes ONE params object with
-    // the property keyframes and settings (duration, ease, …) merged
-    // together — unlike Motion's animate(target, keyframes, options)
-    // three-argument shape used elsewhere in this file. A duration/
-    // ease passed as a separate third argument here is silently
-    // ignored (falls back to anime's own 1000ms default) rather than
-    // erroring, which is what actually happened here originally.
+    // anime.js animate() takes ONE params object (keyframes + duration/ease merged);
+    // a separate third argument is silently ignored.
     window.anime.animate(overlay, { opacity: [0, 1], duration: 160, ease: 'outQuad' });
     if (panel) {
-        // Rises into place with a soft ease-out, the same motion as the
-        // public site's package dialog. The old scale-with-overshoot
-        // ('outBack') made the panel pop and settle.
+        // Rises in with a soft ease-out (same as the public site's package dialog).
         window.anime.animate(panel, { opacity: [0, 1], translateY: [24, 0], duration: 360, ease: 'outCubic' });
     }
 }
@@ -369,14 +285,7 @@ function closeOverlay(overlay) {
     }
 }
 
-// The common case: one button opens the overlay as-is (no per-click
-// setup needed) and one Cancel button, the backdrop, or Escape closes
-// it. Previously duplicated verbatim across pages (each defining its
-// own copy, and each registering its own document-level Escape
-// listener) — now the one shared version, called the same way from
-// any page (materials.html alone now wires four separate overlays:
-// add/edit material, add supplier, plus Suppliers' own edit/history
-// modals since the two pages merged into one).
+// Common case: one open button and one Cancel button; the backdrop and Escape also close.
 function wireOverlay(overlayId, openBtnId, cancelBtnId) {
     const overlay = document.getElementById(overlayId);
     const openBtn = openBtnId ? document.getElementById(openBtnId) : null;
@@ -393,44 +302,17 @@ function wireOverlay(overlayId, openBtnId, cancelBtnId) {
     });
 }
 
-// Shows the loading overlay the instant a form is actually submitted,
-// app-wide — no per-form opt-in needed. Delegated on `document` in
-// the bubble phase, so a capture-phase listener that cancels the
-// submission first (initConfirmDialogs()'s confirm() dialog) or a
-// form's own bubble-phase listener closer to it in the tree (login.html's
-// field validation, initDispatchQtyWarnings()'s over/under-limit
-// checks) has already had its chance to call preventDefault() by the
-// time this runs — checking e.defaultPrevented here means a cancelled
-// submit never shows a dialog for a request that was never actually
-// sent.
-//
-// MUST be registered before initSoftNav() (see the DOMContentLoaded
-// call site) — initSoftNav()'s own submit listener also calls
-// e.preventDefault() on nearly every form in the app, to take over
-// with its own fetch, which e.defaultPrevented can't tell apart from
-// an actual cancellation. Running first means that hasn't happened
-// yet by the time this checks it.
-//
-// Hiding it again is initSoftNav()'s job (see go() above): a plain,
-// non-soft-nav submission just lets the browser's own navigation tear
-// the whole page — overlay included — down on its own, but a
-// successful soft-nav swap only replaces .content, so go() explicitly
-// hides this once its response comes back.
-//
-// That "the browser tears the whole page down" assumption doesn't hold
-// for a form (or submit button) targeting a new tab/window — e.g. the
-// Reports page's Download PDF/Excel buttons, formtarget="_blank" so the
-// file opens in a new tab while this one stays put. isSoftSubmittableForm()
-// above already excludes those from soft-nav (target !== '_self'), which
-// used to leave them showing the overlay here with nothing left to ever
-// hide it again: the current page never navigates, so it just sat there
-// reading "Loading…" forever after every report download. Skipped with
-// the same target-resolution isSoftSubmittableForm() uses, so only a
-// submit that's actually about to navigate *this* tab shows it.
+// Shows the loading overlay as soon as a form is really submitted (no per-form opt-in).
+// Bubble phase on `document`, so e.defaultPrevented already reflects cancels from the
+// confirm dialog or a form's own validation.
+// Must be registered BEFORE initSoftNav(): its submit listener also calls
+// preventDefault(), which defaultPrevented can't tell from a cancel.
+// Hiding is initSoftNav()'s job (go()); a plain submit unloads the page itself.
+// Forms targeting another tab (e.g. report Download buttons) never navigate this tab,
+// so they are skipped, using the same target check as isSoftSubmittableForm().
 function initSubmitLoadingState() {
-    // A submit marks its own button busy (label and width stay) and starts the
-    // top progress bar; the page stays interactive. A second submit of the same
-    // form is swallowed while the first is in flight.
+    // A submit marks its button busy and starts the top progress bar; a second submit
+    // of the same form is swallowed while the first is in flight.
     function clearBusy(form) {
         delete form.dataset.submitting;
         form.querySelectorAll('.is-loading').forEach((b) => {
@@ -477,34 +359,13 @@ function initSubmitLoadingState() {
     });
 }
 
-// ---------------------------------------------------------------
-// Receipt downloads, report PDF/Excel generation, and the product CSV
-// export (every element with [data-generate-file] — see admin/reports.html,
-// branch/reports.html, and the various Receipt/Export links across both
-// admin and branch templates) all build a file server-side before
-// sending anything back. Unlike a normal form submit, none of them
-// navigate the current tab (they're target="_blank"/formtarget="_blank"
-// specifically so initSoftNav() and initSubmitLoadingState() both
-// leave them alone — see those functions' own comments), so there was
-// nothing on screen between the click and the browser's own download
-// indicator a moment later, which reads as "did that even do
-// anything?" when generation takes more than an instant.
-//
-// Handled here with fetch instead of letting the browser follow the
-// link/submit the form directly, so this dialog can show real
-// progress once bytes start arriving and be dismissed exactly when
-// the file is actually ready — not a guessed timeout. A response
-// that isn't one of the file types these endpoints actually produce
-// (e.g. generate_report() redirecting back to the report builder with
-// a "no data matches those filters" flash) is treated as a normal
-// page navigation instead of a download.
+// ---- File generation (receipts, report PDF/Excel, CSV export: [data-generate-file]) ----
+// These build a file server-side and open in a new tab, so nothing else shows progress.
+// fetch() lets the dialog show real progress and close when the file is ready.
+// A non-file response (e.g. a "no data" redirect) is treated as a normal navigation.
 let generateOverlayEl = null;
 let generateInFlight = false;
 let generateOverlayShownAt = 0;
-// A small/fast receipt can finish end-to-end well under a second,
-// which made the dialog blip on and immediately back off — barely
-// long enough to register as having happened. Same idea as
-// LOADING_OVERLAY_MIN_VISIBLE_MS above, just held a beat longer since
-// this one's showing a progress bar that's more noticeable mid-cut.
+// Minimum visible time for report dialogs, so a fast receipt doesn't just blip.
 const GENERATE_OVERLAY_MIN_VISIBLE_MS = 900;
 

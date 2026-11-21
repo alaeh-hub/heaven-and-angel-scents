@@ -1,13 +1,13 @@
-"""Report generation stays aligned with the pages: every report type
-builds and renders (PDF + Excel) for the roles that can pull it, in every
-time mode, and the page rules (low stock, Closed-only package sales,
-bulk mL kept apart, branch-only filters) hold in the generated data.
+"""Reports stay aligned with the pages: every report builds and renders (PDF + Excel)
+for the allowed roles in every time mode, and the page rules (low stock, Closed-only
+package sales, bulk mL apart, branch-only filters) hold in the data.
 """
 from factories import make_branch, make_inventory, make_product, unique_suffix
 from heaven_angel.services.reports import REPORT_TYPES, get_report, parse_report_filters, render_report_excel, render_report_pdf
 
 
 def test_every_report_builds_and_renders(app, sql):
+    """Every report builds and renders."""
     branch_id = make_branch(sql)
     sku = make_product(sql)
     make_inventory(sql, branch_id, sku, stock_qty=1, reorder_level=10)
@@ -24,6 +24,7 @@ def test_every_report_builds_and_renders(app, sql):
 
 
 def test_low_stock_report_matches_low_stock_rule(app, sql):
+    """Low stock report matches low stock rule."""
     branch_id = make_branch(sql)
     low = make_product(sql)
     make_inventory(sql, branch_id, low, stock_qty=2, reorder_level=10)
@@ -35,6 +36,7 @@ def test_low_stock_report_matches_low_stock_rule(app, sql):
 
 
 def test_branch_filter_only_labels_reports_that_use_it(app, sql):
+    """Branch filter only labels reports that use it."""
     branch_id = make_branch(sql)
     with app.test_request_context():
         products = get_report("products", parse_report_filters({"branch_id": str(branch_id)}))
@@ -44,6 +46,7 @@ def test_branch_filter_only_labels_reports_that_use_it(app, sql):
 
 
 def test_partner_inquiry_amounts_only_total_closed_sales(app, sql):
+    """Partner inquiry amounts only total closed sales."""
     cur = sql.cursor()
     cur.execute(
         """INSERT INTO partner_inquiries (partner_type, company_name, contact_person, phone, email,
@@ -73,6 +76,7 @@ def _scent_oil_with_restock(sql, code, name, price, qty, cost, purchased="2026-1
 
 
 def test_scent_oil_purchases_show_in_the_materials_and_scent_oils_reports(app, sql):
+    """Scent oil purchases show in the materials and scent oils reports."""
     code = "ZZ" + unique_suffix().upper()
     _scent_oil_with_restock(sql, code, "Report Oil", "3.8", 250, 950)
     with app.test_request_context():
@@ -87,6 +91,7 @@ def test_scent_oil_purchases_show_in_the_materials_and_scent_oils_reports(app, s
 
 
 def test_raw_materials_purchased_includes_oil_bought_per_scent(app, sql):
+    """Raw materials purchased includes oil bought per scent."""
     def purchased():
         with app.test_request_context():
             report = get_report("financial_summary", parse_report_filters({"mode": "all"}))
@@ -97,6 +102,7 @@ def test_raw_materials_purchased_includes_oil_bought_per_scent(app, sql):
 
 
 def test_oil_bought_per_scent_counts_toward_the_oil_materials_supplier(app, client, sql):
+    """Oil bought per scent counts toward the oil materials supplier."""
     from factories import login, make_raw_material, make_user
     name = f"Oil Supplier {unique_suffix()}"
     cur = sql.cursor()

@@ -2,42 +2,20 @@ import { useEffect, useRef } from 'react';
 import * as THREE from 'three';
 import { SCENE_LABEL } from '../content/scents.js';
 
-// Uriel H1 & Raphael A3. variant="story" (the hero) is "wireframe to real":
-// in the dark, glowing points and thin lines draw a blueprint of each
-// bottle: the points start scattered and settle onto their nodes while the
-// lines trace out rings and meridians from the base upward, with a scan
-// line sliding over them. Then the surface fills in: a bright seam sweeps
-// up the real bottle, the blueprint dissolving behind it, and the glass
-// turns on (an electric rim glow on the dark body). When the seam reaches
-// the cap a small shockwave rings out across the floor and through the air,
-// the platforms' LED rings fire and the lights switch to a studio look. A
-// glossy black floor reflects it all; bloom, a horizontal anamorphic
-// streak, a shallow depth of field and ACES with a little film grain finish
-// each frame.
-//
-// The timeline is driven from outside (the hero scrubs it with the scroll)
-// and there is no fade, since the hero fades the canvas in. The bottles are
-// the 85 ml white-bottle product: their labels are cut from the product
-// renders and kept in static/img/scene/.
-//
-// variant="turntable" is the finished pair from
-// prototype/turntable/*.html (one bottle each there, both here): each
-// bottle turns on its lit platform, one full turn every 10 s after a
-// 1.8 s ease-in, while the studio lights come up, caustics drift through
-// the bottles and a shallow depth of field softens the floor.
-//
-// variant="spray" is prototype/spray/index.html: the same studio, but only
-// Raphael A3, overcap off, held at a three-quarter angle on its platform.
-// Every 5 s (first at 1.9 s) the actuator presses and a fine mist bursts
-// from the nozzle across the frame, slows, widens and fades.
-//
-// r149 used "legacy" colour handling (hex colours as-is); turning colour
-// management off keeps every material looking as authored.
+// Three.js scene of Uriel H1 & Raphael A3 (85 ml bottles, labels in static/img/scene/).
+// variant="story" (hero): "wireframe to real". A blueprint of points and lines
+//   draws and settles, a bright seam fills in the real bottle, a shockwave
+//   fires the platform LED rings, then bloom, DOF and grain finish the frame.
+//   The timeline is driven from outside (scroll); the hero fades the canvas.
+// variant="turntable": the finished pair, each bottle turning on its platform
+//   (one turn per 10 s after a 1.8 s ease-in); see prototype/turntable.
+// variant="spray": Raphael A3 alone, misting every 5 s; see prototype/spray.
+// Colour management is off (three r149 "legacy" colours) to keep materials as authored.
 THREE.ColorManagement.enabled = false;
 
 /** Scene time (seconds) of the final frame: both bottles on their platforms. */
 export const SCENE_END = 10;
-/** Scene time up to which the opening plays at full speed on its own; from there it slows to a stop at SCENE_END, like a camera coming to rest. */
+/** Scene time up to which the opening runs at full speed; then it eases to SCENE_END. */
 export const SCENE_INTRO = 8.4;
 /** How much faster than real time the opening plays. */
 const INTRO_SPEED = 1.5;
@@ -87,10 +65,8 @@ const EASE_MS = 130;
 const SLOW_FRAME_MS = 25;
 /**
  * Pixel-ratio cap, canvas pixel budget and glass-refraction resolution,
- * best first. The budget (total canvas pixels) is what keeps a tier
- * affordable: a phone's canvas is only ~400 CSS px across, so it can run
- * at its full 2 to 2.5x density for fewer pixels than a desktop canvas
- * at 1.75x. Cutting density instead is what made phones look soft.
+ * best first. The pixel budget keeps a tier affordable: phones keep full
+ * density at fewer pixels (cutting density made them look soft).
  */
 const QUALITY = [
   { dpr: 3, px: 2.6e6, transmission: 1, dof: true },
@@ -100,27 +76,17 @@ const QUALITY = [
   { dpr: 1.5, px: 0.9e6, transmission: 0.5, dof: false },
   { dpr: 1, px: 0.6e6, transmission: 0.5, dof: false },
 ];
-/** Shortest gap (ms) between two rendered frames: a 60 fps ceiling, a hair under 16.7 so a 60 Hz screen never skips one. */
+/** Shortest gap (ms) between rendered frames: a 60 fps cap just under 16.7. */
 const MIN_FRAME_MS = 15;
 /** Rendered frames the average needs before it may step down (≈ 1/3 s at 60 Hz). */
 const SLOW_STREAK = 20;
 /** Averages this slow (≈ 20 fps) skip a tier: one step wouldn't be enough. */
 const VERY_SLOW_FRAME_MS = 50;
 
-/**
- * Phones and small screens run every scene at the top tier, always: the
- * same lighting, glass refraction, depth of field and pixel density as a
- * desktop, and the step-down below never touches them. On a desktop the
- * scene still protects a weak GPU by stepping down.
- */
+/** Phones and small screens always run the top tier; desktops step down on a weak GPU. */
 const holdsTopQuality = () => typeof window !== 'undefined' && window.matchMedia('(pointer: coarse), (max-width: 960px)').matches;
 
-/**
- * The tier a desktop has settled on so far, shared by every scene on
- * the page (the hero's and the notes section's), so the second scene
- * starts where the first one landed instead of re-learning it, with the
- * stutter and the render-target rebuilds that come with each step.
- */
+/** The desktop tier settled on so far, shared by all scenes so the next one starts there. */
 let sharedTier = 0;
 
 /* Turntable timing, exactly as in prototype/turntable/*.html. */
@@ -143,12 +109,9 @@ const SPRAY_STILL = SPRAY_FIRST + 0.45;
 const QUAD_VS = 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }';
 
 /**
- * Builds the scene and its post-processing on `renderer`. `invalidate`
- * is called when something arrives late (the label images) and the
- * current frame needs drawing again. `variant` is 'story', 'turntable'
- * or 'spray' (all share the studio: caustics, depth of field; the story
- * adds the blueprint and its lens effects); `tones` (CSS colours) tint the turntable's backdrop glow along
- * render()'s `tone` argument.
+ * Builds the scene and post-processing on `renderer`. `invalidate` redraws
+ * when something arrives late (label images). `variant`: 'story',
+ * 'turntable' or 'spray'; `tones` (CSS colours) tint the turntable glow.
  */
 function buildScene(renderer, invalidate, { variant = 'story', tones = [] } = {}) {
   const turntable = variant === 'turntable';
@@ -214,15 +177,12 @@ function buildScene(renderer, invalidate, { variant = 'story', tones = [] } = {}
     return keep(t);
   };
   const S_RED = 0.25 / 74.5;
-  // Overall height kept from the original two-bottle layout, so the camera
-  // and the platforms need no retuning.
+  // Overall height kept from the old two-bottle layout (no camera/platform retune).
   const S_BLUE = (S_RED * (374 + 76 + 92)) / (317 + 67 + 82);
-  // The 85 ml bottle (measured from the product render): a glossy white
-  // body, a wide collar and a taller, narrower cap. Both scents share it.
+  // The 85 ml bottle (from the product render): white body, wide collar, taller cap.
   const TALL = 1.12; // body stretched up from the render's proportions
   const BOTTLE = { R: 71.5 * S_BLUE, H: 317 * S_BLUE * TALL, collarR: 47 * S_BLUE, collarH: 70 * S_BLUE, capR: 35 * S_BLUE, capH: 88 * S_BLUE };
-  // ...and one label placement, cut from the product render
-  // and stored in static/img/scene/.
+  // One label placement, cut from the product render.
   const LABEL = {
     l0: BOTTLE.H * SCENE_LABEL.l0,
     l1: BOTTLE.H * SCENE_LABEL.l1,
@@ -567,10 +527,7 @@ function buildScene(renderer, invalidate, { variant = 'story', tones = [] } = {}
     }
   }
 
-  /**
-   * Fine perfume mist: an analytic particle system (drag, turbulence,
-   * spreading, fading) evaluated in the vertex shader from the burst's age.
-   */
+  /** Fine perfume mist: analytic particles (drag, turbulence, fade) computed in the vertex shader. */
   function makeMist(count, sizeMin, sizeMax, alpha, spread, speed, life) {
     const g = new THREE.BufferGeometry();
     const P = new Float32Array(count * 3);
@@ -635,10 +592,7 @@ function buildScene(renderer, invalidate, { variant = 'story', tones = [] } = {}
     const reflected = new THREE.Points(g, m);
     reflected.frustumCulled = false;
     mirror.add(reflected);
-    // Not in noDepth: hiding these for the depth pass left the label and
-    // liquid black in the next frame (three r186). They add nothing to it
-    // anyway: under the depth override they draw at their stored positions,
-    // which are all zero (the motion lives in this shader).
+    // Hiding these for the depth pass turned the label liquid black (three r186); they add nothing there.
     return pts;
   }
   if (spray) {
@@ -650,19 +604,11 @@ function buildScene(renderer, invalidate, { variant = 'story', tones = [] } = {}
 
   /* ---------------- story: wireframe blueprint → surface fills in → studio ---------------- */
   /**
-   * Builds the blueprint (glowing points and lines for each bottle), the
-   * cold haze behind it, the shockwaves and the bottle reveal, and returns
-   * `update(t)` to pose them (bottles, platforms and camera are posed in
-   * poseStory). Everything is a pure function of `t`, so the scroll can
-   * scrub it either way.
-   *
-   *   0 - 4.4    the blueprint draws itself: points settle onto their nodes,
-   *              lines trace upward from the base, a scan line slides over
-   *   4.4 - 5.7  the surface fills in behind a bright seam that sweeps up
-   *              each bottle; the blueprint dissolves behind it and the
-   *              glass turns on (electric rim on the dark body)
-   *   5.9        shockwave: LED rings fire, the floor and the air ripple,
-   *              the lights switch to the studio look
+   * Builds the blueprint, haze, shockwaves and bottle reveal; returns
+   * `update(t)` (a pure function of `t`, so scroll can scrub either way).
+   *   0 - 4.4    blueprint draws: points settle, lines trace up, scan line
+   *   4.4 - 5.7  a bright seam fills in each bottle behind a dissolving blueprint
+   *   5.9        shockwave: LED rings fire, lights switch to studio
    */
   function makeWireframeStory() {
     const LAND = [5.9, 6.05]; // when each platform's LED ring fires (just after the seam reaches the cap)
@@ -680,9 +626,7 @@ function buildScene(renderer, invalidate, { variant = 'story', tones = [] } = {}
     cold.position.set(0, 1.3, -2.4);
     noDepth.push(cold);
 
-    // The shockwave when each bottle closes: one ring spreading across the
-    // floor (a second, delayed copy and a ring through the air at mid-bottle
-    // height read as duplicates of it, so there is just the one).
+    // One floor ring per closing bottle (duplicates read as noise).
     const ringTex = radialTex([[0, 'rgba(255,255,255,0)'], [0.78, 'rgba(255,255,255,0)'], [0.9, 'rgba(255,255,255,1)'], [0.95, 'rgba(255,255,255,0.35)'], [1, 'rgba(255,255,255,0)']]);
     const waves = [];
     for (const [x, col, t0] of [[-PX, PINK, LAND[0]], [PX, CYAN, LAND[1]]]) {
@@ -702,11 +646,9 @@ function buildScene(renderer, invalidate, { variant = 'story', tones = [] } = {}
     }
 
     /**
-     * The blueprint of one bottle centred at x = cx: rings and meridians
-     * along its silhouette (body, collar, cap), a dashed centreline, a
-     * dimension line with end ticks, and a ring with tick marks on the
-     * floor. Lines go in as segment pairs; points sit on the ring/meridian
-     * crossings. aH is the world height over WIRE_H, which orders the draw-on.
+     * Blueprint of one bottle at x = cx: rings, meridians, centreline,
+     * dimension line and floor ring. Lines are segment pairs; aH (height
+     * over WIRE_H) orders the draw-on.
      */
     function buildBlueprint(cx, side) {
       const LP = [];
@@ -884,9 +826,7 @@ function buildScene(renderer, invalidate, { variant = 'story', tones = [] } = {}
     makeWire(REVEAL[0], PINK);
     makeWire(REVEAL[1], CYAN);
 
-    // Bottles build upward behind a bright seam: every fragment above the
-    // reveal height (|y|, so the reflection builds too) is discarded; the
-    // seam itself is a thin cold-white line with a short glow trailing it.
+    // Bottles build upward behind a seam: fragments above the reveal height (|y|) are discarded.
     function addReveal(root, u) {
       root.traverse((o) => {
         if (!o.isMesh || o.material.userData.revealed) return;
@@ -902,8 +842,7 @@ function buildScene(renderer, invalidate, { variant = 'story', tones = [] } = {}
             .replace('void main() {', 'void main() {\n if (abs(vRevW.y) > uReveal) discard;')
             .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\n float dRev = max(uReveal - abs(vRevW.y), 0.0); float edgeRev = 1.0 - smoothstep(0.0, 0.035, dRev); float trailRev = exp(-dRev * 16.0);\n totalEmissiveRadiance += vec3(2.4, 3.0, 3.8) * edgeRev + vec3(0.5, 0.85, 1.2) * trailRev * 0.5;');
         };
-        // three caches programs by onBeforeCompile's source, which this
-        // wrapper makes identical for every material: key by the original.
+        // three caches programs by source, identical here: key by the original.
         m.customProgramCacheKey = () => `reveal|${prevKey}`;
         m.needsUpdate = true;
       });
@@ -984,9 +923,7 @@ function buildScene(renderer, invalidate, { variant = 'story', tones = [] } = {}
         gl_FragColor = vec4(o + n*0.022, 1.0);
       }`;
 
-  // Depth of field: a depth pass (overlays hidden) gives each pixel's
-  // distance, and the scene is mixed toward two blurred copies of itself
-  // the further it sits from the focus distance.
+  // Depth of field: a depth pass blends toward blurred copies by focus distance.
   const APERTURE = story ? 0.2 : 0.18;
   const dof = {
     depthRT: new THREE.WebGLRenderTarget(1, 1, { minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter }),
@@ -1005,9 +942,7 @@ function buildScene(renderer, invalidate, { variant = 'story', tones = [] } = {}
         c = mix(c, texture2D(d1, vUv).rgb, smoothstep(0.0, 0.5, coc));
         c = mix(c, texture2D(d2, vUv).rgb, smoothstep(0.5, 1.0, coc));`);
   }
-  // Story only: an anamorphic streak (a long, horizontal-only blur of the
-  // bright pass, added back in cool blue) and a flash: a big one when the
-  // surface closes, a small one as each LED ring fires.
+  // Story only: anamorphic streak plus flashes (surface closes, each LED ring).
   const streakRT = story ? [new THREE.WebGLRenderTarget(1, 1, rtOpts), new THREE.WebGLRenderTarget(1, 1, rtOpts)] : null;
   if (streakRT) {
     compFS = compFS
@@ -1150,10 +1085,8 @@ function buildScene(renderer, invalidate, { variant = 'story', tones = [] } = {}
   }
 
   /**
-   * Turntable: pose the pair `t` seconds after it first came into view,
-   * with the backdrop glow at `tone` (0..1) along `tones`. Each bottle
-   * turns exactly as in its prototype (same start angle, ease-in and
-   * speed), and the two turn together.
+   * Turntable: pose the pair `t` seconds after coming into view, backdrop
+   * glow at `tone` (0..1). Both bottles turn together as in the prototype.
    */
   const toneTmp = new THREE.Color();
   function poseTurntable(t, tone) {
@@ -1188,8 +1121,7 @@ function buildScene(renderer, invalidate, { variant = 'story', tones = [] } = {}
       hazeTone.material.opacity = 0.16 * light;
     }
 
-    // the camera eases back as the lights come up, then drifts gently;
-    // the studio lights stay put, so highlights glide across the turning glass
+    // Camera eases back as lights rise; studio lights stay put so highlights glide.
     const d = lerp(6.5, 7.8, eIOS(lin(0, 2.4, t)));
     const az = 0.07 * Math.sin(t * 0.23);
     const el = 0.075 + 0.015 * Math.sin(t * 0.19);
@@ -1205,9 +1137,8 @@ function buildScene(renderer, invalidate, { variant = 'story', tones = [] } = {}
   }
 
   /**
-   * Spray: pose Raphael `t` seconds after it first came into view. The
-   * lights come up as in the turntable, then the pump presses every
-   * SPRAY_CYCLE seconds and the mist bursts from the nozzle.
+   * Spray: pose Raphael `t` seconds after coming into view; the pump presses
+   * every SPRAY_CYCLE seconds and the mist bursts.
    */
   const nozW = new THREE.Vector3();
   const q = new THREE.Quaternion();
@@ -1290,12 +1221,8 @@ function buildScene(renderer, invalidate, { variant = 'story', tones = [] } = {}
   }
 
   /**
-   * Compile every shader the timeline will need, in the background
-   * (KHR_parallel_shader_compile where available). Without this the cap,
-   * collar, label and platforms each compiled the first time they came on
-   * screen, and again when a fading material turned opaque: a visible
-   * hitch partway through the scroll. The next render() restores the
-   * proper material states.
+   * Compile every needed shader in the background (parallel compile where
+   * available) to avoid a hitch when parts first appear; render() restores states.
    */
   function warm() {
     const opaque = renderer.compileAsync(scene, camera);
@@ -1342,24 +1269,13 @@ function buildScene(renderer, invalidate, { variant = 'story', tones = [] } = {}
 
 /**
  * The Uriel & Raphael scene on a square canvas.
- *
- * variant="story" (the default): `progress` (anything with .get()
- * returning 0..1, e.g. a Motion scroll value) scrubs the scene from the
- * drawing blueprint (0) to both bottles on their platforms (1); on load
- * the blueprint first draws itself and hangs by itself. Without `progress`, `time`
- * holds one fixed moment (reduced motion uses the final frame). Renders
- * only while on screen and while something is changing.
- *
- * variant="turntable": the pair turns on their platforms continuously
- * while on screen (the clock pauses off screen, so the turn picks up
- * where it left off). `tone` (a 0..1 value with .get()) moves the
- * backdrop glow through `tones` (hex colours).
- *
- * variant="spray": Raphael A3 alone, spraying every 5 s while on screen
- * (same pausing clock as the turntable). With `paused`, it holds the
- * still frame at `time` instead (by default, mid-burst).
- *
- * `onReady` fires after the first frame.
+ * story (default): `progress` (anything with .get() 0..1) scrubs the scene;
+ *   on load the blueprint draws itself. Without `progress`, `time` holds one
+ *   moment (reduced motion: the final frame).
+ * turntable: the pair turns while on screen; `tone` (0..1) moves the glow
+ *   through `tones` (hex colours).
+ * spray: Raphael A3 sprays every 5 s; `paused` holds the frame at `time`.
+ * Renders only while on screen and changing; `onReady` fires after frame one.
  */
 export default function PerfumeScene({
   variant = 'story', progress, time: timeProp, paused = false, tone, tones, onReady, onFreeze, className = '',
@@ -1380,8 +1296,7 @@ export default function PerfumeScene({
   const running = variant !== 'story' && !paused;
 
   useEffect(() => {
-    // Let the page paint its text first: building the scene and compiling
-    // its shaders is a long task that otherwise freezes the first frames.
+    // Let the page paint text first (scene build and shader compile are a long task).
     let stop;
     let raf2 = 0;
     const raf1 = requestAnimationFrame(() => {
@@ -1404,11 +1319,8 @@ export default function PerfumeScene({
     } catch {
       return undefined;
     }
-    // Quality steps, dropped (never raised again, so it can't oscillate)
-    // when the frame rate sags while the scene is moving. Starts from the
-    // tier the page has already settled on (see sharedTier).
-    // The scent turntable is the showpiece: it starts one step above the
-    // tier the page settled on (the step-down below still protects weak GPUs).
+    // Quality steps down (never up, so no oscillation) when frames sag; starts
+    // at the shared tier. The turntable starts one step above it.
     const locked = holdsTopQuality(); // phones and small screens never step down
     let tier = locked ? 0 : variant === 'turntable' ? Math.max(0, sharedTier - 1) : sharedTier;
     let dirty = true;
@@ -1448,17 +1360,13 @@ export default function PerfumeScene({
     const target = () => {
       const p = progressRef.current;
       if (!p) return time;
-      // The opening plays by itself when the page loads, all the way to the
-      // final frame, so nothing waits on a scroll; scrolling during it just
-      // carries it on sooner.
+      // The opening plays by itself on load to the final frame; scrolling only speeds it up.
       if (!t0) t0 = performance.now();
       const sec = (performance.now() - t0) / 1000;
       let intro = SCENE_END;
       if (sec < INTRO_DONE_S) {
         const u = sec * INTRO_SPEED;
-        // Full speed, then an exponential ease-out whose opening speed
-        // matches (so there is no visible change of pace), settling on the
-        // final frame instead of stopping short of it.
+        // Full speed, then an exponential ease-out of matching speed settling on the final frame.
         const run = SCENE_END - SCENE_INTRO;
         intro = u <= SCENE_INTRO ? u : SCENE_INTRO + run * (1 - Math.exp(-(u - SCENE_INTRO) / run));
       }
@@ -1476,31 +1384,21 @@ export default function PerfumeScene({
 
     const tick = (now) => {
       frame = requestAnimationFrame(tick);
-      // 60 fps is the most this scene needs: its turn and its eases are all
-      // measured in real time, so on a 120 Hz screen skipping every other
-      // frame looks identical and halves the GPU work (and the heat).
+      // 60 fps is enough (eases are real-time), and halves GPU work on 120 Hz screens.
       if (last && now - last < MIN_FRAME_MS) return;
       let dt;
       if (running) {
-        // Always moving: advance the clock by the real frame time, so the
-        // turn (or spray) keeps its exact speed at any refresh rate.
+        // Advance by real frame time so speed holds at any refresh rate.
         dt = last ? Math.min(now - last, 100) : 16.7;
         clock += dt / 1000;
         current = clock;
       } else {
-        // Ease toward the target (like a scrubbed video with a little lag)
-        // rather than jumping frame to frame; once it has caught up and
-        // nothing else changed, the last frame simply stays on the canvas.
-        // The ease is time-based, so it feels the same at 60 Hz, 120 Hz or
-        // when a frame is dropped.
+        // Ease toward the target (time-based) instead of jumping; once caught up, keep the last frame.
         const goal = target();
         const settled = Math.abs(goal - current) < 1e-4;
         if (settled && !dirty) {
           last = 0;
-          // Finished (the last frame of the opening, shaders compiled):
-          // hand the parent a still of it so it can drop the live scene.
-          // The canvas is read right after a render, in the same task,
-          // since a WebGL canvas without a kept buffer reads back blank later.
+          // Done: hand the parent a still so it can drop the live scene (read right after render).
           if (freezeRef.current && !frozen && warmed && progressRef.current && goal >= SCENE_END - 1e-4) {
             frozen = true;
             // Only if a weak desktop GPU had stepped down while it played:

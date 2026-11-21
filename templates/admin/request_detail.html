@@ -1,4 +1,5 @@
-{% extends "base.html" %}
+{% extends "base.html" %}
+{# Admin: one stock request and its dispatch #}
 {% import "_empty.html" as empty %}
 {% import "_macros.html" as m %}
 {% block title %}{{ req.delivery_number }}{% endblock %}
@@ -145,12 +146,7 @@
     </div>
     <div class="rd-actions">
       <div class="rd-actions-buttons">
-        <!-- Reject delivery submits rejectForm (below, outside this
-             <form>) via the button's `form` attribute — no custom JS
-             needed. rejectForm carries data-confirm, so main.js's
-             delegated form[data-confirm] handler shows the confirm()
-             prompt on submit, same pattern as requests.html /
-             users.html / package_detail.html. -->
+        {# Reject button submits rejectForm below via its form attribute. #}
         {% if req.status == 'Pending' %}<button type="submit" form="rejectForm" class="btn btn-danger">Reject delivery</button>{% endif %}
         <button type="submit" class="btn btn-accent">{{ 'Dispatch remaining quantity' if req.status == 'Partially Fulfilled' else 'Dispatch this delivery' }}</button>
       </div>

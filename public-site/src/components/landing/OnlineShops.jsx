@@ -3,8 +3,7 @@ import { FOOTER } from '../../content/footer.js';
 import Chapter from '../Chapter.jsx';
 import Reveal from '../Reveal.jsx';
 
-// Phosphor has no official Shopee/Lazada/TikTok Shop marks, so each
-// store gets a generic icon instead, tinted with its own brand color.
+// No official marketplace marks exist, so generic icons get brand tints.
 const SHOP_ICONS = {
   shopee: ShoppingBagIcon,
   lazada: ShoppingCartIcon,
@@ -24,10 +23,8 @@ const SHOP_BLURBS = {
 };
 
 /**
- * For visitors who already know what they want and would rather order
- * now than send an inquiry: our official storefronts on the marketplaces
- * shoppers already trust. Reuses FOOTER.marketplaces (content/footer.js)
- * so the footer and this section never fall out of sync.
+ * Official marketplace storefronts for visitors who want to order now.
+ * Reuses FOOTER.marketplaces so the footer and this section stay in sync.
  */
 export default function OnlineShops() {
   const shops = FOOTER.marketplaces || [];

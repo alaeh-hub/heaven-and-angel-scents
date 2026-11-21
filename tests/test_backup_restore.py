@@ -36,6 +36,7 @@ def _write_backup(app, path):
 
 
 def test_the_backup_includes_the_scent_oil_tables(app, sql, tmp_path):
+    """The backup includes the scent oil tables."""
     code = _scent_oil(sql)
     backup = tmp_path / "backup.zip"
     summary = _write_backup(app, backup)
@@ -48,6 +49,7 @@ def test_the_backup_includes_the_scent_oil_tables(app, sql, tmp_path):
 
 
 def test_a_restore_brings_back_each_scents_oil(app, sql, tmp_path):
+    """A restore brings back each scents oil."""
     code = _scent_oil(sql, "250")
     backup = tmp_path / "backup.zip"
     _write_backup(app, backup)
@@ -68,6 +70,7 @@ def test_a_restore_brings_back_each_scents_oil(app, sql, tmp_path):
 
 
 def test_a_backup_from_before_scent_oils_empties_them(app, sql, tmp_path):
+    """A backup from before scent oils empties them."""
     _scent_oil(sql)
     full = tmp_path / "full.zip"
     _write_backup(app, full)

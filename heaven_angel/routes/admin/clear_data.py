@@ -15,14 +15,10 @@ from heaven_angel.routes.admin._common import bp
 
 
 # ---------------------------------------------------------------- clear data (dev only)
-# Kept through a reset so everyone can still sign in and the app still
-# has its HQ/branches and pricing settings to run against. Every other
-# table in the database is emptied, including ones added after this was
-# written (the list comes from information_schema, not a hard-coded set).
+# Kept on reset: sign-in, HQ/branches, settings. All other tables are emptied.
 CLEAR_DATA_KEEP_TABLES = frozenset({
     "users", "branches", "admin_actions", "login_activity", "bulk_rate_settings", "unit_cogs_settings",
-    # The built-in bulk batch formulas are configuration, not business data
-    # (see bulk_formulas in schema.sql, migration 50).
+    # Built-in bulk formulas are configuration, not business data.
     "bulk_formulas", "bulk_formula_sizes", "bulk_formula_settings", "bulk_formula_packaging",
     "bulk_formula_scents",
 })
@@ -32,9 +28,7 @@ CLEAR_DATA_CONFIRM_PHRASE = "CLEAR ALL DATA"
 
 
 def _clearable_tables():
-    """Every base table in the current database except the keep-list,
-    with its row count (exact, via COUNT(*) — information_schema's
-    table_rows is only an InnoDB estimate)."""
+    """Base tables outside the keep-list, with exact row counts."""
     names = [
         row["t"] for row in query(
             """SELECT table_name AS t FROM information_schema.tables
@@ -45,9 +39,7 @@ def _clearable_tables():
     ]
     tables = []
     for name in names:
-        # Names come from information_schema, never from the request;
-        # still refuse anything that isn't a plain identifier before it
-        # goes into SQL unparameterized (table names can't be bound).
+        # Names come from information_schema; skip non-identifiers (can't be bound).
         if not name.replace("_", "").isalnum():
             continue
         count = query(f"SELECT COUNT(*) AS c FROM `{name}`", fetchone=True)["c"]
@@ -58,15 +50,7 @@ def _clearable_tables():
 @bp.route("/clear-data", methods=["GET", "POST"])
 @admin_required
 def clear_data():
-    """Development-only reset: empties every business table (products,
-    inventory, sales, requests, materials, partners, logs...) while
-    keeping user accounts, branches and pricing settings. Uploaded
-    product photos are deleted too, since nothing references them after.
-
-    Only exists when ALLOW_DATA_RESET is on (see config.py — forced off
-    in production); otherwise this is a plain 404, so the page's very
-    existence isn't advertised. Requires typing CLEAR_DATA_CONFIRM_PHRASE.
-    """
+    """Dev-only reset of business tables; 404 unless ALLOW_DATA_RESET (off in production)."""
     if not current_app.config.get("ALLOW_DATA_RESET"):
         abort(404)
 
@@ -79,12 +63,7 @@ def clear_data():
         conn = get_db()
         cur = conn.cursor()
         try:
-            # TRUNCATE (not DELETE) so auto-increment ids restart too —
-            # the next delivery is DR-000001 again. TRUNCATE can't run
-            # against FK-referenced tables with checks on, and it commits
-            # implicitly, so this is not one atomic transaction: a failure
-            # partway leaves the earlier tables already emptied. Fine for
-            # a dev tool, where the answer is simply to run it again.
+            # TRUNCATE restarts ids but commits implicitly: not atomic, so rerun if it fails.
             cur.execute("SET FOREIGN_KEY_CHECKS = 0")
             for table in tables:
                 cur.execute(f"TRUNCATE TABLE `{table['name']}`")
@@ -118,8 +97,7 @@ def clear_data():
         ])
         flash(f"Cleared {total_rows} rows and {removed_images} photos. Accounts, branches and prices were kept.",
               "success")
-        # The Settings dialog posts from whatever page it was opened on;
-        # only same-site paths are honoured.
+        # The Settings dialog posts from any page; only same-site paths are honoured.
         back = request.form.get("next", "")
         if back.startswith("/") and not back.startswith(("//", "/\\")):
             return redirect(back)

@@ -2,16 +2,10 @@ import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { CaretDownIcon, CheckIcon } from '@phosphor-icons/react';
 
 /**
- * The site's own dropdown, used instead of the browser's native <select>
- * (whose open list is drawn by the OS and can't be styled).
- *
- * It is a button that opens a listbox. Keyboard: Arrow keys / Home / End move,
- * Enter or Space picks, Escape and Tab close, and typing a letter jumps to the
- * next option starting with it. The list flips above the button when there is
- * no room below. `required` is honoured through a hidden proxy input, so the
- * browser's normal "please fill out this field" check still runs on submit.
- *
- * options: [{ value, label }]. onChange receives the picked option's value.
+ * Styled dropdown replacing the native <select>: button plus listbox with
+ * arrow/Home/End/Enter/Space/Escape/Tab and type-ahead. Flips above when
+ * short on room; `required` works via a hidden proxy input.
+ * options: [{ value, label }]; onChange gets the value.
  */
 export default function Select({
   id,
@@ -58,7 +52,7 @@ export default function Select({
     innerButtonRef.current?.focus({ preventScroll: true });
   };
 
-  // Flip above the button when the list would run off the bottom of the screen.
+  // Flip above the button if the list would overflow the screen.
   useLayoutEffect(() => {
     if (!open || !listRef.current || !innerButtonRef.current) return;
     const rect = innerButtonRef.current.getBoundingClientRect();
@@ -67,7 +61,7 @@ export default function Select({
     setUp(below < need && rect.top > below);
   }, [open, options.length]);
 
-  // Keep the highlighted option in view while arrowing through a long list.
+    // Keep the highlighted option in view.
   useEffect(() => {
     if (!open) return;
     listRef.current?.children[active]?.scrollIntoView({ block: 'nearest' });
@@ -97,8 +91,7 @@ export default function Select({
       case 'End': e.preventDefault(); setActive(last); break;
       case 'Enter':
       case ' ': e.preventDefault(); pick(active); break;
-      // stopPropagation: inside the inquiry dialog, Escape should close just
-      // this list, not the whole dialog behind it.
+      // Escape closes just this list, not the dialog behind it.
       case 'Escape': e.preventDefault(); e.stopPropagation(); closeList(); break;
       case 'Tab': closeList(); break;
       default:

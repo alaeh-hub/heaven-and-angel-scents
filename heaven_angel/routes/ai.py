@@ -32,10 +32,7 @@ class _DraftAlreadyReviewed(Exception):
 
 GEMINI_URL_TMPL = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
 
-# MAX_TOOL_ROUNDS caps how many times the model can call a tool before we
-# force a final answer — protects against a runaway loop (and the Gemini
-# API cost that comes with it) if the model keeps asking for more tools
-# instead of answering.
+# Cap on tool rounds: stops a runaway tool loop (and API cost).
 MAX_TOOL_ROUNDS = 6
 
 SYSTEM_PROMPT = """You are "Halo", a helper built into the internal inventory \
@@ -107,6 +104,7 @@ to list a few things, put each on its own line with a dash and a space, e.g. "- 
 """
 
 
+# JSON fallback for Decimal and date/datetime values.
 def _json_default(o):
     if isinstance(o, (datetime.date, datetime.datetime)):
         return o.isoformat()
@@ -115,19 +113,23 @@ def _json_default(o):
     return str(o)
 
 
+# Rate-limit key: the signed-in user, else the client IP.
 def _rate_limit_key():
     return str(session.get("user_id") or get_remote_address())
 
 
+# Per-user limit string for the chat endpoint, from config.
 def _ai_chat_rate_limit():
     return current_app.config.get("AI_CHAT_RATE_LIMIT", "15 per minute;150 per day")
 
 
+# Today's date in business (Philippine) time.
 def _current_business_date():
     row = query("SELECT CURDATE() AS today", fetchone=True)
     return row["today"]
 
 
+# Who is asking (role, branch), passed to every tool.
 def _ctx():
     role = session.get("role")
     return {
@@ -139,6 +141,7 @@ def _ctx():
     }
 
 
+# One raw Gemini API request; returns (response, error).
 def _call_gemini_raw(payload):
     api_key = current_app.config.get("GEMINI_API_KEY")
     if not api_key:
@@ -146,14 +149,7 @@ def _call_gemini_raw(payload):
 
     model = current_app.config.get("GEMINI_MODEL", "gemini-2.5-flash")
     try:
-        # requests' json= kwarg calls json.dumps() internally with no way
-        # to pass a custom `default=`, so anything not natively
-        # JSON-serializable (Decimal from a DB row's price/qty column,
-        # date/datetime from a timestamp column) would blow up here with
-        # a raw TypeError. Serialize it ourselves with _json_default and
-        # send the resulting string via data= instead, so those values
-        # get converted (Decimal -> float, date/datetime -> isoformat)
-        # instead of crashing the request.
+        # Serialize with _json_default (Decimal/date); json= can't take default=.
         body = json.dumps(payload, default=_json_default)
         resp = requests.post(
             GEMINI_URL_TMPL.format(model=model),
@@ -201,8 +197,7 @@ def _run_agent(system_instruction, contents, tools, ctx):
                 return None, "The assistant returned an empty response."
             return text, None
 
-        # Model wants tool(s) run. Echo its own turn back verbatim, then
-        # answer with one functionResponse per call it made.
+        # Echo the model's turn back, then one functionResponse per call.
         contents.append({"role": "model", "parts": parts})
         response_parts = []
         for call in function_calls:
@@ -215,11 +210,7 @@ def _run_agent(system_instruction, contents, tools, ctx):
             response_parts.append({"functionResponse": fr})
         contents.append({"role": "user", "parts": response_parts})
 
-    # Exhausted MAX_TOOL_ROUNDS and the model was still calling tools on
-    # the last round — but every result it asked for is already sitting
-    # in `contents`. Rather than throwing that away, make one final call
-    # with tools omitted so the model can't ask for yet another round
-    # and has to answer from what it's already gathered.
+    # Rounds used up: one last call without tools forces a final answer.
     final_payload = {
         "system_instruction": {"parts": [{"text": system_instruction + (
             "\n\nYou are out of tool calls for this turn. Do not request any "
@@ -243,12 +234,14 @@ def _run_agent(system_instruction, contents, tools, ctx):
     return None, "That took too many steps to answer — try asking something more specific."
 
 
+# Halo chat page.
 @bp.route("/")
 @login_required
 def chat_page():
     return render_template("ai/chat.html")
 
 
+# Chat endpoint: runs the tool loop and returns Halo's reply.
 @bp.route("/chat", methods=["POST"])
 @login_required
 @limiter.limit(_ai_chat_rate_limit, key_func=_rate_limit_key)
@@ -293,17 +286,15 @@ def chat():
 
 # ---------------------------------------------------------------------------
 # Draft review — the human-in-the-loop step for propose_stock_request.
-#
-# delivery_number: confirmed against the real schema.sql — every delivery
-# is numbered DR-<request_id zero-padded to 6 digits>, generated right
-# after insert (see schema.sql section 6 and its migration in section 12).
-# Using request_id here (not draft_id) is what makes an AI-originated
-# delivery numbered identically to one requested by hand.
+# Draft review: the human approval step for propose_stock_request.
+# Delivery numbers are DR-<request_id> so AI drafts match manual requests.
 
+# DR-<request_id> numbering, same as manual requests.
 def _next_delivery_number(request_id):
     return f"DR-{request_id:06d}"
 
 
+# Drafts this user may see (Admin: all, Branch: own branch).
 def _visible_drafts(ctx):
     if ctx["role"] == "Admin":
         return query(
@@ -321,6 +312,7 @@ def _visible_drafts(ctx):
     )
 
 
+# Load a draft this user may see, or 404.
 def _draft_or_404(draft_id, ctx):
     row = query(
         "SELECT * FROM ai_stock_drafts WHERE draft_id = %s", (draft_id,), fetchone=True
@@ -332,18 +324,14 @@ def _draft_or_404(draft_id, ctx):
     return row
 
 
+# List stock-request drafts awaiting review.
 @bp.route("/drafts")
 @login_required
 def list_drafts():
     ctx = _ctx()
     drafts = _visible_drafts(ctx)
     for d in drafts:
-        # Not stored under the key "items": d is a plain dict, and Jinja's
-        # attribute lookup (`d.items`) would resolve to dict.items (the
-        # built-in bound method) before ever falling back to `d["items"]`,
-        # silently shadowing it instead of raising — the template would
-        # then crash on `d.items|map(...)` with "not iterable". draft_items
-        # doesn't collide with anything dict provides.
+        # Key is draft_items, not items: Jinja's d.items would hit dict.items.
         d["draft_items"] = query(
             """SELECT sdi.sku, sdi.suggested_qty, p.item_name, p.unit
                FROM ai_stock_draft_items sdi JOIN products p ON sdi.sku = p.sku
@@ -353,6 +341,7 @@ def list_drafts():
     return render_template("ai/drafts.html", drafts=drafts)
 
 
+# Approve a draft: turns it into a real stock request.
 @bp.route("/drafts/<int:draft_id>/approve", methods=["POST"])
 @login_required
 def approve_draft(draft_id):
@@ -376,9 +365,7 @@ def approve_draft(draft_id):
         r["sku"]: r
         for r in query(f"SELECT sku, price, unit FROM products WHERE sku IN ({placeholders})", tuple(skus))
     }
-    # Re-checked at approval, not just when the draft was proposed: a
-    # product may have been deleted since, and only bottled sizes are ever
-    # requested from HQ (same rule as branch.request_stock()).
+    # Re-check at approval: product may be deleted; only bottled sizes go to HQ.
     missing = [s for s in skus if s not in products]
     bulk = [s for s in skus if s in products and products[s]["unit"] not in BOTTLE_UNITS]
     if missing or bulk:
@@ -394,8 +381,7 @@ def approve_draft(draft_id):
     try:
         with transaction() as conn:
             cur = conn.cursor()
-            # Claim the draft first: only one concurrent approval can flip it
-            # out of 'Pending Review'.
+            # Claim the draft first so only one concurrent approval wins.
             cur.execute(
                 """UPDATE ai_stock_drafts SET status = 'Approved', reviewed_by_user_id = %s,
                    reviewed_at = NOW() WHERE draft_id = %s AND status = 'Pending Review'""",
@@ -403,11 +389,7 @@ def approve_draft(draft_id):
             )
             if cur.rowcount != 1:
                 raise _DraftAlreadyReviewed()
-            # delivery_number is DR-<request_id>, so request_id has to exist
-            # first. Insert with a placeholder that's unique even under
-            # concurrent approvals (stock_requests.delivery_number is
-            # UNIQUE), then update it to the real DR-###### once we have
-            # the row's own id, still inside this same transaction.
+            # Temp unique delivery_number, replaced by DR-<request_id> in this transaction.
             cur.execute(
                 """INSERT INTO stock_requests (branch_id, delivery_number, status, requested_at)
                    VALUES (%s, CONCAT('TMP-', CONNECTION_ID(), '-', UNIX_TIMESTAMP()), 'Pending', NOW())""",
@@ -453,6 +435,7 @@ def approve_draft(draft_id):
     return redirect(url_for("ai.list_drafts"))
 
 
+# Reject a pending draft; no request is created.
 @bp.route("/drafts/<int:draft_id>/reject", methods=["POST"])
 @login_required
 def reject_draft(draft_id):

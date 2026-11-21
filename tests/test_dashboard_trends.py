@@ -1,7 +1,4 @@
-"""Trend arrows on the dashboard stat tiles (see utils.percent_change()
-and the trend() macro in _macros.html): the comparison windows are
-computed in SQL, so these check the queries against real sales rows.
-"""
+"""Trend arrows on dashboard stat tiles: comparison windows are SQL, so check them on real rows."""
 from factories import login, make_branch, make_product, make_user
 
 
@@ -17,6 +14,7 @@ def _add_sale(sql, branch_id, sku, qty, unit_price, sold_at_sql):
 
 
 def test_branch_dashboard_shows_revenue_up_vs_same_time_yesterday(client, sql):
+    """Branch dashboard shows revenue up vs same time yesterday."""
     branch_id = make_branch(sql)
     sku = make_product(sql)
     # Yesterday, before this time of day: 100. Today so far: 150 -> +50%.
@@ -34,6 +32,7 @@ def test_branch_dashboard_shows_revenue_up_vs_same_time_yesterday(client, sql):
 
 
 def test_branch_dashboard_hides_trend_with_no_sales_yesterday(client, sql):
+    """Branch dashboard hides trend with no sales yesterday."""
     branch_id = make_branch(sql)
     sku = make_product(sql)
     _add_sale(sql, branch_id, sku, 1, "150.00", "NOW() - INTERVAL 1 SECOND")
@@ -48,6 +47,7 @@ def test_branch_dashboard_hides_trend_with_no_sales_yesterday(client, sql):
 
 
 def test_admin_dashboard_shows_revenue_trend(client, sql):
+    """Admin dashboard shows revenue trend."""
     branch_id = make_branch(sql)
     sku = make_product(sql)
     _add_sale(sql, branch_id, sku, 1, "100.00", "NOW() - INTERVAL 1 MONTH - INTERVAL 1 SECOND")

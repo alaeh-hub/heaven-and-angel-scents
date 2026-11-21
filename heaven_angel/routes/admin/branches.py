@@ -60,24 +60,13 @@ def branches():
 @bp.route("/low-stock")
 @admin_required
 def low_stock():
-    """Full, searchable/paginated list of every branch SKU at or below
-    its reorder level — the dashboard's "Low stock across branches"
-    widget only ever shows a preview of 8 rows (see dashboard()'s
-    `low_stock` query, LIMIT 8), so a branch with more than a handful
-    of SKUs to reorder had no single place to see the rest without
-    guessing which ones fell off that preview. This page is that place:
-    every low-stock row, filterable per branch, with a per-branch
-    summary up top so HQ can prioritize which branch to restock first.
-    HQ's own warehouse is listed too (first), so HQ also sees what it
-    needs to produce or buy for itself.
-    """
+    """Fleet-wide list of every SKU at or below its reorder level (HQ first)."""
     branch_filter = request.args.get("branch_id", "all")
     # HQ's warehouse first, then branches alphabetically.
     branch_list = query(
         "SELECT branch_id, branch_name, is_hq FROM branches ORDER BY is_hq DESC, branch_name")
 
-    # Per-branch rollup, always fleet-wide (the tabs below only filter
-    # the row list) — same convention as discrepancies()'s summary.
+    # Per-branch rollup is always fleet-wide (tabs only filter the rows).
     summary = query(
         f"""SELECT b.branch_id, b.branch_name, b.is_hq,
                   COUNT(*) AS low_stock_count,
@@ -105,9 +94,7 @@ def low_stock():
     if branch_filter != "all":
         sql += " AND b.branch_id = %s"
         params.append(branch_filter)
-    # Most critical first: furthest below its own reorder level (a
-    # branch sitting at 0/20 sorts ahead of one at 8/10), branch/item
-    # as a stable tiebreaker.
+    # Most critical first (furthest below reorder level), then branch/item.
     sql += " ORDER BY (bi.stock_qty - bi.reorder_level) ASC, b.branch_name, p.item_name"
     rows = query(sql, tuple(params))
 
@@ -122,20 +109,9 @@ def low_stock():
 @bp.route("/branch-performance")
 @admin_required
 def branch_performance():
-    """Side-by-side comparison of every retail branch — revenue, units
-    sold, delivery discrepancies, and a rough inventory-turnover figure
-    — so an underperforming or high-shrinkage branch stands out at a
-    glance, instead of cross-referencing Branch Stock, Record Sale, and
-    Discrepancies by hand for each branch in turn.
+    """Side-by-side comparison of retail branches.
 
-    Turnover here is intentionally a simple approximation — all-time
-    units sold divided by *current* stock on hand — not a proper
-    COGS-based ratio over a matching period, since neither a
-    per-branch cost basis nor point-in-time stock history exists to
-    compute the textbook version. It's still useful for a relative
-    comparison between branches (one selling through its stock several
-    times over vs. one barely moving it), just not to be read as an
-    absolute number — see the page's own note on this.
+    Turnover is rough: all-time units sold / current stock (not COGS-based).
     """
     sort = request.args.get("sort", "revenue")
     if sort not in ("revenue", "units", "discrepancies", "turnover"):
@@ -179,26 +155,18 @@ def branch_performance():
            WHERE b.is_hq = FALSE"""
     )
 
-    # Turnover is a derived ratio (division by current stock, which can
-    # be zero), so it's computed here rather than in SQL — None means
-    # "can't be computed" (no stock on hand right now), shown as "—"
-    # rather than a misleading 0 or an unbounded number.
+    # Turnover is None when no stock is on hand (shown as a dash, not 0).
     for r in rows:
         r["turnover"] = round(r["units_sold"] / r["total_stock"],
                               2) if r["total_stock"] else None
 
-    # Stable alphabetical pass first, so branches tied on the chosen
-    # metric (e.g. two branches with 0 discrepancies) fall back to
-    # branch name order rather than whatever order MySQL happened to
-    # return them in.
+    # Alphabetical first so ties keep a stable order.
     rows.sort(key=lambda r: r["branch_name"])
     sort_keys = {
         "revenue": lambda r: r["revenue"],
         "units": lambda r: r["units_sold"],
         "discrepancies": lambda r: r["discrepancy_count"],
-        # Branches with no computable turnover (zero stock right now)
-        # sort to the bottom regardless of direction — there's nothing
-        # meaningful to rank them against.
+        # No computable turnover sorts last in either direction.
         "turnover": lambda r: (r["turnover"] is not None, r["turnover"] or 0),
     }
     rows.sort(key=sort_keys[sort], reverse=True)

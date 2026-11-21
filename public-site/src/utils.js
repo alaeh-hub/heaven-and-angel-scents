@@ -17,11 +17,8 @@ export const packagePath = (slug, packageId) => `/partner-portal/${slug}/package
 
 
 /**
- * Glide to the landing section `id`, framing its content rather than its
- * outer edge (sections carry 80-150px of top padding, which left a wide
- * empty band under the nav). Content that fits below the nav is centred
- * in that space; taller content starts just below the nav. Returns false
- * when there's no such section.
+ * Glide to landing section `id`, framing its content under the nav.
+ * Returns false when there is no such section.
  */
 export function scrollToSection(id) {
   const section = document.getElementById(id);

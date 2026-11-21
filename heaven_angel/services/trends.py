@@ -1,13 +1,8 @@
 """Time-bucket options for the Reports page's trend charts (shared by admin and branch)."""
 
 
-# Bucket-size options for the "Ledger movement" trend chart on the
-# Reports page (see the admin and branch reports_data() endpoints). Every `trunc` expression is
-# wrapped so it evaluates to an actual DATE, not a formatted string —
-# DATE_FORMAT() on its own returns text, and wrapping it back in DATE()
-# keeps all four options returning the same Python type (datetime.date)
-# so reports_data() can call .isoformat() on the result the same way
-# regardless of which option was picked, with no extra branching.
+# Bucket sizes for the Ledger movement chart. Each `trunc` is wrapped in DATE() so
+# every option returns a datetime.date.
 TREND_GRANULARITIES = {
     "daily": {
         "trunc": "DATE(sml.created_at)",

@@ -1,10 +1,5 @@
-"""Tools: calculators for the numbers the business works with every day — a
-unit converter, the alcohol + water mix, bottle yield, price per unit, and a
-formula cost calculator with editable prices.
-
-Everything is calculated in the browser from numbers the server hands over
-(the unit factors, the formula settings from the database, the formulas'
-current costing), so nothing here writes to the database.
+"""Tools: browser-side calculators (unit converter, alcohol + water mix, bottle yield,
+price per unit, formula cost). Nothing here writes to the database.
 """
 from flask import render_template
 
@@ -35,6 +30,7 @@ UNIT_FACTORS = {
 }
 
 
+# Page: hands the unit factors, formula settings and costing to the calculators.
 @bp.route("/tools")
 @admin_required
 def tools():

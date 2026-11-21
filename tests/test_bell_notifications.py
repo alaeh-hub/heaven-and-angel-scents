@@ -1,9 +1,6 @@
-"""Live bell notifications (sockets.notify_bell) for the stock request
-lifecycle: each step tells the *other* side — HQ admins when a branch
-requests or receives, the branch when HQ dispatches or rejects. The
-browser shows these in the bell and as a toast (main.js's
-initRealtime()). notify_bell is swapped for a recorder so these check
-who gets told what, without a live socket.
+"""Live bell notifications for the stock request lifecycle: each step tells the other side.
+
+notify_bell is replaced by a recorder, so these check who is told what without a socket.
 """
 import pytest
 
@@ -41,6 +38,7 @@ def _signed_in_admin(client, sql):
 
 
 def test_branch_request_notifies_admins(client, sql, bells):
+    """Branch request notifies admins."""
     _signed_in_branch(client, sql)
     sku = make_product(sql)
     token = get_form_token(client, "/branch/request-stock")
@@ -55,6 +53,7 @@ def test_branch_request_notifies_admins(client, sql, bells):
 
 
 def test_dispatch_notifies_the_branch(client, sql, bells):
+    """Dispatch notifies the branch."""
     branch_id = make_branch(sql)
     _signed_in_admin(client, sql)
     sku = make_product(sql)
@@ -72,6 +71,7 @@ def test_dispatch_notifies_the_branch(client, sql, bells):
 
 
 def test_failed_dispatch_sends_nothing(client, sql, bells):
+    """Failed dispatch sends nothing."""
     branch_id = make_branch(sql)
     _signed_in_admin(client, sql)
     sku = make_product(sql)
@@ -86,6 +86,7 @@ def test_failed_dispatch_sends_nothing(client, sql, bells):
 
 
 def test_reject_notifies_the_branch_but_not_on_a_no_op(client, sql, bells):
+    """Reject notifies the branch but not on a no op."""
     branch_id = make_branch(sql)
     _signed_in_admin(client, sql)
     sku = make_product(sql)
@@ -108,6 +109,7 @@ def test_reject_notifies_the_branch_but_not_on_a_no_op(client, sql, bells):
     ("6", "warning", "4 unit(s) unaccounted for"),
 ])
 def test_receipt_notifies_admins(client, sql, bells, received, level, text):
+    """Receipt notifies admins."""
     branch_id = _signed_in_branch(client, sql)
     sku = make_product(sql)
     make_inventory(sql, branch_id, sku, stock_qty=0)

@@ -1,4 +1,5 @@
-{% extends "base.html" %}
+{% extends "base.html" %}
+{# Customers list #}
 {% import "_empty.html" as empty %}
 {% import "_macros.html" as m %}
 {% block title %}Customers{% endblock %}
@@ -111,9 +112,7 @@
             <td class="num mobile-detail" data-label="Total spent">{{ r.total_spent|peso }}</td>
             <td class="tnum text-soft mobile-detail" data-label="Last purchase">{{ r.last_purchase_at.strftime('%b %d, %Y') }}</td>
             <td class="text-soft mobile-detail" data-label="Last at">{{ r.last_branch_name }}</td>
-            <!-- Mobile-only, see .mobile-toggle-row/.row-toggle-btn in
-                 style.css. Hidden on desktop, where every cell above is
-                 already visible in the real table row. -->
+            {# Mobile-only: .row-toggle-btn expands the cells hidden in the card layout. #}
             <td data-label="" class="mobile-toggle-row">
               <button type="button" class="row-toggle-btn" aria-expanded="false">
                 <span>Details</span>

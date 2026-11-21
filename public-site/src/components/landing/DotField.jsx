@@ -8,8 +8,7 @@ const MAX_R = 3;
 const REACH = 160; // how far a dot feels the pointer
 const PUSH = 10; // how far a dot nudges away from the pointer, at its closest
 
-// Resting and lit colours (matches --ink-3 and --gold-ink in tokens.css;
-// a canvas can't read CSS custom properties, so these are copied in).
+// Resting and lit colours (copied from --ink-3 / --gold-ink; a canvas cannot read CSS vars).
 const REST = [117, 117, 125];
 const NEAR = [224, 192, 104];
 const REST_ALPHA = 0.4;
@@ -20,17 +19,9 @@ const clamp01 = (x) => Math.min(1, Math.max(0, x));
 const smooth = (x) => x * x * (3 - 2 * x);
 
 /**
- * A grid of dots that light up, grow and nudge away from the pointer.
- * The pointer is tracked only over the element this renders into, so it
- * reacts to the cursor within that section and nowhere else on the page
- * (drop it into a `position: relative` container as a background layer,
- * e.g. absolutely positioned behind that section's real content).
- *
- * Static and non-interactive under reduced motion; the animation loop
- * pauses while off screen. Ships its own base CSS (`.dot-field` in
- * landing.css: `position: absolute; inset: 0`), so it fills its
- * positioned ancestor on its own rather than depending on the page
- * around it to size that div correctly.
+ * Canvas dot grid that lights up and nudges away from the pointer, tracked
+ * only over its own host. Use as a background in a `position: relative`
+ * container. Static under reduced motion; loop pauses off screen.
  */
 export default function DotField({ className = '' }) {
   const reduce = useReducedMotion();
@@ -99,8 +90,7 @@ export default function DotField({ className = '' }) {
     let pointer = null; // {x, y} in the canvas's own CSS px, null when the cursor is elsewhere
     let visible = false;
     const onMove = (e) => {
-      // Touch has no hovering cursor; tracking a finger mid-swipe only
-      // repaints the grid while the shelf is trying to scroll.
+      // Skip touch: tracking a finger mid-swipe only repaints.
       if (e.pointerType !== 'mouse') return;
       const rect = host.getBoundingClientRect();
       pointer = { x: e.clientX - rect.left, y: e.clientY - rect.top };
@@ -120,11 +110,7 @@ export default function DotField({ className = '' }) {
 
     const tick = (now) => {
       frame = requestAnimationFrame(tick);
-      // Clamped both ends: never negative (the first tick can be kicked
-      // off manually, from IntersectionObserver, with its own
-      // performance.now() reading that isn't guaranteed to precede the
-      // next rAF timestamp) and capped so a dropped frame doesn't jump
-      // the ease.
+      // Clamped: the first manual tick may predate the rAF timestamp, and a dropped frame must not jump.
       const dt = last ? Math.max(0, Math.min(now - last, 50)) : 16.7;
       last = now;
       const k = 1 - Math.exp(-dt / 90); // time-based ease toward the target, each frame
@@ -132,9 +118,7 @@ export default function DotField({ className = '' }) {
       ctx.clearRect(0, 0, w, h);
       active.length = 0;
 
-      // Most dots sit at rest and share one fillStyle; only the few near
-      // the pointer need their own colour, so those are drawn in a
-      // second pass instead of one setFillStyle per dot every frame.
+      // Rest dots share one fillStyle; only near-pointer dots get a second pass.
       ctx.fillStyle = REST_COLOR;
       ctx.beginPath();
       for (const d of dots) {
@@ -154,8 +138,7 @@ export default function DotField({ className = '' }) {
             ty = d.ry + uy * PUSH * f;
           }
         }
-        // Defensive floor: `ctx.arc` throws on a negative radius, and r
-        // must never reach it however dt/k behave.
+        // Floor: ctx.arc throws on a negative radius.
         d.r = Math.max(0, d.r + (targetR - d.r) * k);
         d.x += (tx - d.x) * k;
         d.y += (ty - d.y) * k;
@@ -170,9 +153,7 @@ export default function DotField({ className = '' }) {
       }
       ctx.fill();
 
-      // Pointer gone and every dot back at rest: the frame just drawn is
-      // the resting grid, so stop until the pointer returns instead of
-      // repainting an unchanging canvas every frame.
+      // At rest with no pointer: stop repainting until it returns.
       if (!pointer && !active.length && dots.every((d) => Math.abs(d.x - d.rx) < 0.05 && Math.abs(d.y - d.ry) < 0.05)) {
         cancelAnimationFrame(frame);
         frame = 0;

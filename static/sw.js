@@ -1,11 +1,4 @@
-/* Service worker for the installed app.
- *
- * This is a live operations system behind a sign-in, so pages and data are
- * NEVER cached: every navigation and API call goes to the network. The only
- * thing kept is static files (CSS, JS, fonts, icons), served stale and
- * refreshed in the background so the app opens fast. If the network is down
- * when a page is opened, a short offline notice is shown instead of the
- * browser's error page. */
+/* Service worker: caches static files only; pages and data always hit the network. */
 const CACHE_PREFIX = 'ha-static-';
 const CACHE = CACHE_PREFIX + 'v3';
 
@@ -38,8 +31,7 @@ self.addEventListener('fetch', (event) => {
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
   if (url.origin !== self.location.origin) return;
-  // Video/audio are fetched in byte ranges (status 206), which the Cache API
-  // cannot store. Let the browser handle those requests itself.
+  // Range requests (video/audio, 206) can't be cached; let the browser handle them.
   if (req.headers.has('range')) return;
 
   if (req.mode === 'navigate') {

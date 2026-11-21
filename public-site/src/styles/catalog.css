@@ -206,8 +206,7 @@
 }
 
 /* ===================================================== phone scale-down
-   Mobile only: smaller type, tighter spacing and smaller controls. Kept
-   last in the cascade so it wins over the desktop rules above. */
+   Mobile only: smaller type, tighter spacing; last so it wins. */
 @media (max-width: 640px) {
   :root {
     --gutter: 16px;

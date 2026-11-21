@@ -22,7 +22,6 @@ root). This blueprint only does two things for it:
       GET  /api/packages              — the package list (?scope= filter).
       GET  /api/packages/<id>         — one package, its products, a few
                                         other packages, and a CSRF token.
-      GET  /api/products              — the catalog (?gender=, ?page=).
       GET  /api/site                  — portal-wide facts: contact details,
                                         catalog/package counts, and a CSRF
                                         token for the general inquiry form.

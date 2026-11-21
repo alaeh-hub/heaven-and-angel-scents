@@ -1,4 +1,5 @@
-{% extends "base.html" %}
+{% extends "base.html" %}
+{# Admin: branches list and setup #}
 {% import "_empty.html" as empty %}
 {% block title %}Branches{% endblock %}
 {% block heading %}Branches{% endblock %}
@@ -60,9 +61,7 @@
               <td class="text-soft mobile-detail" data-label="Location">{{ b.location or 'No location' }}</td>
               <td class="num mobile-detail" data-label="Accounts">{{ b.user_count }}</td>
               <td class="tnum text-soft mobile-detail" data-label="Added">{{ b.created_at.strftime('%b %d, %Y') }}</td>
-              <!-- Mobile-only, see .mobile-toggle-row/.row-toggle-btn in
-                   style.css. Hidden on desktop, where every cell above is
-                   already visible in the real table row. -->
+              {# Mobile-only: .row-toggle-btn expands the cells hidden in the card layout. #}
               <td data-label="" class="mobile-toggle-row">
                 <button type="button" class="row-toggle-btn" aria-expanded="false">
                   <span>Details</span>

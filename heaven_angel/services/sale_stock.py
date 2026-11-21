@@ -154,12 +154,7 @@ def void_sale(cur, *, sale_id, reason, user_id, username, branch_id=None, today_
         raise TransactionAborted(
             "Branch staff can only void sales recorded today — ask HQ to void older ones.")
 
-    # What this sale actually took out. Sales recorded before sale logs
-    # carried reference_id have no linked rows: a Sale/Freebie took its
-    # own qty then, and an old Refill took nothing.
-    # A bulk sale or refill took mL from batches (sale_batch_usage): give exactly
-    # that back, capped at each batch's size so a written-off batch can't end up
-    # holding more than it was ever made with.
+    # Give back exactly what the sale took (bulk: mL per batch via sale_batch_usage, capped at batch size).
     cur.execute(
         "SELECT batch_id, ml FROM sale_batch_usage WHERE sale_id = %s FOR UPDATE", (sale_id,))
     batch_usage = cur.fetchall()

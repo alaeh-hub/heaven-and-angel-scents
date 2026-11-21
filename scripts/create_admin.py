@@ -1,23 +1,14 @@
-"""Create (or reset) a login account. Works the same on a dev machine and on
-the production server, because it uses whatever database the app itself is
-configured for (.env / environment variables).
+"""Create (or reset) a login account, using the app's configured database.
 
     python scripts/create_admin.py                       # first Admin, prompts
     python scripts/create_admin.py --username owner
     python scripts/create_admin.py --role Branch --branch "Balayan Branch"
     python scripts/create_admin.py --username admin --reset-password
+    docker compose exec web python scripts/create_admin.py   # Docker
 
-Docker deployment:
-
-    docker compose exec web python scripts/create_admin.py
-
-Passwords are always typed at a hidden prompt, never given as an argument, so
-they never land in shell history. Without --reset-password an existing
-username is never touched.
-
-By default an account is NOT forced to change its password at first login
-(you just typed it yourself). Pass --must-change to hand an account to
-someone else and make them choose their own password.
+Passwords come from a hidden prompt, never an argument. An existing username
+is untouched without --reset-password. Pass --must-change to force the user
+to pick their own password at first login.
 """
 import argparse
 import getpass

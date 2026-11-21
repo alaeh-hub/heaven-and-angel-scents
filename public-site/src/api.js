@@ -1,15 +1,11 @@
-// Thin client for the Flask JSON API in routes/portal.py. Every call is
-// same-origin (Flask serves the built app; Vite proxies in dev), so the
-// session cookie that carries the CSRF token rides along automatically.
+// Client for the Flask JSON API (same-origin, so the CSRF session cookie rides along).
 
 export class ApiError extends Error {
   constructor(message, status, { fromServer = false } = {}) {
     super(message);
     this.name = 'ApiError';
     this.status = status;
-    // True when the message came from our own JSON {"error"} body, as
-    // opposed to a fallback for a non-JSON response (rate limiter page,
-    // an expired CSRF token, a proxy error...).
+    // True when the message came from our own JSON {"error"} body.
     this.fromServer = fromServer;
   }
 }
@@ -47,14 +43,6 @@ export function fetchPackages(slug, scope, signal) {
   return request(`${apiBase(slug)}/packages${query}`, { signal });
 }
 
-export function fetchProducts(slug, { gender, page }, signal) {
-  const params = new URLSearchParams();
-  if (gender && gender !== 'all') params.set('gender', gender);
-  if (page > 1) params.set('page', String(page));
-  const query = params.toString();
-  return request(`${apiBase(slug)}/products${query ? `?${query}` : ''}`, { signal });
-}
-
 export function fetchPackage(slug, packageId, signal) {
   return request(`${apiBase(slug)}/packages/${packageId}`, { signal });
 }
@@ -80,10 +68,8 @@ export function sendGeneralInquiry(slug, fields, csrfToken) {
 }
 
 /**
- * Send a form POST with the CSRF token in `tokenRef`. A non-JSON 400 is
- * Flask-WTF rejecting the token, usually because the page sat open past
- * its lifetime: `refresh()` fetches a fresh one and the send is tried
- * once more before giving up.
+ * Form POST with the CSRF token. A non-JSON 400 means a stale token, so
+ * `refresh()` gets a new one and the send is retried once.
  */
 export async function withCsrfRetry(tokenRef, send, refresh) {
   try {

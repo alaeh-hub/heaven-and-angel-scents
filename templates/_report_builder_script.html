@@ -1,5 +1,4 @@
-{# Behaviour for the report builder in _report_builder.html. Include it from {% block scripts %} (so soft
-   navigation re-runs it) after setting rb_admin to true or false. #}
+{# Script for _report_builder.html; set rb_admin first, include from the scripts block. #}
 <script nonce="{{ csp_nonce() }}">
   (function () {
     const IS_ADMIN = {{ 'true' if rb_admin else 'false' }};

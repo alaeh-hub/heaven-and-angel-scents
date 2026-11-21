@@ -1,9 +1,6 @@
-"""routes/admin/'s record_sale() — HQ's own copy of branch.record_sale()
-(see its docstring: "Mirrors branch.record_sale()"). This hand-duplicated
-implementation had no test of its own before this file — test_sales.py
-only ever exercised the branch-side copy, so the two could silently drift
-apart with nothing to catch it. Mirrors test_sales.py's cases against the
-HQ warehouse (branch_id=1) instead of a regular branch.
+"""Admin record_sale() (HQ's copy of branch.record_sale()) mirrors test_sales.py at HQ (branch_id=1).
+
+The two copies are hand-duplicated, so these cases keep them from drifting apart.
 """
 from factories import (count_sales, get_batch_remaining, get_form_token, get_inventory_qty,
                         last_movement_log, login, make_inventory, make_product,
@@ -37,6 +34,7 @@ def _signed_in_admin(client, sql):
 
 
 def test_sale_decrements_hq_stock_and_logs_a_matching_movement(client, sql):
+    """Sale decrements hq stock and logs a matching movement."""
     _signed_in_admin(client, sql)
     sku = make_product(sql, price="50.00")
     make_inventory(sql, HQ_BRANCH_ID, sku, stock_qty=10)
@@ -81,14 +79,14 @@ def _last_sale_id(sql, sku):
 
 
 def test_refill_draws_the_scents_batches_oldest_first_not_bottles(client, sql):
+    """Refill draws the scents batches oldest first not bottles."""
     _signed_in_admin(client, sql)
     bottle, base, (old, new) = _scent_with_batches(sql, 60, 500)
 
     resp = _sell(client, bottle, qty=2, unit_price="20.00", sale_type="Refill")
 
     assert resp.status_code == 302
-    # Customer brought their own bottle: bottles untouched, 2 x 50 mL poured —
-    # the old batch emptied first (60 mL), the rest (40 mL) from the next one.
+    # Own bottle: bottles untouched, 2 x 50 mL poured; old batch (60 mL) empties first.
     assert get_inventory_qty(sql, HQ_BRANCH_ID, bottle) == 10
     assert get_batch_remaining(sql, old) == 0
     assert get_batch_remaining(sql, new) == 460
@@ -98,6 +96,7 @@ def test_refill_draws_the_scents_batches_oldest_first_not_bottles(client, sql):
 
 
 def test_refill_is_blocked_without_enough_bulk(client, sql):
+    """Refill is blocked without enough bulk."""
     _signed_in_admin(client, sql)
     bottle, base, (batch,) = _scent_with_batches(sql, 60)
 
@@ -109,6 +108,7 @@ def test_refill_is_blocked_without_enough_bulk(client, sql):
 
 
 def test_bulk_sale_by_the_ml_takes_it_from_the_batches(client, sql):
+    """Bulk sale by the ml takes it from the batches."""
     _signed_in_admin(client, sql)
     bottle, base, (batch,) = _scent_with_batches(sql, 300)
 
@@ -126,6 +126,7 @@ def test_bulk_sale_by_the_ml_takes_it_from_the_batches(client, sql):
 
 
 def test_bulk_sale_is_blocked_when_the_batches_are_short(client, sql):
+    """Bulk sale is blocked when the batches are short."""
     _signed_in_admin(client, sql)
     bottle, base, (batch,) = _scent_with_batches(sql, 50)
 
@@ -136,6 +137,7 @@ def test_bulk_sale_is_blocked_when_the_batches_are_short(client, sql):
 
 
 def test_bulk_sale_page_offers_scents_with_batch_ml_left(client, sql):
+    """Bulk sale page offers scents with batch ml left."""
     _signed_in_admin(client, sql)
     bottle, base, _ = _scent_with_batches(sql, 300)
 
@@ -145,6 +147,7 @@ def test_bulk_sale_page_offers_scents_with_batch_ml_left(client, sql):
 
 
 def test_a_bulk_sale_is_refused_at_a_branch(client, sql):
+    """A bulk sale is refused at a branch."""
     from factories import make_branch
     branch_id = make_branch(sql)
     user = make_user(sql, role="Branch", branch_id=branch_id)
@@ -161,6 +164,7 @@ def test_a_bulk_sale_is_refused_at_a_branch(client, sql):
 
 
 def test_overselling_hq_stock_is_rejected(client, sql):
+    """Overselling hq stock is rejected."""
     _signed_in_admin(client, sql)
     sku = make_product(sql, price="50.00")
     make_inventory(sql, HQ_BRANCH_ID, sku, stock_qty=2)
@@ -173,6 +177,7 @@ def test_overselling_hq_stock_is_rejected(client, sql):
 
 
 def test_zero_price_sale_is_rejected(client, sql):
+    """Zero price sale is rejected."""
     _signed_in_admin(client, sql)
     sku = make_product(sql, price="50.00")
     make_inventory(sql, HQ_BRANCH_ID, sku, stock_qty=10)
@@ -185,6 +190,7 @@ def test_zero_price_sale_is_rejected(client, sql):
 
 
 def test_credit_sale_without_a_buyer_name_is_rejected(client, sql):
+    """Credit sale without a buyer name is rejected."""
     _signed_in_admin(client, sql)
     sku = make_product(sql, price="50.00")
     make_inventory(sql, HQ_BRANCH_ID, sku, stock_qty=10)
@@ -204,6 +210,7 @@ def test_credit_sale_without_a_buyer_name_is_rejected(client, sql):
 
 
 def test_double_submitting_the_same_sale_form_only_records_it_once(client, sql):
+    """Double submitting the same sale form only records it once."""
     _signed_in_admin(client, sql)
     sku = make_product(sql, price="50.00")
     make_inventory(sql, HQ_BRANCH_ID, sku, stock_qty=10)

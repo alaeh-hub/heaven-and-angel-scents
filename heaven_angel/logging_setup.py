@@ -1,8 +1,4 @@
-"""Log formatting: readable colour text for development, JSON lines for production.
-
-Every record is stamped with the current request's ID so a log search (or a
-support report quoting the X-Request-ID header) can find all of one request's lines.
-"""
+"""Log formatting: colour text in development, JSON lines in production."""
 import json
 import logging
 import re
@@ -14,6 +10,7 @@ REQUEST_ID_OK = re.compile(r"^[A-Za-z0-9._-]{8,64}$")
 
 
 class _ColorFormatter(logging.Formatter):
+    """Colour text log lines for development."""
     _COLORS = {
         logging.DEBUG: "\x1b[36m",
         logging.INFO: "\x1b[32m",
@@ -61,6 +58,7 @@ class _JsonFormatter(logging.Formatter):
 
 
 def configure_logging(app, json_logs):
+    """Set up logging for the current environment."""
     for logger_name in (app.logger.name, "werkzeug"):
         logger = logging.getLogger(logger_name)
         for handler in logger.handlers:

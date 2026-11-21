@@ -1,15 +1,7 @@
-/* ==========================================================================
-   SQUARE CORNERS (trial)
-
-   Buttons, the filter, chips, form fields, dropdowns and cards lose their
-   rounded corners. Everything is in this one file, loaded last (see
-   main.jsx), so the look can be judged side by side and undone by deleting
-   the import. `!important` is deliberate: it has to beat the per-breakpoint
-   radii set in atelier.css and the inline radii on the loading skeletons.
-
-   Left round on purpose: the bottle bubbles on package cards, loading
-   spinners, the slider thumb, scroll thumbs and the small status dots.
-   ========================================================================== */
+/* SQUARE CORNERS (trial): buttons, filter, chips, fields, dropdowns and
+   cards lose their rounding. Loaded last (main.jsx); delete the import to
+   undo. `!important` beats the per-breakpoint and skeleton inline radii.
+   Round on purpose: bottle bubbles, spinners, slider/scroll thumbs, dots. */
 
 /* ---------------------------------------------------------------- buttons */
 .btn,

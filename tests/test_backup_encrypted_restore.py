@@ -25,6 +25,7 @@ def _enc_file(tmp_path, password=PASSWORD):
 # ---------------------------------------------------------------- the encryption itself (no database)
 
 def test_encrypt_then_decrypt_round_trips():
+    """Encrypt then decrypt round trips."""
     data = _inner_zip()
     blob = encrypt_backup(data, PASSWORD)
     assert is_encrypted_backup(blob) and blob.startswith(MAGIC)
@@ -34,10 +35,12 @@ def test_encrypt_then_decrypt_round_trips():
 
 def test_the_same_data_encrypts_differently_each_time():
     # a fresh salt and nonce every time, so two backups never share a key stream
+    """The same data encrypts differently each time."""
     assert encrypt_backup(b"same", PASSWORD) != encrypt_backup(b"same", PASSWORD)
 
 
 def test_a_wrong_passphrase_or_a_damaged_file_does_not_open():
+    """A wrong passphrase or a damaged file does not open."""
     blob = encrypt_backup(_inner_zip(), PASSWORD)
     with pytest.raises(BackupDecryptError):
         decrypt_backup(blob, "not the passphrase")
@@ -51,6 +54,7 @@ def test_a_wrong_passphrase_or_a_damaged_file_does_not_open():
 
 def test_the_attachment_is_not_a_zip_archive():
     # the point of the format: nothing for a mail scanner to treat as a locked archive
+    """The attachment is not a zip archive."""
     blob = encrypt_backup(_inner_zip(), PASSWORD)
     assert not blob.startswith(b"PK")
 
@@ -58,6 +62,7 @@ def test_the_attachment_is_not_a_zip_archive():
 # ---------------------------------------------------------------- restore reads it
 
 def test_the_encrypted_email_attachment_restores_as_it_is(app, tmp_path):
+    """The encrypted email attachment restores as it is."""
     with app.app_context():
         app.config["BACKUP_ZIP_PASSWORD"] = PASSWORD
         sql, zf = bk.read_backup_sql(_enc_file(tmp_path))
@@ -69,6 +74,7 @@ def test_the_encrypted_email_attachment_restores_as_it_is(app, tmp_path):
 
 
 def test_a_plain_backup_zip_still_restores(app, tmp_path):
+    """A plain backup zip still restores."""
     plain = tmp_path / "plain.zip"
     plain.write_bytes(_inner_zip())
     with app.app_context():
@@ -78,6 +84,7 @@ def test_a_plain_backup_zip_still_restores(app, tmp_path):
 
 
 def test_an_encrypted_backup_needs_the_right_password(app, tmp_path):
+    """An encrypted backup needs the right password."""
     path = _enc_file(tmp_path)
     with app.app_context():
         app.config["BACKUP_ZIP_PASSWORD"] = ""
@@ -125,6 +132,7 @@ def test_no_backup_is_built_when_there_is_no_password(app, sql, monkeypatch):
 
 
 def test_the_email_backup_button_explains_a_missing_password(app, client, sql, monkeypatch):
+    """The email backup button explains a missing password."""
     from factories import login, make_user
     monkeypatch.setitem(app.config, "MAIL_SERVER", "smtp.example.test")
     monkeypatch.setitem(app.config, "MAIL_DEFAULT_SENDER", "from@example.test")
@@ -140,12 +148,14 @@ def test_the_email_backup_button_explains_a_missing_password(app, client, sql, m
 # ---------------------------------------------------------------- what the backup log says
 
 def test_a_small_backup_is_shown_in_kb_not_as_zero_mb():
+    """A small backup is shown in kb not as zero mb."""
     from heaven_angel.services.mailer import mask_email, size_text
     assert size_text(41_000) == "40 KB" and size_text(900) == "1 KB" and size_text(2_600_000) == "2.5 MB"
     assert mask_email("owner@gmail.com") == "o****@gmail.com" and mask_email("") == ""
 
 
 def test_a_refused_recipient_is_not_reported_as_sent(app, monkeypatch):
+    """A refused recipient is not reported as sent."""
     import smtplib
 
     from heaven_angel.services import mailer

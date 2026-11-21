@@ -1,6 +1,5 @@
-"""script-src must not allow 'unsafe-inline': every inline <script> carries
-the response's nonce and no template uses on*= event-handler attributes
-(those are blocked by the CSP and would silently stop working).
+"""script-src must not allow 'unsafe-inline': inline scripts carry the nonce and no
+template uses on*= handler attributes (the CSP would silently block them).
 """
 import re
 
@@ -52,6 +51,7 @@ def _static_get_endpoints(app, prefixes):
 
 
 def test_login_page_scripts_all_carry_the_nonce(client):
+    """Login page scripts all carry the nonce."""
     resp = client.get("/login")
     assert resp.status_code == 200
     _assert_page_is_nonce_clean(resp, "/login")
@@ -59,6 +59,7 @@ def test_login_page_scripts_all_carry_the_nonce(client):
 
 @pytest.mark.parametrize("role,prefixes", [("Admin", ("admin.", "ai.", "scan.")), ("Branch", ("branch.", "ai.", "scan."))])
 def test_every_signed_in_page_is_nonce_clean(app, client, sql, role, prefixes):
+    """Every signed in page is nonce clean."""
     branch_id = make_branch(sql) if role == "Branch" else None
     user = make_user(sql, role=role, branch_id=branch_id)
     login(client, user["username"], user["password"], role)

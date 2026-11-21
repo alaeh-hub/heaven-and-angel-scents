@@ -9,19 +9,10 @@
 /* Hallmark · waive 39b · button.faq-q rows in the FAQ accordion · the questions wrap across full-width rows, so the accordion button is taller than a pill control */
 /* Hallmark · waive 49b · the footer contact email at 1024px · the address breaks inside the contact column on purpose instead of overflowing the footer */
 /* Design tokens + primitives for the partner portal.
-
-   Direction: Apple-inspired premium product page (quiet neutrals, big
-   confident sans type, soft materials, spring motion) carrying the
-   brand's own gold as the single accent. Nothing here is an Apple asset
-   or an official Apple material; the frosted surfaces are plain
-   backdrop-filter approximations with solid fallbacks.
-
-   Shape rule (used everywhere):
-     - surfaces (cards, media, sheets): --r-surface (24px), inner --r-inner (16px)
-     - interactive controls (buttons, chips, segmented control): full pill
-     - form inputs: --r-input (14px)
-
-   Theme: always dark, on every page. */
+   Dark, Apple-inspired product look with brand gold as the one accent
+   (frosted surfaces are backdrop-filter approximations, solid fallbacks).
+   Shapes: surfaces --r-surface 24px (inner --r-inner 16px), controls full
+   pill, inputs --r-input 14px. Always dark on every page. */
 
 @import '@fontsource-variable/geist';
 
@@ -30,8 +21,7 @@
 
   --font: 'Geist Variable', 'Helvetica Neue', Helvetica, Arial, sans-serif;
 
-  /* Always dark: a near-black stage so the glass, gold and glowing
-     podiums carry the page. */
+  /* Always dark: a near-black stage for the glass, gold and podiums. */
   --bg: #070708;
   --bg-alt: #0e0e10;
   --surface: #151518;
@@ -42,8 +32,7 @@
   --hairline: rgb(255 255 255 / 0.08);
   --hairline-strong: rgb(255 255 255 / 0.15);
 
-  /* Brand gold. --gold is the fill (dark text on it), --gold-ink is the
-     text-on-background shade. */
+  /* Brand gold: --gold is the fill (dark text), --gold-ink the text shade. */
   --gold: #d9b64b;
   --gold-hover: #e3c465;
   --gold-ink: #e0c068;
@@ -510,8 +499,7 @@ select.input {
   color: var(--gold-ink);
 }
 
-/* Lets the browser's own "please fill out this field" check still work for a
-   required custom dropdown: invisible, but laid over the button. */
+/* Keeps the browser "fill out this field" check working for a required custom dropdown (invisible, over the button). */
 .select-proxy {
   position: absolute;
   inset: 0;
@@ -537,16 +525,10 @@ select.input {
 }
 
 /* -------------------------------------------------------------- glow
-
-   Cursor-following gold light for surfaces. useGlowPointer (mounted once
-   in App.jsx) writes the pointer position as --mx/--my on every glow
-   element under the mouse; before the first move they fall back to the
-   centre.
-
-   .glow-card  a soft spotlight on the surface plus a gold rim that lights
-               up nearest the pointer. Add .glow-fill to skip the rim
-               (rows inside a list, where a ring per row would be noisy).
-   .glow-area  a broad, borderless bloom for stages and visuals. */
+   Cursor-following gold light. useGlowPointer sets --mx/--my on glow
+   elements under the mouse (centre until the first move).
+   .glow-card  spotlight plus a gold rim near the pointer; .glow-fill skips the rim.
+   .glow-area  broad borderless bloom for stages and visuals. */
 
 .glow-card,
 .glow-area {

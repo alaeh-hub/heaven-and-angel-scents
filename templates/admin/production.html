@@ -1,4 +1,5 @@
-{% extends "base.html" %}
+{% extends "base.html" %}
+{# Admin: production runs (bottling from bulk batches) #}
 {% import "_empty.html" as empty %}
 {% import "_macros.html" as m %}
 {% block title %}Production Log{% endblock %}
@@ -248,13 +249,7 @@
           <input type="text" id="batch_code" name="batch_code" placeholder="B-2026-08-A">
         </div>
       </div>
-      <!-- Every run draws from a bulk batch (see bulk_batches in
-           schema.sql) — this is what deducts its remaining mL, enforcing
-           "materials go into a batch before they're bottled". Cost of
-           goods, though, comes from the flat base price set per size on
-           the Base Cost of Goods page (see unit_cogs_settings) — not this batch's
-           own real cost/mL, which stays informational (shown on the Bulk
-           Batches page only). -->
+      {# Each run deducts mL from a bulk batch; cost comes from the Base Cost of Goods page. #}
       <div class="field" id="batchField">
         <label for="bulk_batch_id">Bulk batch</label>
         <select id="bulk_batch_id" name="bulk_batch_id">
@@ -271,11 +266,7 @@
             first</a>.</div>
         {% endif %}
       </div>
-      <!-- Cost of goods is computed automatically from the flat base
-           price set per packaging size on the Base Cost of Goods page — this is
-           only a live preview; the authoritative figure is recomputed
-           and frozen server-side in production() when the run is
-           actually logged. -->
+      {# Live preview only; the cost is recomputed server-side when the run is logged. #}
       <div class="help live-slot live-slot-2" id="cogsPreview" style="margin-bottom:var(--space-md);"></div>
       <button type="submit" class="btn btn-accent" style="width:100%;">Save production</button>
     </form>

@@ -1,6 +1,5 @@
-"""AI assistant tools stay aligned with the pages and reports: every tool
-runs cleanly for both roles, and the bottle / bulk-mL split, HQ naming,
-bulk-request guard and COGS maths match the rest of the system.
+"""AI tools stay aligned with the pages: every tool runs for both roles, and the
+bottle / bulk-mL split, HQ naming, bulk-request guard and COGS maths match the system.
 """
 from heaven_angel.routes import ai_tools
 from factories import make_branch, make_product, make_scent, unique_suffix
@@ -54,6 +53,7 @@ ADMIN_TOOLS = {
 
 
 def test_every_tool_runs_for_its_roles(app, sql):
+    """Every tool runs for its roles."""
     branch_id = make_branch(sql)
     sku = make_product(sql)
     _add_sale(sql, branch_id, sku, 1, "100.00", f"Cust {unique_suffix()}")
@@ -70,6 +70,7 @@ def test_every_tool_runs_for_its_roles(app, sql):
 
 
 def test_sales_tools_keep_bulk_ml_apart_and_customer_address(app, sql):
+    """Sales tools keep bulk ml apart and customer address."""
     branch_id = make_branch(sql)
     bottle, base = make_scent(sql)
     bulk = f"{base}-BULK"
@@ -89,6 +90,7 @@ def test_sales_tools_keep_bulk_ml_apart_and_customer_address(app, sql):
 
 
 def test_branch_check_stock_hides_bulk_and_propose_rejects_bulk(app, sql):
+    """Branch check stock hides bulk and propose rejects bulk."""
     branch_id = make_branch(sql)
     # Bulk is not a product: there is no such SKU to check or to request.
     bulk = f"NOPE-{unique_suffix().upper()}-BULK"
@@ -101,12 +103,14 @@ def test_branch_check_stock_hides_bulk_and_propose_rejects_bulk(app, sql):
 
 
 def test_admin_can_name_hq_for_sales(app, sql):
+    """Admin can name hq for sales."""
     with app.test_request_context():
         out = ai_tools.dispatch("get_sales_summary", {"period": "all_time", "branch_name": "HQ"}, _admin_ctx())
     assert "error" not in out, out
 
 
 def test_scent_oil_tool_lists_each_scents_oil_and_flags_the_shared_pool(app, sql):
+    """Scent oil tool lists each scents oil and flags the shared pool."""
     code = "ZZ" + unique_suffix().upper()
     cur = sql.cursor()
     cur.execute("INSERT INTO scent_oils (base_code, scent_name, cost_per_unit, stock_qty) VALUES (%s, 'AI Oil', 3.8, 250)",

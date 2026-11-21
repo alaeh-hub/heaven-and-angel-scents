@@ -13,11 +13,8 @@ function titleCaseLabel(text) {
     return String(text).toLowerCase().replace(/_/g, ' ').replace(/\b\w/g, function (c) { return c.toUpperCase(); });
 }
 
-// HTML legend for a Chart.js chart, rendered into `container`. Chart.js's
-// canvas legend wraps into ragged centred rows on a phone and eats into
-// the plot's fixed height; this one is a real grid (see .chart-legend in
-// style.css) under the canvas. Each chip still toggles its dataset on and
-// off, same as clicking the built-in legend.
+// HTML legend for a chart (a grid, since the canvas legend wraps raggedly on phones).
+// Chips toggle their dataset like the built-in legend.
 function renderChartLegend(chart, container) {
     if (!container) return;
     container.innerHTML = '';
@@ -44,11 +41,9 @@ function renderChartLegend(chart, container) {
     });
 }
 
-// ---- Dashboard chart kit (Boss-Insights style) -------------------------
-// Shared by the admin and branch Reports pages: compact peso formatting,
-// SVG sparklines for KPI tiles, up/down delta chips, a donut with its total
-// in the middle plus a "name / amount / share" list, and one set of Chart.js
-// defaults so every graph reads as one system.
+// ---- Dashboard chart kit ----
+// Shared by admin and branch Reports: peso formatting, sparklines, delta chips,
+// donut with total, and common Chart.js defaults.
 function compactPeso(value) {
     var n = Number(value) || 0;
     var abs = Math.abs(n);
@@ -67,8 +62,7 @@ function pctChange(current, previous) {
     return ((current - previous) / Math.abs(previous)) * 100;
 }
 
-// Chart.js cannot parse every modern CSS colour (oklch, color-mix), so each
-// theme token is resolved to plain sRGB through a 1px canvas first.
+// Chart.js can't parse oklch/color-mix, so resolve theme tokens to sRGB via a canvas.
 var chartColorCtx = null;
 function chartRgb(value) {
     if (!chartColorCtx) {
@@ -85,11 +79,8 @@ function chartRgb(value) {
         : 'rgba(' + d[0] + ',' + d[1] + ',' + d[2] + ',' + (d[3] / 255).toFixed(3) + ')';
 }
 
-// Chart lines, bars and dots must stand out from the surface they sit on (3:1,
-// the usual minimum for graphics). A theme's data colours are free to be pale:
-// Cyberpunk's neon yellow, or the gold, measured 1.3-2:1 on a light page. This
-// deepens such a colour towards black (light surface) or white (dark surface)
-// just far enough to pass, and leaves colours that already pass untouched.
+// Nudge a data colour toward black/white until it has 3:1 contrast on its surface
+// (pale theme colours fail on light pages); colours that already pass are untouched.
 function chartRgbParts(s) {
     var m = /rgba?\(\s*([\d.]+)[,\s]+([\d.]+)[,\s]+([\d.]+)(?:[,\s/]+([\d.]+))?/.exec(String(s));
     return m ? { c: [+m[1], +m[2], +m[3]], a: m[4] === undefined ? 1 : +m[4] } : null;
@@ -121,9 +112,7 @@ function chartTheme() {
     var dark = document.documentElement.getAttribute('data-theme') === 'dark';
     var tok = function (name) { return chartRgb(css.getPropertyValue(name).trim()); };
     var surface = tok('--surface');
-    // What a chart is really drawn on: the first opaque background behind a chart
-    // card or KPI tile (some styles paint these a different colour from --surface,
-    // and the glass styles make the surface translucent), else the page background.
+    // The real backdrop of a chart: first opaque background behind it, else the page's.
     var under = tok('--bg');
     var probe = document.querySelector('.kpi-spark, .chart-canvas-wrap, .donut-wrap, .kpi-tile, .chart-card, .card');
     for (var el = probe; el; el = el.parentElement) {
@@ -153,8 +142,7 @@ function chartTheme() {
     };
 }
 
-// Chart.js defaults + the "total in the middle" doughnut plugin. Safe to
-// call on every data load.
+// Chart.js defaults + the doughnut "total in the middle" plugin; safe to call repeatedly.
 function applyChartDefaults() {
     var t = chartTheme();
     Chart.defaults.font.family = t.font;
@@ -223,13 +211,13 @@ function sparklineSVG(values, color) {
         '</svg>';
 }
 
-// Fills one KPI tile (markup: .kpi-tile > .kpi-value, .kpi-meta, .kpi-spark).
-//   o.value      text for the big number (title gets o.title)
-//   o.delta      change vs previous period, or null (a % unless o.points)
-//   o.points     true when delta is in percentage points (margin tiles)
-//   o.goodWhenUp false for costs: an increase is shown red
-//   o.note       text beside the chip, e.g. "17.1% of total sales"
-//   o.series     values for the sparkline; o.color its colour
+// Fills one KPI tile (.kpi-tile > .kpi-value, .kpi-meta, .kpi-spark).
+//   o.value, o.title  big number text and its tooltip
+//   o.delta           change vs previous period or null (% unless o.points)
+//   o.points          delta is in percentage points (margin tiles)
+//   o.goodWhenUp      false for costs (an increase shows red)
+//   o.note            text beside the chip
+//   o.series, o.color sparkline values and colour
 function fillKpiTile(el, o) {
     if (!el) return;
     var val = el.querySelector('.kpi-value');
@@ -300,9 +288,7 @@ function lineChartOptions(t, yFormat) {
     };
 }
 
-// Keeps a donut readable with many outlets: the biggest (max - 1) rows stay,
-// the rest fold into one "Other (n)" slice, flagged other:true so callers can
-// give it a neutral colour instead of recycling a palette colour.
+// Keep the biggest (max - 1) donut rows; fold the rest into one "Other (n)" slice (other:true).
 function topWithOther(rows, max) {
     var sorted = rows.slice().sort(function (a, b) { return b.value - a.value; });
     if (sorted.length <= max) return sorted;
@@ -327,11 +313,9 @@ function shortDateLabel(iso) {
 }
 
 
-// ---- Empty charts ---------------------------------------------------------
-// A chart with nothing to plot (no sales yet, every value zero) draws bare
-// axes, which reads as broken. Call syncChartEmpties() after the charts are
-// built: any canvas whose chart has no positive value gets a message in its
-// place, and gets its chart back the moment data arrives.
+// ---- Empty charts ----
+// Charts with no positive value get a message instead of bare axes.
+// Call syncChartEmpties() after charts are built.
 var CHART_EMPTY_COPY = {
     profitChart: ['No sales in this window', 'Sales, cost and profit are charted once sales are recorded in the selected period.'],
     salesTrendChart: ['No sales in this window', 'Your sales are charted here once they are recorded in the selected period.'],
@@ -391,13 +375,9 @@ function syncChartEmpties(root) {
     });
 }
 
-// ---- Re-theme live ---------------------------------------------------------
-// Charts, sparklines and legend dots are painted with plain colour values read
-// from the theme once, when they are built. Switching light/dark, the interface
-// style or the accent colour afterwards left them in the old palette (pale lines
-// on a light page, dark axis text on a dark one) until the page was reloaded.
-// This watches for those switches and swaps the old palette for the new one in
-// place: no reload, no new request.
+// ---- Re-theme live ----
+// Chart colours are read from the theme once; re-paint them in place when the
+// light/dark mode, style or accent changes (no reload).
 var chartPalette = null;
 
 function chartPaletteOf(t) {
@@ -422,8 +402,7 @@ function remapChartColors(value, map, seen) {
         for (var i = 0; i < value.length; i++) value[i] = remapChartColors(value[i], map, seen);
         return value;
     }
-    // Chart.js builds its option objects without a normal prototype, so test what the
-    // object is rather than what it inherits from.
+    // Chart.js option objects lack a normal prototype, so test the type directly.
     if (typeof Node !== 'undefined' && value instanceof Node) return value;
     if (value instanceof Date || typeof value.getContext === 'function') return value;
     Object.keys(value).forEach(function (k) {
@@ -466,8 +445,7 @@ function rethemeCharts() {
             chart.update('none');
         });
     }
-    // Sparklines (stroke / fill attributes) and anything coloured with an inline style
-    // from a theme colour, e.g. the dots beside a doughnut's legend.
+    // Re-colour sparklines and inline-styled theme colours (e.g. donut legend dots).
     document.querySelectorAll('.kpi-spark-svg *').forEach(function (el) {
         ['stroke', 'fill'].forEach(function (attr) {
             var v = el.getAttribute(attr);

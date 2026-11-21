@@ -3,36 +3,12 @@
 
 
 
-# Column keys that are money/int/num but shouldn't be summed into a
-# report's totals row — a per-unit price summed across rows produces a
-# meaningless number (e.g. three ₱85 sales don't total to "₱255 of
-# unit price"), unlike qty/line-total columns where a sum is a genuine
-# total. Kept as a small denylist rather than an opt-in flag on every
-# column definition, since every other money/int/num column across
-# every report *is* meant to total.
-#
-# cost_per_unit/cogs_per_unit are the same "per-unit price" shape as
-# unit_price (raw_materials/cogs_logs' own per-unit cost, not a line
-# total). price/hq_price (products.price, shown as-is on the Products
-# and Branch Stock reports) are that exact same per-unit reference
-# price too — summing it across unrelated products is just as
-# meaningless as summing unit_price across unrelated sales. qty_per_unit
-# (unit_formula_items) and package_qty (raw_materials) are both a
-# quantity in whatever unit that particular material happens to use
-# (grams, mL, pieces, ...) — unlike a plain piece-count like
-# qty_sold/qty_produced on a bottled product (a bulk product's rows
-# hold mL instead; split_bulk_quantities() moves those into their own
-# column so they're totalled apart), summing these across rows for different materials on the
-# same report would add incompatible units together (e.g. grams +
-# milliliters) into a number that means nothing. cost_per_ml (a bulk
-# batch's cost per mL) is the same per-unit shape as cost_per_unit, and
-# turnover (Branch Performance) is a ratio per branch, not an amount.
+# Columns never summed in totals rows: per-unit prices/costs, ratios and counts
+# across different materials or products add up to a meaningless number.
 NO_TOTAL_COLUMNS = {"unit_price", "cost_per_unit", "cogs_per_unit",
                     "qty_per_unit", "package_qty", "price", "hq_price",
                     "cost_per_ml", "turnover",
-                    # A reorder threshold / current material stock is a
-                    # per-row level, and inventory_log's change is signed
-                    # (in and out net to nothing meaningful).
+                    # Per-row levels and signed changes (in and out net to nothing meaningful).
                     "reorder_level", "stock_on_hand", "change_qty", "change_qty_bulk_ml",
                     # Partner Inquiries' quoted amount covers every lead;
                     # only the Closed-only sale_amount column is a total.
@@ -44,9 +20,7 @@ NO_TOTAL_COLUMNS = {"unit_price", "cost_per_unit", "cogs_per_unit",
                     "purchase_count"}
 
 
-# Per-row quantity columns that hold mL rather than a bottle count on a
-# bulk product's row (products.unit = 'BULK'): qty_sold, stock and
-# production quantities are all recorded in mL for bulk.
+# Columns holding mL (not bottles) on a bulk product's row (products.unit = 'BULK').
 BULK_QTY_COLUMNS = {"qty_sold", "stock_qty", "total_stock", "qty_produced", "change_qty"}
 
 

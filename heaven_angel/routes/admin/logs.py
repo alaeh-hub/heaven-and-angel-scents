@@ -18,15 +18,8 @@ from heaven_angel.routes.admin._common import bp
 def movement_logs():
     """Production/Sale/Refill activity only.
 
-    Stock-request-driven movements (DISPATCH, RECEIPT, DAMAGE,
-    ADJUSTMENT — every row tagged reference_type='STOCK_REQUEST' by
-    dispatch_request() / receive_stock()) are deliberately excluded
-    here. A delivery can carry any number of SKUs at once now, so one
-    row here — one branch, one item, one qty — would misrepresent it
-    and just duplicate what the delivery's own review page and its
-    receipt PDF already show in full, correctly grouped under one
-    delivery number. See requests_list()/review_request() and
-    receipts.py for that history instead.
+    Stock-request movements (reference_type='STOCK_REQUEST') are excluded: a delivery's
+    own page and receipt show them grouped.
     """
     branch_filter = request.args.get("branch_id", "all")
     sql = """SELECT sml.*, b.branch_name, p.item_name
@@ -49,28 +42,13 @@ def movement_logs():
 @bp.route("/discrepancies")
 @admin_required
 def discrepancies():
-    """Fleet-wide view of delivery discrepancies — DAMAGE (reported at
-    receipt) and ADJUSTMENT (dispatched but never received/accounted
-    for — see branch.py's receive_stock() shortfall handling) rows tied
-    to a delivery (reference_type='STOCK_REQUEST'), across every branch.
-
-    Each delivery's own receipt already shows this per-item, and each
-    branch has its own Discrepancies page scoped to itself (see
-    branch.py's discrepancies()) — this is the admin-side rollup that
-    lets HQ spot a bad courier or a branch that keeps reporting damage/
-    shortfall, instead of only ever seeing one delivery at a time on
-    review_request().
-    """
+    """Fleet-wide delivery discrepancies (DAMAGE and ADJUSTMENT rows) across every branch."""
     branch_filter = request.args.get("branch_id", "all")
     branch_list = query(
         "SELECT branch_id, branch_name FROM branches WHERE is_hq = FALSE ORDER BY branch_name")
 
-    # Per-branch rollup, always fleet-wide regardless of the tab below.
-    # Units come from each delivery line (see reports.py's
-    # DISCREPANCY_UNITS_SQL): the log rows themselves carry
-    # change_qty = 0, so summing that always showed 0 damaged/shortfall
-    # units. The total is damaged + shortfall units, so the three
-    # columns always add up.
+    # Per-branch rollup, always fleet-wide. Units come from delivery lines (the log rows
+    # carry change_qty = 0); total = damaged + shortfall.
     summary = query(
         f"""SELECT b.branch_id, b.branch_name,
                   COUNT(DISTINCT sml.reference_id) AS deliveries_affected,
@@ -93,9 +71,7 @@ def discrepancies():
         s["total_units"] = s["damaged_units"] + s["shortfall_units"]
     summary.sort(key=lambda s: (-s["total_units"], -s["damaged_units"], s["branch_name"]))
 
-    # Detail log — same shape as branch.py's discrepancies(), just
-    # joined across every branch and filterable by one, same
-    # all/per-branch tabs convention as low_stock().
+    # Detail log: like branch.py's discrepancies(), across branches, with per-branch tabs.
     sql = f"""SELECT sml.*, p.item_name, b.branch_name, sr.delivery_number,
                      {DISCREPANCY_UNITS_SQL} AS units_lost
               FROM stock_movement_logs sml
@@ -130,19 +106,11 @@ def discrepancies():
 @bp.route("/audit-log")
 @admin_required
 def audit_log():
-    """Non-inventory admin activity — account/product/branch changes.
-
-    Separate from the Movement Ledger above on purpose: that ledger is
-    strictly stock quantity events (production/dispatch/receipt/sale/
-    damage), while this covers everything else an admin can do that
-    isn't a stock movement. See audit.py for how entries get written.
-    """
+    """Non-inventory admin activity (account, product, branch changes); see audit.py."""
     page = max(request.args.get("page", 1, type=int) or 1, 1)
     page_size = 300
     offset = (page - 1) * page_size
-    # Fetch one extra row to know whether another page exists, without a
-    # separate COUNT(*) query — see login_activity_log() below for the
-    # same pattern.
+    # Fetch one extra row to know if another page exists (no COUNT query).
     rows = query(
         """SELECT action_id, actor_username, action, target, details, created_at
            FROM admin_actions
@@ -159,17 +127,10 @@ def audit_log():
 @bp.route("/login-activity")
 @admin_required
 def login_activity_log():
-    """Every sign-in attempt, successful or not — separate from Admin
-    Log above, which only ever covers changes an already-authenticated
-    admin makes, never the act of signing in itself. See login_activity.py
-    for how entries get written (from routes/auth.py's login()).
+    """Every sign-in attempt, successful or not (see login_activity.py).
 
-    username_attempted / role_attempted are what was actually typed at
-    the time, kept even if that username never matched a real account
-    (a typo, or someone probing for valid logins) or if the matching
-    account's username has since changed — current_username shows what
-    that account is called today, for cross-reference, when the two
-    differ.
+    username_attempted is what was typed, kept even if no account matched;
+    current_username is the account's name today.
     """
     outcome_filter = request.args.get("outcome", "all")
     page = max(request.args.get("page", 1, type=int) or 1, 1)
@@ -182,8 +143,7 @@ def login_activity_log():
         sql += " WHERE la.success = TRUE"
     elif outcome_filter == "failed":
         sql += " WHERE la.success = FALSE"
-    # Fetch one extra row to know whether another page exists, without a
-    # separate COUNT(*) query.
+    # Fetch one extra row to know if another page exists (no COUNT query).
     sql += " ORDER BY la.created_at DESC LIMIT %s OFFSET %s"
     rows = query(sql, (page_size + 1, offset))
     has_next = len(rows) > page_size
@@ -197,9 +157,7 @@ def login_activity_log():
         fetchone=True,
     )
 
-    # Usernames with several failed attempts in the last 24 hours —
-    # worth a second look (repeated typos from a real user, or someone
-    # actively guessing at an account's password).
+    # Usernames with several failed attempts in the last 24 hours.
     recent_failures = query(
         """SELECT username_attempted, COUNT(*) AS attempt_count, MAX(created_at) AS last_attempt_at
            FROM login_activity

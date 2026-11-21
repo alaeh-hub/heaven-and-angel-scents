@@ -1,12 +1,8 @@
-"""Tiny row-builders for tests — each inserts one row directly via a raw
-DB connection (the `sql` fixture in conftest.py) and returns what a test
-needs to act on it. Every name is uuid-suffixed so tests never collide
-with each other or with schema.sql's own seeded branches (1/2/3), even
-though they all share one test database for the whole session (see
-conftest.py's `_test_database` fixture) — nothing here ever cleans up
-after itself, by design: the entire test database is dropped at the end
-of the session, so leftover rows are harmless as long as every test only
-ever looks at its own uniquely-named rows.
+"""Tiny row-builders for tests: each inserts one row via the `sql` fixture.
+
+Names are uuid-suffixed so tests never collide with each other or with the
+seeded branches (1/2/3). Nothing is cleaned up: the whole test database is
+dropped at session end, so tests must only look at their own rows.
 """
 import re
 import uuid
@@ -17,14 +13,9 @@ _FORM_TOKEN_RE = re.compile(rb'name="form_token" value="([^"]*)"')
 
 
 def get_form_token(client, endpoint):
-    """GET `endpoint` and pull out the hidden form_token field a route
-    protected by utils.issue_form_token()/consume_form_token() renders.
+    """GET `endpoint` and return the hidden form_token a single-use-token route renders.
 
-    Needed before POSTing to any such route in a test: the token is
-    single-use and tied to the session by the GET that rendered it (see
-    utils.py's module docstring on single-use form tokens) — a POST
-    with no token, or last test's stale one, is now rejected the same
-    way a real double-submit would be.
+    Needed before POSTing to such a route: the token is single-use and tied to the session.
     """
     resp = client.get(endpoint)
     match = _FORM_TOKEN_RE.search(resp.data)
@@ -207,13 +198,9 @@ def make_user(sql, role, branch_id=None, password="Test-Passw0rd!",
 
 
 def make_raw_material(sql, unit="Gram", package_qty="100.000", package_cost="100.00"):
-    """Insert a raw material the way admin.py's materials() would — a
-    purchase log entry, cost_per_unit worked out from package_cost/
-    package_qty, and stock_qty seeded to package_qty (a freshly added
-    material starts with everything it was just bought at fully in
-    stock — see raw_materials in schema.sql). Nothing deducts from
-    stock_qty except a bulk batch actually consuming it (see
-    make_bulk_batch()/create_bulk_batch()).
+    """Insert a raw material like the Materials page: cost_per_unit from cost / qty, stock = package_qty.
+
+    Only a bulk batch (see make_bulk_batch()/create_bulk_batch()) deducts stock_qty.
     """
     name = f"Test Material {unique_suffix()}"
     cost_per_unit = float(package_cost) / float(package_qty)
@@ -243,12 +230,7 @@ PRODUCTION_URL = "/admin/production"
 
 def log_production(client, sku, qty_produced, batch_code=None, bulk_batch_id=None,
                     rate_per_ml=None, **kwargs):
-    """POST to admin.production() the way the "Log a production run" form
-    does. A Bottled size now requires bulk_batch_id (its real cost/mL
-    prices the run — see bulk_batches in schema.sql); Bulk/Refill instead
-    requires rate_per_ml. Callers pass whichever one applies to their
-    product's category.
-    """
+    """POST to the production form. Bottled needs bulk_batch_id; Bulk/Refill needs rate_per_ml."""
     token = get_form_token(client, PRODUCTION_URL)
     data = {"form_token": token, "sku": sku, "qty_produced": str(qty_produced)}
     if batch_code:
@@ -261,13 +243,10 @@ def log_production(client, sku, qty_produced, batch_code=None, bulk_batch_id=Non
 
 
 def make_bulk_batch(sql, items, input_qty="1000.000", input_unit="Milliliter", scent_name=None):
-    """Insert a bulk batch directly (bypassing create_bulk_batch()'s own
-    route/transaction, but matching its actual cost math) for tests that
-    need an existing batch to bottle from rather than testing batch
-    creation itself. `items` is a list of (material_id, qty_used,
-    cost_per_unit) triples. Unlike the real route, this does NOT deduct
-    raw_materials.stock_qty — tests covering that deduction go through
-    create_bulk_batch() directly instead.
+    """Insert a bulk batch directly, matching create_bulk_batch()'s cost math.
+
+    `items` is a list of (material_id, qty_used, cost_per_unit). Unlike the real
+    route it does NOT deduct raw_materials.stock_qty.
     """
     ml_per_unit = {"Milliliter": 1, "Liter": 1000, "Gallon": 3200}
     total_volume_ml = float(input_qty) * ml_per_unit[input_unit]
@@ -284,9 +263,7 @@ def make_bulk_batch(sql, items, input_qty="1000.000", input_unit="Milliliter", s
     )
     batch_id = cur.lastrowid
     for material_id, qty_used, cost_per_unit in items:
-        # qty_used_unit is stored alongside qty_used/cost_per_unit_snapshot
-        # (see migration 39 in schema.sql) — tests here always give amounts
-        # already in the material's own purchase unit, so use that.
+        # qty_used_unit (migration 39): tests pass amounts in the purchase unit.
         cur.execute("SELECT unit FROM raw_materials WHERE material_id = %s", (material_id,))
         qty_used_unit = cur.fetchone()[0]
         cur.execute(
@@ -302,12 +279,7 @@ def make_bulk_batch(sql, items, input_qty="1000.000", input_unit="Milliliter", s
 
 
 def set_unit_cogs(sql, unit, base_cost_per_unit):
-    """Set a Bottled packaging size's flat base cost of goods directly
-    (bypassing save_unit_cogs()'s own route, but matching its upsert
-    semantics) — see unit_cogs_settings in schema.sql. This is what
-    production() logs as cogs_per_unit for that size, independent of
-    whichever bulk batch a run draws from (see make_bulk_batch()).
-    """
+    """Set a Bottled size's flat base cost directly (what production() logs as cogs_per_unit)."""
     cur = sql.cursor()
     cur.execute(
         """INSERT INTO unit_cogs_settings (unit, base_cost_per_unit) VALUES (%s, %s)
@@ -336,18 +308,11 @@ def get_cogs_logs(sql, sku):
 
 
 def make_stock_request(sql, branch_id, items, status="Pending"):
-    """Insert a delivery header + line items directly (bypassing
-    request_stock() itself) so dispatch/receive/reject tests can set up
-    a request already in whatever state (and with whatever
-    dispatched_qty/received_qty already filled in) they need to exercise,
-    without going through the full multi-step request -> dispatch ->
-    receive flow just to get there.
+    """Insert a delivery header and items directly, in any state a test needs.
 
-    Each entry in `items` is a dict with at least sku/requested_qty;
-    unit_price/dispatched_qty/received_qty/damaged_qty all default the
-    same way a fresh Pending request line would. An In Transit request
-    with dispatched lines also gets a matching shipment fixture.
-    Returns request_id.
+    Each `items` dict needs sku/requested_qty; unit_price, dispatched_qty,
+    received_qty and damaged_qty default like a fresh Pending line. An In Transit
+    request with dispatched lines also gets a shipment fixture. Returns request_id.
     """
     cur = sql.cursor()
     cur.execute(

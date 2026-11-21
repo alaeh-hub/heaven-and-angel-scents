@@ -16,8 +16,7 @@ export function AnimatedRays({
 }: AnimatedRaysProps) {
     const [isDark, setIsDark] = useState(false);
     const [mounted, setMounted] = useState(false);
-    // The drift only runs while the rays are on screen: a blended, blurred
-    // layer repainting every frame offscreen is pure waste.
+    // Drift runs only on screen (a blurred blended layer is costly offscreen).
     const [visible, setVisible] = useState(false);
     const rootRef = useRef<HTMLElement>(null);
 

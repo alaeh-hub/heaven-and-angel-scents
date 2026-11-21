@@ -5,13 +5,7 @@ import { SCENTS, SCENT_BOTTLE_CENTRE } from '../../content/scents.js';
 import { thumb } from '../../content/scentImages.js';
 import Reveal from '../Reveal.jsx';
 
-/**
- * "About the brand": the heading and story across the top, then the
- * photographs (a large landscape with a smaller portrait overlapping its
- * corner) beside three short facts that arrive one after another. Copy
- * and photos live in content/about.js (placeholders for now). Shares a plain
- * black ground with the craft film (.house).
- */
+/** "About the brand": story, photos and three facts; copy in content/about.js. */
 const PICKS = [SCENTS[0], SCENTS.find((s) => s.variant === 'Male'), SCENTS[4]].filter(Boolean);
 
 export default function About() {

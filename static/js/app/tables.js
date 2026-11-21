@@ -52,31 +52,17 @@ function initDispatchQtyWarnings() {
     });
 }
 
-// Anchors a paginated table/list's own top edge to the same scroll
-// position on every Prev/Next click, instead of leaving it to chance.
-// Without this: paging to a much shorter page (e.g. a last page with
-// one leftover row) shrinks the document underneath an unmoved scroll
-// position, so the browser clamps scrollTop to the new, shorter max —
-// which happens to land right back on the now-nearby pagination
-// controls. Paging back to a taller page doesn't reverse that:
-// scrollTop stays exactly where it was clamped to, now sitting
-// somewhere mid-table on the taller page, with its rows and controls
-// pushed down out of view below it — the user has to scroll down again
-// to find them. Scrolling the container's top into view on every click
-// (not just when it happens to be needed) keeps the anchor point the
-// same regardless of which direction the row count just changed.
+// Keeps a paginated list's top edge at the same scroll position on every Prev/Next,
+// since a shorter page clamps scrollTop and leaves the user mid-table on a taller one.
 function scrollPaginatedContainerIntoView(container) {
     const behavior = window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth';
     container.scrollIntoView({ behavior, block: 'start' });
 }
 
-// Opt-in: data-fit-to="<css selector>" on a [data-smart-table] makes the card
-// that holds it exactly as tall as the card the selector finds (the page's own
-// CSS stretches the list card to that row height), shows as many rows per page
-// as fit in that height, and shares the leftover pixels between the rows so
-// the table ends flush with the pagination bar. It re-fits when the reference
-// card resizes (a form that grows or shrinks) and on window resize. Under the
-// two-column breakpoint it goes back to the table's own data-page-size.
+// Opt-in: data-fit-to="<selector>" on a [data-smart-table] makes its card as tall as the
+// matched card, shows as many rows as fit and spreads leftover pixels so the table ends
+// flush with pagination. Re-fits on reference or window resize; under the two-column
+// breakpoint it uses its own data-page-size.
 function setupFitToSibling(container, getRows, setRows) {
     const refSel = container.dataset.fitTo;
     const card = container.closest('.card');
@@ -126,9 +112,7 @@ function setupFitToSibling(container, getRows, setRows) {
     if (typeof ResizeObserver === 'function') {
         ro = new ResizeObserver(schedule);
         ro.observe(ref);
-        // The fixed parts around the rows (title, search bar, pagination,
-        // footnote) change height when text wraps differently or a web font
-        // finishes loading; each of those needs a re-fit too.
+        // Surrounding parts (title, search, pagination) change height on wrap or font load: re-fit.
         ['.card-header', '.table-toolbar', '.smart-pagination', '.pg-foot'].forEach((sel) => {
             const el = card.querySelector(sel);
             if (el) ro.observe(el);
@@ -139,14 +123,11 @@ function setupFitToSibling(container, getRows, setRows) {
     schedule();
 }
 
-// ---- Click-to-sort column headers, for every table that can take it. ----
-// A header becomes a button; click cycles ascending, descending, back to the
-// original order (aria-sort says which). The type of a column is read from its
-// own cells: all numbers (₱1,200.50, 45%, 500 mL, +12) sort numerically, all
-// dates by time, anything else as text with embedded numbers in order. Empty
-// and "None"-style cells always sink to the bottom. A table is left alone when
-// it can't be sorted safely: a cell spans columns, a row edits inputs, or the
-// header and rows don't line up. Opt out with data-no-sort on the table.
+// ---- Click-to-sort headers ----
+// A header becomes a button cycling ascending, descending, original (aria-sort).
+// Column type comes from its cells: numbers (money, %, mL) numeric, dates by time,
+// else text with embedded numbers in order. Empty/"None" cells sink to the bottom.
+// Skipped when unsafe (spanning cells, input rows, misaligned header). data-no-sort opts out.
 const SORT_BLANK = /^(|none|n\/a|not costed|-|—|–)$/i;
 const SORT_NUMBER = /^[+\-−]?\d*\.?\d+(?:e\d+)?\s*(%|ml|l|g|kg|u|x|pcs?|bottles?)?$/i;
 const SORT_LEADING = /^[+\-−]?\d*\.?\d+(?!\d*-\d)\s*[a-z%\/]/i;
@@ -247,9 +228,10 @@ function initPlainTableSort() {
     });
 }
 
-// A scrolling table region has to be reachable from the keyboard, or a person
-// who can't use a mouse can't scroll it. Only the ones that really scroll.
+// A table region that really scrolls must be reachable by keyboard.
 function initScrollableTableRegions() {
+    // Phone tables are stacked cards (680px): nothing scrolls, so skip layout reads.
+    if (window.matchMedia('(max-width: 680px)').matches) return;
     document.querySelectorAll('.table-wrap').forEach((wrap) => {
         const scrolls = wrap.scrollHeight > wrap.clientHeight + 1 || wrap.scrollWidth > wrap.clientWidth + 1;
         if (scrolls && !wrap.hasAttribute('tabindex')) {
@@ -288,12 +270,8 @@ function initSmartTables() {
             rowText.set(r, extra && extra !== visible ? visible + ' ' + extra : visible);
         });
 
-        // Opt-in (table-collapsible, see style.css's @media (max-width:
-        // 680px) rules) — each row's mobile card starts collapsed to
-        // just its .mobile-inline-anchor/.mobile-inline-action, with a
-        // "Details" bar at the bottom to reveal its .mobile-detail
-        // cells (Qty/Price/Total/Payment on Record Sale's recent-sales
-        // list) instead of dumping all of them at once.
+        // Opt-in (table-collapsible, mobile CSS): each row's card starts collapsed to its
+        // .mobile-inline-anchor/.mobile-inline-action, with a "Details" bar to reveal the rest.
         if (table.classList.contains('table-collapsible')) {
             rows.forEach((row) => {
                 const toggleBtn = row.querySelector('.row-toggle-btn');
@@ -336,9 +314,7 @@ function initSmartTables() {
             const q = input ? input.value.trim().toLowerCase() : '';
             const fval = filterSelect ? filterSelect.value : '';
             filtered = rows.filter((r) => {
-                // Plain substring first (cheap, and what people expect for
-                // exact bits like an OR# or phone), then the shared smart
-                // matcher: words in any order and one small typo.
+                // Plain substring first (cheap, e.g. an OR# or phone), then the smart matcher.
                 const text = rowText.get(r);
                 const matchesSearch = !q || text.indexOf(q) !== -1
                     || (window.SmartMatch ? window.SmartMatch.score(q, text, '') !== -1 : false);
@@ -370,9 +346,7 @@ function initSmartTables() {
             }
 
             if (countTarget) {
-                // data-count-distinct: count unique row data-count-key
-                // values instead of rows (e.g. Products counts SKUs by
-                // base code, so A1-85ML and A1-BULK are one).
+                // data-count-distinct counts unique data-count-key values, not rows (e.g. SKUs by base code).
                 const count = 'countDistinct' in container.dataset
                     ? new Set(filtered.map((r) => r.dataset.countKey || r)).size
                     : filtered.length;
@@ -398,8 +372,7 @@ function initSmartTables() {
             });
         }
 
-        // A page can change data-page-size (e.g. Products fits as many rows
-        // as the card beside it is tall) and fire this to re-paginate.
+        // A page can change data-page-size and fire this to re-paginate.
         container.addEventListener('smart-table-repage', () => {
             pageSize = parseInt(container.dataset.pageSize, 10) || 10;
             render();
@@ -413,16 +386,9 @@ function initSmartTables() {
     initScrollableTableRegions();
 }
 
-// Pagination-only counterpart to initSmartTables() for pages that show a
-// paginated list of cards/blocks rather than a <table> — e.g. a partner's
-// inquiry history, or the shipment blocks on Receive Stock. There's no
-// search here on purpose (see the two call sites): each item's content
-// isn't a flat row of short cell text, so a text search box would be
-// awkward to use, and pagination alone already caps how much renders at
-// once. Container needs data-smart-list, data-page-size, and
-// data-list-item-selector (the CSS selector for one "item" inside it);
-// pagination controls follow the same .smart-pagination markup used by
-// initSmartTables() so the two share styling.
+// Pagination-only counterpart of initSmartTables() for lists of cards/blocks (no search).
+// Container needs data-smart-list, data-page-size and data-list-item-selector;
+// controls reuse the .smart-pagination markup.
 function initSmartLists() {
     document.querySelectorAll('[data-smart-list]').forEach((container) => {
         const itemSelector = container.dataset.listItemSelector || '.smart-list-item';
@@ -469,9 +435,8 @@ function initSmartLists() {
 }
 
 
-// An empty state's action can click a button that is already on the page
-// ("New sale", "+ Add material"): <button data-click-target="openNewSaleBtn">.
-// Delegated on document, so it survives soft navigation and re-rendered lists.
+// Empty-state buttons can click a page button: <button data-click-target="openNewSaleBtn">.
+// Delegated on document, so it survives soft nav and re-rendered lists.
 document.addEventListener('click', (e) => {
     const btn = e.target.closest('[data-click-target]');
     if (!btn) return;

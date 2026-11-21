@@ -14,22 +14,11 @@ from heaven_angel.logging_setup import REQUEST_ID_OK, configure_logging
 from heaven_angel.template_helpers import register_error_handlers, register_template_helpers
 
 
-# Content-Security-Policy for Talisman below. script-src has no
-# 'unsafe-inline': every inline <script> carries the per-request nonce
-# ({{ csp_nonce() }}), and templates use data- attributes handled in
-# static/js/app/ instead of on*= handlers. style-src keeps 'unsafe-inline'
-# because the templates use several hundred inline style="" attributes; that
-# is the remaining gap. Clickjacking, MIME-sniffing and (in production) HSTS
-# are covered regardless.
+# CSP: nonce for inline scripts; inline styles still allowed (known gap).
 _CSP = {
     "default-src": "'self'",
     "script-src": ["'self'"],
-    # motion.js used to load from cdn.jsdelivr.net — it's now vendored at
-    # static/js/motion.js (see base.html / login.html), so jsdelivr no
-    # longer needs to be here. Being a third-party origin was also why
-    # Edge's Tracking Prevention / Brave Shields blocked it from storage
-    # access in the console — self-hosting removes that too, since the
-    # browser now sees it as same-origin.
+    # motion.js is self-hosted (static/js/motion.js), so no jsdelivr origin is needed.
     "style-src": ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
     "font-src": ["'self'", "https://fonts.gstatic.com"],
     "connect-src": ["'self'", "wss:", "ws:"],
@@ -43,6 +32,7 @@ PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
 def _load_config(app, environment):
+    """Load config from the environment (Production when APP_ENV says so)."""
     config_class = CONFIG_BY_ENV.get(environment)
     if config_class is None:
         raise RuntimeError(f"Unsupported APP_ENV: {environment}")
@@ -57,9 +47,7 @@ def _load_config(app, environment):
         )
 
     if not app.config.get("PARTNER_PORTAL_SLUG"):
-        # See config.py's PARTNER_PORTAL_SLUG comment: this keeps local
-        # dev usable out of the box, but a real deployment should set
-        # PARTNER_PORTAL_SLUG explicitly so the shared link is stable.
+        # Local-dev fallback only; production must set PARTNER_PORTAL_SLUG (see config.py).
         app.config["PARTNER_PORTAL_SLUG"] = secrets.token_urlsafe(12)
         if not app.config["DEBUG"]:
             app.logger.warning(
@@ -72,17 +60,15 @@ def _load_config(app, environment):
 
 
 def _trust_proxy_if_configured(app):
+    """Trust X-Forwarded-* headers when running behind the reverse proxy."""
     if os.environ.get("TRUST_PROXY", "0") == "1":
-        # Behind a reverse proxy (Caddy in docker-compose.yml) every request
-        # arrives from the proxy's IP over plain HTTP. Without this, rate
-        # limiting would treat all users as one client and Talisman would
-        # redirect-loop trying to force HTTPS. Only enable it when the app is
-        # reachable exclusively through that proxy, or X-Forwarded-* can be forged.
+        # Behind Caddy: trust proxy headers. Only enable if the app is reachable solely via the proxy.
         from werkzeug.middleware.proxy_fix import ProxyFix
         app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 
 
 def _install_request_id(app):
+    """Stamp every request with an ID for logs and the X-Request-ID header."""
     @app.before_request
     def _assign_request_id():
         # Reuse the proxy's/client's ID when it looks sane, so a support
@@ -105,6 +91,7 @@ def _install_request_id(app):
 
 
 def _init_extensions(app, environment):
+    """Attach the limiter, CSRF, Talisman and Socket.IO to the app."""
     db.init_app(app)
     CSRFProtect(app)
     limiter.init_app(app)
@@ -116,13 +103,7 @@ def _init_extensions(app, environment):
         force_https=(environment == "production"),
         strict_transport_security=(environment == "production"),
         session_cookie_secure=app.config["SESSION_COOKIE_SECURE"],
-        # Permissions-Policy: switch off every browser feature this app does
-        # not use, so a compromised or embedded page cannot reach them. The
-        # only one it needs is the camera, for the receipt QR scanner
-        # (static/js/scan.js), and only from its own pages. Kept to the widely
-        # implemented feature names so browsers do not log "Unrecognized
-        # feature" for the header (the reason Talisman's default
-        # `browsing-topics=()` was dropped before).
+        # Permissions-Policy: everything off except the camera (receipt QR scanner).
         permissions_policy={
             "camera": "(self)",
             "microphone": "()",
@@ -145,6 +126,7 @@ def _init_extensions(app, environment):
 
 
 def _register_blueprints(app):
+    """Register all route blueprints."""
     from heaven_angel.routes.auth import bp as auth_bp
     from heaven_angel.routes.admin import bp as admin_bp
     from heaven_angel.routes.branch import bp as branch_bp
@@ -195,14 +177,7 @@ def _register_site_routes(app):
 
     @app.route("/robots.txt")
     def robots_txt():
-        # Every page here is either login-gated (admin/branch/ai) or
-        # slug-gated (the partner portal — see routes/portal.py) and never
-        # meant to be publicly discoverable, so search engines are blocked
-        # site-wide. The chat/social link-preview fetchers are the exception:
-        # when HQ shares a portal link in Messenger/Viber/etc., they must
-        # read the page's Open Graph tags and the preview image, and some
-        # honour robots.txt. The page itself still carries `noindex`, and a
-        # wrong slug still 404s, so allowing them exposes nothing new.
+        # Block search engines site-wide, but let link-preview bots read the portal's Open Graph tags.
         preview_bots = (
             "facebookexternalhit", "Facebot", "meta-externalagent", "Twitterbot",
             "LinkedInBot", "Slackbot", "Slack-ImgProxy", "TelegramBot", "WhatsApp",
@@ -215,6 +190,7 @@ def _register_site_routes(app):
 
 
 def _ensure_support_tables(app):
+    """Create small support tables if missing (self-heal for restored backups)."""
     from heaven_angel.services import audit, login_activity
 
     for module, label in ((audit, "admin_actions audit"), (login_activity, "login_activity")):
@@ -233,6 +209,7 @@ def _should_run_background_workers(app, env_flag):
 
 
 def _start_background_workers(app):
+    """Start the backup scheduler and other background threads."""
     # Scheduled backups (Settings -> Backup): one background thread per process.
     if _should_run_background_workers(app, "BACKUP_SCHEDULER"):
         from heaven_angel.services import backup_jobs
@@ -245,6 +222,7 @@ def _start_background_workers(app):
 
 
 def create_app():
+    """Application factory."""
     # root_path is the project root (not this package) so templates/, static/
     # and backups/ keep living beside the code package.
     app = Flask(__name__, root_path=PROJECT_ROOT)

@@ -11,13 +11,9 @@ const MIN_SETS = 1;
 const MAX_SETS = 20;
 
 /**
- * "What you'd earn": pick a package and how many sets, and the three
- * figures that decide a reseller's order (what they pay, what it sells
- * for at our list price, the profit in between) roll to their new
- * values. The estimate is honest about its assumption: it's the gap
- * between the partner price and our own list price, nothing else.
- * Only packages that actually carry a discount are offered; with none,
- * the section doesn't render.
+ * "What you'd earn": pick a package and sets; what they pay, list-price
+ * sell value and profit roll to new values. Only discounted packages are
+ * offered; with none the section does not render.
  */
 /** The packages the estimate can be shown for: those with a discount. */
 export const earningOptions = (packages) => packages.filter((p) => p.reference_total - p.discounted_total > 0.005);

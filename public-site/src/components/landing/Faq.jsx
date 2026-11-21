@@ -6,6 +6,7 @@ import { EASE_OUT, SPRING } from '../../motion.js';
 import Chapter from '../Chapter.jsx';
 import Reveal from '../Reveal.jsx';
 
+// Question/answer pairs shown in the FAQ.
 const FAQS = [
   ["What's the difference between a Distributor and a Reseller?",
     'A Distributor resells further down a chain of their own (think other stores or sub-resellers). A Reseller sells directly to end customers. Both are bulk buyers, and some packages are open to either.'],
@@ -23,6 +24,7 @@ const FAQS = [
     "It's the difference between the partner price you pay and our own regular list price for the same products. If you sell at a different price, your margin changes with it."],
 ];
 
+// One question row that expands to show its answer.
 function FaqItem({ question, answer, open, onToggle, index }) {
   const id = useId();
   return (
@@ -57,6 +59,7 @@ function FaqItem({ question, answer, open, onToggle, index }) {
   );
 }
 
+// FAQ accordion: one answer open at a time.
 export default function Faq() {
   const [open, setOpen] = useState(0);
   const { site, openInquiry } = useSite();

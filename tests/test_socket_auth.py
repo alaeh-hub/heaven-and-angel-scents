@@ -8,16 +8,19 @@ def _connect(app, client):
 
 
 def test_active_branch_user_connects(app, client, sql):
+    """Active branch user connects."""
     user = make_user(sql, role="Branch", branch_id=make_branch(sql))
     login(client, user["username"], user["password"], "Branch")
     assert _connect(app, client).is_connected()
 
 
 def test_anonymous_visitor_is_refused(app, client):
+    """Anonymous visitor is refused."""
     assert not _connect(app, client).is_connected()
 
 
 def test_deactivated_account_is_refused_even_with_a_valid_cookie(app, client, sql):
+    """Deactivated account is refused even with a valid cookie."""
     user = make_user(sql, role="Branch", branch_id=make_branch(sql))
     login(client, user["username"], user["password"], "Branch")
     cur = sql.cursor()
@@ -28,6 +31,7 @@ def test_deactivated_account_is_refused_even_with_a_valid_cookie(app, client, sq
 
 
 def test_session_from_before_a_password_change_is_refused(app, client, sql):
+    """Session from before a password change is refused."""
     user = make_user(sql, role="Admin", branch_id=None)
     login(client, user["username"], user["password"], "Admin")
     cur = sql.cursor()

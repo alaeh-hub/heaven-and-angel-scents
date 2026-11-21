@@ -1,7 +1,6 @@
 import { useEffect } from 'react';
 
-// Counted, so the inquiry form opening/closing inside the package
-// dialog doesn't unlock the page behind that dialog.
+// Counted, so a nested dialog closing does not unlock the page early.
 let locks = 0;
 
 export function useBodyScrollLock(active) {

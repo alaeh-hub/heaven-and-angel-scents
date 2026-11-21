@@ -1,7 +1,4 @@
-"""The top bar's "Today" sales chip (app.py's today_sales_summary() and
-/api/today-sales): a branch sees only its own sales, an admin sees every
-branch, and only today's sales count.
-"""
+"""Top bar "Today" sales chip: a branch sees its own, an admin sees all, only today counts."""
 from factories import login, make_branch, make_product, make_user
 from heaven_angel.utils import compact_peso
 
@@ -18,6 +15,7 @@ def _insert_sale(sql, branch_id, sku, qty, unit_price, days_ago=0):
 
 
 def test_branch_chip_counts_only_its_own_sales_today(client, sql):
+    """Branch chip counts only its own sales today."""
     branch_id = make_branch(sql)
     other_branch = make_branch(sql)
     sku = make_product(sql)
@@ -40,6 +38,7 @@ def test_branch_chip_counts_only_its_own_sales_today(client, sql):
 
 
 def test_admin_chip_totals_every_branch(client, sql):
+    """Admin chip totals every branch."""
     sku = make_product(sql)
     branch_a = make_branch(sql)
     branch_b = make_branch(sql)
@@ -58,10 +57,12 @@ def test_admin_chip_totals_every_branch(client, sql):
 
 
 def test_today_sales_requires_sign_in(client):
+    """Today sales requires sign in."""
     assert client.get("/api/today-sales").status_code == 401
 
 
 def test_today_sales_rejects_deactivated_user_with_live_session(client, sql):
+    """Today sales rejects deactivated user with live session."""
     branch_id = make_branch(sql)
     user = make_user(sql, role="Branch", branch_id=branch_id)
     login(client, user["username"], user["password"], "Branch")
@@ -76,6 +77,7 @@ def test_today_sales_rejects_deactivated_user_with_live_session(client, sql):
 
 
 def test_today_sales_uses_current_role_not_login_time_role(client, sql):
+    """Today sales uses current role not login time role."""
     branch_id = make_branch(sql)
     sku = make_product(sql)
     _insert_sale(sql, branch_id, sku, 1, "100.00")
@@ -93,6 +95,7 @@ def test_today_sales_uses_current_role_not_login_time_role(client, sql):
 
 
 def test_compact_amounts():
+    """Compact amounts."""
     assert compact_peso(0) == "₱0"
     assert compact_peso(850) == "₱850"
     assert compact_peso(10000) == "₱10k"

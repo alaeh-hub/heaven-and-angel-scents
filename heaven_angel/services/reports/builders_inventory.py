@@ -13,10 +13,7 @@ from heaven_angel.utils import (
 
 # ---------------------------------------------------------------- per-type builders
 def report_products(filters, branch_scope):
-    # NOTE: products.is_active was dropped from the schema (products are
-    # now edited in place from the admin Products page instead of being
-    # discontinued/reactivated — see schema.sql's migration block), so
-    # there is no active/discontinued status left to filter or show here.
+    # products.is_active no longer exists, so there is no active/discontinued filter here.
     where, params = "", []
     if filters["variant"] != "all":
         where += " AND p.variant = %s"
@@ -50,6 +47,7 @@ def report_products(filters, branch_scope):
 
 
 def report_production_log(filters, branch_scope):
+    """Production log report."""
     where, params = "", []
     if filters["unit"] != "all":
         where += " AND p.unit = %s"
@@ -328,6 +326,7 @@ def report_cogs_logs(filters, branch_scope):
 
 
 def report_branch_stock(filters, branch_scope):
+    """Branch stock report."""
     where, params = "", []
     if branch_scope is not None:
         where += " AND b.branch_id = %s"
@@ -351,10 +350,7 @@ def report_branch_stock(filters, branch_scope):
         # Same as My Inventory: a branch only ever stocks bottled sizes.
         where += " AND p.unit <> 'BULK'"
 
-    # No more per-branch price override — every branch sells at
-    # products.price, so this is just stock levels per branch now.
-    # (products.is_active no longer exists — see schema.sql's migration
-    # block — so there's nothing to filter out here anymore.)
+    # Every branch sells at products.price, so this is only stock levels per branch.
     rows = query(
         f"""SELECT b.branch_name, p.sku, p.item_name, p.variant, p.unit, p.price AS hq_price,
                    bi.stock_qty, bi.reorder_level
@@ -446,6 +442,7 @@ def report_stock_requests(filters, branch_scope):
 
 
 def report_inventory_log(filters, branch_scope):
+    """Inventory (stock movement) log report."""
     where, params = "", []
     if branch_scope is not None:
         where += " AND sml.branch_id = %s"
@@ -465,9 +462,7 @@ def report_inventory_log(filters, branch_scope):
     where += time_where
 
     rows = query(
-        # Delivery DAMAGE/ADJUSTMENT rows carry negative change_qty values
-        # for the units that never entered branch stock. DISCREPANCY_UNITS_SQL
-        # also supports legacy zero-valued rows from before that change.
+        # Delivery DAMAGE/ADJUSTMENT rows hold negative change_qty (legacy rows are zero; see DISCREPANCY_UNITS_SQL).
         f"""SELECT sml.created_at, b.branch_name, p.item_name, p.sku, p.unit,
                    sml.movement_type,
                    CASE WHEN sml.reference_type = 'STOCK_REQUEST'

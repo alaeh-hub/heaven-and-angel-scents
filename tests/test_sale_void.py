@@ -1,7 +1,6 @@
-"""Void a sale (sale_stock.void_sale): stock goes back (SALE_VOID), the
-sale leaves every total, and a permanent sale_voids record keeps who and
-why. HQ can void any location's sale; branch staff only their own, and
-only on the day it was recorded. A voided refill returns its bulk mL.
+"""Void a sale (sale_stock.void_sale): stock returns (SALE_VOID), totals drop, and a
+permanent sale_voids record keeps who and why. HQ voids any sale; branch staff only
+their own, on the day recorded. A voided refill returns its bulk mL.
 """
 from factories import (count_sales, get_batch_remaining, get_form_token, get_inventory_qty,
                         last_movement_log, login, make_branch, make_inventory, make_product,
@@ -46,6 +45,7 @@ def _admin(client, sql):
 
 
 def test_branch_voids_todays_sale_and_stock_returns(client, sql):
+    """Branch voids todays sale and stock returns."""
     branch_id = _branch_user(client, sql)
     sku = make_product(sql)
     make_inventory(sql, branch_id, sku, stock_qty=10)
@@ -64,6 +64,7 @@ def test_branch_voids_todays_sale_and_stock_returns(client, sql):
 
 
 def test_void_needs_a_reason(client, sql):
+    """Void needs a reason."""
     branch_id = _branch_user(client, sql)
     sku = make_product(sql)
     make_inventory(sql, branch_id, sku, stock_qty=10)
@@ -76,6 +77,7 @@ def test_void_needs_a_reason(client, sql):
 
 
 def test_branch_cannot_void_an_older_sale_or_another_branchs(client, sql):
+    """Branch cannot void an older sale or another branchs."""
     branch_id = _branch_user(client, sql)
     sku = make_product(sql)
     make_inventory(sql, branch_id, sku, stock_qty=10)
@@ -101,6 +103,7 @@ def test_branch_cannot_void_an_older_sale_or_another_branchs(client, sql):
 
 
 def test_admin_voids_any_sale_including_old_ones(client, sql):
+    """Admin voids any sale including old ones."""
     branch_id = make_branch(sql)
     sku = make_product(sql)
     make_inventory(sql, branch_id, sku, stock_qty=4)
@@ -123,6 +126,7 @@ def test_admin_voids_any_sale_including_old_ones(client, sql):
 
 
 def test_voiding_a_refill_returns_its_bulk_ml_to_the_batches_it_came_from(client, sql):
+    """Voiding a refill returns its bulk ml to the batches it came from."""
     bottle, base = make_scent(sql, unit="10ML")
     make_inventory(sql, HQ, bottle, stock_qty=0)
     old = make_scent_batch(sql, base, 20, created_at="2026-01-01 08:00:00")
@@ -142,6 +146,7 @@ def test_voiding_a_refill_returns_its_bulk_ml_to_the_batches_it_came_from(client
 
 
 def test_voiding_a_bulk_sale_returns_its_ml(client, sql):
+    """Voiding a bulk sale returns its ml."""
     bottle, base = make_scent(sql, unit="10ML")
     batch = make_scent_batch(sql, base, 100)
     _admin(client, sql)
@@ -158,6 +163,7 @@ def test_voiding_a_bulk_sale_returns_its_ml(client, sql):
 
 
 def test_admin_void_redirect_stays_inside_admin(client, sql):
+    """Admin void redirect stays inside admin."""
     branch_id = make_branch(sql)
     sku = make_product(sql)
     make_inventory(sql, branch_id, sku, stock_qty=1)
@@ -173,6 +179,7 @@ def test_admin_void_redirect_stays_inside_admin(client, sql):
 
 
 def test_branch_sales_history_offers_void_only_for_todays_sales(client, sql):
+    """Branch sales history offers void only for todays sales."""
     branch_id = _branch_user(client, sql)
     sku = make_product(sql)
     make_inventory(sql, branch_id, sku, stock_qty=10)

@@ -32,10 +32,7 @@ def parse_report_filters(args):
     def _month(name):
         raw = (args.get(name) or "").strip()
         try:
-            # Normalizes to exactly "YYYY-MM" (e.g. a stray "2026-9" from
-            # a hand-edited querystring becomes "2026-09") rather than
-            # trusting whatever shape the browser's <input type="month">
-            # actually sent.
+            # Normalize to "YYYY-MM" (e.g. "2026-9" becomes "2026-09").
             return datetime.datetime.strptime(raw, "%Y-%m").strftime("%Y-%m")
         except ValueError:
             return None
@@ -109,19 +106,14 @@ def time_window(date_col, filters, params):
         if filters["date_to"]:
             frag += f" AND {date_col} <= %s"
             params.append(f"{filters['date_to']} 23:59:59")
-        # Range mode is capped at MAX_ROWS just like "all time" — it was
-        # previously hardcoded to False here, so a date range matching
-        # more than MAX_ROWS rows would silently drop the excess with no
-        # "capped, narrow your filters" note anywhere in the report.
+        # Range mode is capped at MAX_ROWS like "all time" so excess rows are flagged, not dropped.
         return frag, f"ORDER BY {date_col} ASC", MAX_ROWS, True
     if mode == "month":
         first_day, last_day = _month_bounds(filters["month"])
         frag = f" AND {date_col} >= %s AND {date_col} <= %s"
         params.append(f"{first_day.isoformat()} 00:00:00")
         params.append(f"{last_day.isoformat()} 23:59:59")
-        # A single calendar month of activity is realistically never
-        # anywhere near MAX_ROWS, but capped the same way range/all-time
-        # are just in case — same reasoning as range mode above.
+        # One month is capped at MAX_ROWS too, same as range mode.
         return frag, f"ORDER BY {date_col} ASC", MAX_ROWS, True
     if mode == "all":
         return "", f"ORDER BY {date_col} DESC", MAX_ROWS, True
@@ -129,6 +121,7 @@ def time_window(date_col, filters, params):
 
 
 def describe_window(filters, truncated):
+    """Subtitle text describing the report's time window."""
     mode = filters["mode"]
     if mode == "recent":
         note = f"Most recent {filters['recent_n']} entries"

@@ -1,19 +1,8 @@
-"""The built-in bulk batch formulas from formula.txt / the "Costing
-Calculator By Formula" spreadsheet.
+"""Built-in bulk batch formulas (15%, 14%, 13%) in 500/250/125 ml oil sizes.
 
-There are three formulas (15%, 14%, 13%), each in three timpla sizes (500,
-250 and 125 ml of oil scent). The amounts live in the database (bulk_formulas,
-bulk_formula_sizes, bulk_formula_settings, bulk_formula_packaging — seeded in
-schema.sql, migration 50), so producing a batch means choosing a formula and a
-size; nobody picks materials one by one. Each ingredient role (oil scent,
-fixative, ...) is tied once to a raw material (batch_formula_materials), and
-everything — total mL, the alcohol/water split, bottles, packaging, cost per
-bottle — is computed from the database's amounts and that material's current
-cost.
-
-The "Alcohol" line of a formula (e.g. 2800 ml) is already alcohol AND
-distilled water mixed together, so it is split by the formula settings'
-alcohol : water parts (1000 : 200 in the spreadsheet: 1000 mL alcohol to 200 mL water).
+Amounts live in the database (schema.sql migration 50); each ingredient role is tied
+to a raw material. The "Alcohol" line is alcohol and water, split by the settings'
+parts (1000 : 200).
 """
 import decimal
 import math
@@ -42,8 +31,7 @@ ROLES = {
     "alcohol": ("Alcohol", "Milliliter", ("perfume alcohol", "alcohol", "ethanol")),
     "moisturizer": ("Moisturizer", "Milliliter", ("moisturizer",)),
     "water": ("Distilled Water", "Milliliter", ("distilled water", "water")),
-    # Packaging: the amount per bottle is in bulk_formula_packaging, so the
-    # amount needed is that times the number of bottles the formula makes.
+    # Packaging: amount per bottle is in bulk_formula_packaging, times bottles made.
     "bottle": ("Bottle", "Piece", ("frosted", "bottle")),
     "sticker": ("Sticker", "Piece", ("sticker",)),
     "seal": ("Plastic Seal", "Piece", ("plastic seal", "seal")),
@@ -51,15 +39,12 @@ ROLES = {
 PACKAGING_ROLES = ("bottle", "sticker", "seal")
 
 
-# Chemist and labor: a flat charge per bottle a formula batch yields (5 pesos each by
-# default), added to the batch's cost and to the cost per NEW bottle. They are costs,
-# not materials, so nothing is deducted from stock.
+# Chemist and labor: flat per-bottle charge (5 pesos default); costs, not stock.
 _cost_columns_checked = False
 
 
 def ensure_cost_columns():
-    """Make sure the chemist/labor columns exist, once per process, so a database that has
-    not re-run schema.sql yet keeps working (schema.sql adds them too, section 59)."""
+    """Add the chemist/labor columns once per process (schema.sql section 59 too)."""
     global _cost_columns_checked
     if _cost_columns_checked:
         return
@@ -82,29 +67,19 @@ def ensure_cost_columns():
 
 
 def reapply_data_fixes():
-    """After a restore: the database is whatever the backup held, so make the once-per-process
-    checks (the chemist/labor columns, the opening alcohol) run again instead of trusting that
-    they already did. The ratio is re-checked every time the formulas load."""
+    """After a restore, re-run the once-per-process checks (the ratio rechecks on load)."""
     global _cost_columns_checked, _opening_alcohol_checked
     _cost_columns_checked = False
     _opening_alcohol_checked = False
     ensure_cost_columns()
 
 
-# The opening Perfume Alcohol was imported as 9 gallons worked out with the US gallon
-# (34,068.706 mL for 4,500 pesos). A gallon here is 3,200 mL, so those 9 gallons are
-# 28,800 mL: the quantity and stock were 5,268.706 mL too high and the cost per mL too low.
+# Opening alcohol was imported with the US gallon; here a gallon is 3,200 mL.
 _opening_alcohol_checked = False
 
 
 def _heal_opening_alcohol():
-    """Correct the opening Perfume Alcohol to 9 gallons x 3,200 mL, once per process.
-
-    Only a row that still matches the original import exactly (unit mL, quantity
-    34,068.706, package cost 4,500) is touched, so it runs once and never overwrites an
-    alcohol record that has since changed (scripts/gallon_stock_correction.py handles
-    those). Stock is lowered by the same overstatement and never below zero. The same
-    correction is in schema.sql (section 58)."""
+    """Fix opening Perfume Alcohol to 9 gal x 3,200 mL, only if still the original import."""
     global _opening_alcohol_checked
     if _opening_alcohol_checked:
         return
@@ -134,10 +109,7 @@ def load_formula_config():
         return {"bottle_unit": None, "bottle_ml": None, "alcohol_parts": None, "water_parts": None,
                 "chemist_per_bottle": D(0), "labor_per_bottle": D(0),
                 "packaging": {}, "formulas": {}, "default_formula": None, "scent_formulas": {}}
-    # The mix is 1000 mL alcohol to 200 mL water. It was first seeded the other way
-    # round (200 : 1000), which put far too little alcohol in every batch. A database
-    # still on that old default is corrected here the moment the formulas load, so the
-    # fix does not wait for schema.sql to be re-run (schema.sql corrects it too).
+    # Mix is 1000 alcohol : 200 water; fix the old 200:1000 default on load.
     if settings["mix_alcohol_parts"] == 200 and settings["mix_water_parts"] == 1000:
         try:
             execute("UPDATE bulk_formula_settings SET mix_alcohol_parts = 1000, mix_water_parts = 200 "
@@ -186,14 +158,12 @@ def load_formula_config():
 
 
 def formula_for_scent(config, base_code):
-    """Which formula a scent (product base code) uses: its own entry in
-    bulk_formula_scents, otherwise the default formula."""
+    """Formula a scent uses: its bulk_formula_scents entry, else the default."""
     return config["scent_formulas"].get(base_code, config["default_formula"])
 
 
 def load_scent_choices(config):
-    """The scents offered on the Bulk Batches page: every product sold in the
-    formulas' bottle size, each with the formula it uses."""
+    """Scents sold in the formulas' bottle size, each with its formula."""
     choices = []
     seen = set()
     for p in query("SELECT sku, item_name FROM products WHERE unit = %s ORDER BY item_name",
@@ -207,8 +177,7 @@ def load_scent_choices(config):
 
 
 def split_mix(mix_ml, alcohol_parts, water_parts):
-    """Split a mix amount into (alcohol_ml, water_ml), e.g. 2800 ml ->
-    (2333.333, 466.667). Water is the remainder so they always add back up."""
+    """Split a mix into (alcohol_ml, water_ml); water is the remainder."""
     alcohol_ml = (D(mix_ml) * alcohol_parts / (alcohol_parts + water_parts)).quantize(D("0.001"))
     return alcohol_ml, D(mix_ml) - alcohol_ml
 
@@ -218,8 +187,7 @@ def formula_label(formula, size):
 
 
 def resolve_materials(materials):
-    """role -> raw material row. A saved choice wins; otherwise the first
-    material whose name matches the role (see ROLES)."""
+    """role -> raw material row: saved choice, else first name match (see ROLES)."""
     by_id = {m["material_id"]: m for m in materials}
     resolved = {}
     for row in query("SELECT role, material_id FROM batch_formula_materials"):
@@ -260,12 +228,7 @@ def _line(role, label, material, qty, preferred_unit):
 
 
 def compute_formula(formula, size, resolved, config, stock_by_id=None):
-    """The costing for one formula + size, like the spreadsheet's Formula
-    sheet. Returns None when a needed material isn't set up yet.
-
-    bottles = floor(total ml / bottle size); cost per NEW bottle = (liquid +
-    packaging) / bottles; cost per REFILL = liquid / bottles.
-    """
+    """Costing for one formula + size (None if a material is missing)."""
     if any(role not in resolved for role in ROLES):
         return None
     fixative_g, mix_ml, moisturizer_ml = config["formulas"][formula]["sizes"][size]
@@ -279,10 +242,7 @@ def compute_formula(formula, size, resolved, config, stock_by_id=None):
               ROLES["moisturizer"][1]),
     ]
 
-    # The sheet's "mixing batches": alcohol and water are prepared in whole
-    # mixing batches (e.g. 1000 ml alcohol + 200 ml water = 1200 ml), several
-    # until the formula's amount is reached; the leftover keeps for next time.
-    # Only the mix actually used is costed and deducted from stock.
+    # Mixing batches: alcohol + water made in whole mixes; only the mix used is costed.
     mix_batch_ml = config["alcohol_parts"] + config["water_parts"]
     mix_batches = int(math.ceil(mix_ml / mix_batch_ml)) if mix_ml else 0
     mix_prepared_ml = mix_batches * mix_batch_ml
@@ -290,8 +250,7 @@ def compute_formula(formula, size, resolved, config, stock_by_id=None):
     total_ml = D(size) + fixative_g + mix_ml + moisturizer_ml
     liquid_cost = sum((ln["line_cost"] for ln in lines), D("0")).quantize(D("0.01"))
     bottles = int(total_ml // config["bottle_ml"])
-    # Packaging is automatic: bottles x the per-bottle amount, priced at the
-    # material's current cost.
+    # Packaging: bottles x per-bottle amount, at the material's current cost.
     packaging = []
     for role in PACKAGING_ROLES:
         material = resolved[role]
@@ -313,9 +272,7 @@ def compute_formula(formula, size, resolved, config, stock_by_id=None):
     chemist_cost, labor_cost = extras[0]["line_cost"], extras[1]["line_cost"]
     total_cost = liquid_cost + packaging_cost + chemist_cost + labor_cost
 
-    # Is there enough of everything in stock? Same rule as producing the
-    # batch (_price_liquid_lines / _price_packaging_lines in production.py):
-    # the amount needed, in the material's own stock unit, vs stock_qty.
+    # Stock check: same rule as production.py (_price_liquid/_packaging_lines).
     shortages = []
     if stock_by_id is not None:
         for role, ln in zip(("oil", "fixative", "alcohol", "water", "moisturizer"), lines):
@@ -352,9 +309,7 @@ def compute_formula(formula, size, resolved, config, stock_by_id=None):
 
 
 def calc_to_json(c):
-    """One formula+size's costing as plain JSON for the page's summary panel
-    and the Tools calculators (display only — producing a batch recomputes
-    everything server-side)."""
+    """Costing as JSON for the summary panel and Tools (display only)."""
     if c is None:
         return None
     f = float
@@ -397,11 +352,10 @@ def calc_to_json(c):
 
 
 def load_catalog(materials, config=None, oil=None):
-    """Every formula x size, computed. Returns (resolved materials,
-    {formula: {size: calc or None}}, missing role labels).
+    """All formula x size costings: (resolved, {formula: {size: calc}}, missing roles).
 
-    `oil` is one scent's own oil (a scent_oils row): it replaces the pooled
-    Oil Scent material's price and stock in the costing."""
+    `oil` (a scent_oils row) replaces the pooled Oil Scent price and stock.
+    """
     config = config or load_formula_config()
     resolved = resolve_materials(materials)
     missing = [ROLES[r][0] for r in ROLES if r not in resolved]
@@ -419,8 +373,7 @@ def load_catalog(materials, config=None, oil=None):
 
 
 def prepare_scent_oils(materials, config):
-    """Make sure every catalog scent has its own oil row, then return them as
-    {base_code: row}."""
+    """Ensure each catalog scent has an oil row; return {base_code: row}."""
     resolved = resolve_materials(materials)
     if "oil" in resolved and config["bottle_unit"]:
         ensure_scent_oils(resolved["oil"], [(c["code"], c["name"]) for c in load_scent_choices(config)])

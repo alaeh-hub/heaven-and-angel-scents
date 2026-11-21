@@ -3,12 +3,7 @@
 import * as React from "react";
 import { cn } from "@/lib/utils";
 
-/* =============================================================================
-   LogoSlider Component
-   
-   A smooth, infinite marquee/slider component for displaying logos.
-   Uses Tailwind CSS where possible, raw CSS only for animations/masks.
-============================================================================= */
+/* LogoSlider: infinite marquee for logos; CSS animation and masks only where needed. */
 
 export interface LogoSliderProps {
     /** Array of React nodes (logos, icons, images) to display */
@@ -29,12 +24,7 @@ export interface LogoSliderProps {
     pauseOnHover?: boolean;
 }
 
-/**
- * LogoSlider Component
- *
- * A beautiful infinite marquee for showcasing logos, partners, or any content.
- * Uses per-item CSS animations for optimal performance.
- */
+/** Infinite marquee using per-item CSS animations. */
 
 
 export const LogoSlider = ({
